@@ -1140,6 +1140,15 @@ const messages = {
     useCurrentLocation: "Use my current location",
     gettingLocation: "Finding your location...",
     selectDeliveryOnMap: "Choose delivery location on map",
+    signupNameTooShort: "Enter your full name (at least 2 characters).",
+    signupMobileTooShort: "Enter a mobile number with at least 10 digits.",
+    signupDobRequired: "Enter your date of birth.",
+    signupGenderRequired: "Choose your gender.",
+    signupEmailInvalid: "Enter a valid email address.",
+    signupPasswordTooShort: "Use at least 8 characters for your password.",
+    signupPasswordStrength: "Include an uppercase letter, a lowercase letter and a number.",
+    signupConfirmPassword: "Please confirm your password.",
+    signupPasswordMismatch: "Your passwords do not match.",
   },
 
   hi: {
@@ -2272,6 +2281,15 @@ const messages = {
     useCurrentLocation: "मेरी मौजूदा जगह का उपयोग करें",
     gettingLocation: "आपकी जगह ढूँढ रहे हैं...",
     selectDeliveryOnMap: "मैप पर डिलीवरी की जगह चुनें",
+    signupNameTooShort: "अपना पूरा नाम लिखें (कम से कम 2 अक्षर)।",
+    signupMobileTooShort: "कम से कम 10 अंकों का मोबाइल नंबर लिखें।",
+    signupDobRequired: "अपनी जन्मतिथि लिखें।",
+    signupGenderRequired: "अपना लिंग चुनें।",
+    signupEmailInvalid: "सही ईमेल पता लिखें।",
+    signupPasswordTooShort: "पासवर्ड कम से कम 8 अक्षरों का रखें।",
+    signupPasswordStrength: "पासवर्ड में एक बड़ा अक्षर, एक छोटा अक्षर और एक अंक रखें।",
+    signupConfirmPassword: "कृपया पासवर्ड की पुष्टि करें।",
+    signupPasswordMismatch: "दोनों पासवर्ड एक जैसे नहीं हैं।",
   },
 
   kn: {
@@ -3404,6 +3422,15 @@ const messages = {
     useCurrentLocation: "ನನ್ನ ಈಗಿನ ಸ್ಥಳ ಬಳಸಿ",
     gettingLocation: "ನಿಮ್ಮ ಸ್ಥಳವನ್ನು ಹುಡುಕಲಾಗುತ್ತಿದೆ...",
     selectDeliveryOnMap: "ನಕ್ಷೆಯಲ್ಲಿ ವಿತರಣಾ ಸ್ಥಳ ಆಯ್ಕೆಮಾಡಿ",
+    signupNameTooShort: "ನಿಮ್ಮ ಪೂರ್ಣ ಹೆಸರನ್ನು ನಮೂದಿಸಿ (ಕನಿಷ್ಠ 2 ಅಕ್ಷರಗಳು).",
+    signupMobileTooShort: "ಕನಿಷ್ಠ 10 ಅಂಕಿಗಳ ಮೊಬೈಲ್ ಸಂಖ್ಯೆಯನ್ನು ನಮೂದಿಸಿ.",
+    signupDobRequired: "ನಿಮ್ಮ ಜನ್ಮ ದಿನಾಂಕ ನಮೂದಿಸಿ.",
+    signupGenderRequired: "ನಿಮ್ಮ ಲಿಂಗ ಆಯ್ಕೆಮಾಡಿ.",
+    signupEmailInvalid: "ಸರಿಯಾದ ಇಮೇಲ್ ವಿಳಾಸ ನಮೂದಿಸಿ.",
+    signupPasswordTooShort: "ಪಾಸ್‌ವರ್ಡ್ ಕನಿಷ್ಠ 8 ಅಕ್ಷರಗಳಿರಲಿ.",
+    signupPasswordStrength: "ದೊಡ್ಡ ಅಕ್ಷರ, ಸಣ್ಣ ಅಕ್ಷರ ಮತ್ತು ಒಂದು ಸಂಖ್ಯೆ ಸೇರಿಸಿ.",
+    signupConfirmPassword: "ದಯವಿಟ್ಟು ಪಾಸ್‌ವರ್ಡ್ ದೃಢೀಕರಿಸಿ.",
+    signupPasswordMismatch: "ಎರಡೂ ಪಾಸ್‌ವರ್ಡ್‌ಗಳು ಒಂದೇ ಆಗಿಲ್ಲ.",
   },
 
   bn: {
@@ -4536,6 +4563,15 @@ const messages = {
     useCurrentLocation: "আমার বর্তমান অবস্থান ব্যবহার করুন",
     gettingLocation: "আপনার অবস্থান খোঁজা হচ্ছে...",
     selectDeliveryOnMap: "মানচিত্রে ডেলিভারির স্থান বেছে নিন",
+    signupNameTooShort: "আপনার পুরো নাম লিখুন (অন্তত ২টি অক্ষর)।",
+    signupMobileTooShort: "অন্তত ১০ সংখ্যার মোবাইল নম্বর লিখুন।",
+    signupDobRequired: "আপনার জন্মতারিখ লিখুন।",
+    signupGenderRequired: "আপনার লিঙ্গ বেছে নিন।",
+    signupEmailInvalid: "সঠিক ইমেল ঠিকানা লিখুন।",
+    signupPasswordTooShort: "পাসওয়ার্ড অন্তত ৮ অক্ষরের হতে হবে।",
+    signupPasswordStrength: "একটি বড় হাতের অক্ষর, একটি ছোট হাতের অক্ষর ও একটি সংখ্যা দিন।",
+    signupConfirmPassword: "অনুগ্রহ করে পাসওয়ার্ড নিশ্চিত করুন।",
+    signupPasswordMismatch: "দুটি পাসওয়ার্ড মেলেনি।",
   },
 
   te: {
@@ -5669,6 +5705,15 @@ const messages = {
     useCurrentLocation: "నా ప్రస్తుత స్థానాన్ని ఉపయోగించండి",
     gettingLocation: "మీ స్థానాన్ని కనుగొంటున్నాం...",
     selectDeliveryOnMap: "మ్యాప్‌లో డెలివరీ స్థానాన్ని ఎంచుకోండి",
+    signupNameTooShort: "మీ పూర్తి పేరు నమోదు చేయండి (కనీసం 2 అక్షరాలు).",
+    signupMobileTooShort: "కనీసం 10 అంకెల మొబైల్ నంబర్ నమోదు చేయండి.",
+    signupDobRequired: "మీ పుట్టిన తేదీ నమోదు చేయండి.",
+    signupGenderRequired: "మీ లింగాన్ని ఎంచుకోండి.",
+    signupEmailInvalid: "సరైన ఇమెయిల్ చిరునామా నమోదు చేయండి.",
+    signupPasswordTooShort: "పాస్‌వర్డ్ కనీసం 8 అక్షరాలు ఉండాలి.",
+    signupPasswordStrength: "ఒక పెద్ద అక్షరం, ఒక చిన్న అక్షరం మరియు ఒక సంఖ్య చేర్చండి.",
+    signupConfirmPassword: "దయచేసి పాస్‌వర్డ్‌ను నిర్ధారించండి.",
+    signupPasswordMismatch: "రెండు పాస్‌వర్డ్‌లు సరిపోలలేదు.",
   }
 };
 
