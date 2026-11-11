@@ -56,17 +56,17 @@ export default function OrderHistoryView({ onTrackOrder }) {
   const getStatusBadge = (status) => {
     switch (status) {
       case 'Delivered':
-        return <span className="bg-emerald-100 text-emerald-800 text-[10px] font-black px-2 py-0.5 rounded-full">{t('delivered')}</span>;
+        return <span key={`badge-delivered-${status}`} className="status-badge-transition bg-emerald-100 text-emerald-800 text-[10px] font-black px-2.5 py-0.5 rounded-full inline-flex items-center gap-1 transition-all duration-300 ease-in-out shadow-xs"><span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />{t('delivered')}</span>;
       case 'Cancelled':
-        return <span className="bg-slate-100 text-slate-600 text-[10px] font-black px-2 py-0.5 rounded-full">{t('cancelled')}</span>;
+        return <span key={`badge-cancelled-${status}`} className="status-badge-transition bg-slate-100 text-slate-600 text-[10px] font-black px-2.5 py-0.5 rounded-full inline-flex items-center gap-1 transition-all duration-300 ease-in-out"><span className="w-1.5 h-1.5 rounded-full bg-slate-400" />{t('cancelled')}</span>;
       case 'Rejected':
-        return <span className="bg-rose-100 text-rose-700 text-[10px] font-black px-2 py-0.5 rounded-full">{t('rejected')}</span>;
+        return <span key={`badge-rejected-${status}`} className="status-badge-transition bg-rose-100 text-rose-700 text-[10px] font-black px-2.5 py-0.5 rounded-full inline-flex items-center gap-1 transition-all duration-300 ease-in-out"><span className="w-1.5 h-1.5 rounded-full bg-rose-600" />{t('rejected')}</span>;
       case 'Dispatched':
-        return <span className="bg-blue-100 text-blue-800 text-[10px] font-black px-2 py-0.5 rounded-full">{t('outForDelivery')}</span>;
+        return <span key={`badge-dispatched-${status}`} className="status-badge-transition bg-blue-100 text-blue-800 text-[10px] font-black px-2.5 py-0.5 rounded-full inline-flex items-center gap-1 transition-all duration-300 ease-in-out shadow-xs"><span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse" />{t('outForDelivery')}</span>;
       case 'Ready to Dispatch':
-        return <span className="bg-blue-100 text-blue-800 text-[10px] font-black px-2 py-0.5 rounded-full">{t('readyToDispatch')}</span>;
+        return <span key={`badge-ready-${status}`} className="status-badge-transition bg-indigo-100 text-indigo-800 text-[10px] font-black px-2.5 py-0.5 rounded-full inline-flex items-center gap-1 transition-all duration-300 ease-in-out shadow-xs"><span className="w-1.5 h-1.5 rounded-full bg-indigo-600" />{t('readyToDispatch')}</span>;
       default:
-        return <span className="bg-amber-100 text-amber-800 text-[10px] font-black px-2 py-0.5 rounded-full">{t('processing')}</span>;
+        return <span key={`badge-processing-${status}`} className="status-badge-transition bg-amber-100 text-amber-800 text-[10px] font-black px-2.5 py-0.5 rounded-full inline-flex items-center gap-1 transition-all duration-300 ease-in-out shadow-xs"><span className="w-1.5 h-1.5 rounded-full bg-amber-600 animate-pulse" />{t('processing')}</span>;
     }
   };
 

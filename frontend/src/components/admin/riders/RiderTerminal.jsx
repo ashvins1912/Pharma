@@ -307,7 +307,11 @@ export default function RiderTerminal({ riderId, onClose }) {
           {activeOrder ? (
             <div className="bg-slate-800 border border-blue-500/50 rounded-2xl p-5 space-y-4 shadow-xl">
               <div className="flex justify-between items-center border-b border-slate-700 pb-3">
-                <span className="text-xs font-black bg-blue-600 text-white px-2.5 py-1 rounded-lg">
+                <span
+                  key={activeOrder?.orderStatus || 'active-route'}
+                  className="status-badge-transition text-xs font-black bg-blue-600 text-white px-2.5 py-1 rounded-lg transition-all duration-300 ease-in-out inline-flex items-center gap-1.5 shadow-sm"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                   ACTIVE ROUTE
                 </span>
                 <span className="text-xs font-bold text-amber-400">Arriving in ~8 mins</span>

@@ -65,7 +65,11 @@ export default function OrderTrackingModal({ order, onClose }) {
                 <h2 id="order-tracking-title" className="text-base sm:text-lg font-black tracking-tight text-slate-900 truncate">
                   Order Tracking: #{orderId}
                 </h2>
-                <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-[10px] font-extrabold text-blue-700 border border-blue-200/50 shrink-0">
+                <span
+                  key={currentStatus}
+                  className="status-badge-transition inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-0.5 text-[10px] font-extrabold text-blue-700 border border-blue-200/50 shrink-0 transition-all duration-300 ease-in-out"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse" />
                   {currentStatus}
                 </span>
               </div>
@@ -99,7 +103,7 @@ export default function OrderTrackingModal({ order, onClose }) {
                     {/* Connecting Line */}
                     {idx < STAGES.length - 1 && (
                       <div
-                        className={`absolute left-4 top-8 -bottom-6 w-0.5 ${
+                        className={`absolute left-4 top-8 -bottom-6 w-0.5 transition-colors duration-500 ease-in-out ${
                           idx < currentIndex ? 'bg-emerald-500' : 'bg-slate-200'
                         }`}
                       />
@@ -107,7 +111,8 @@ export default function OrderTrackingModal({ order, onClose }) {
 
                     {/* Icon Circle */}
                     <div
-                      className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs z-10 shrink-0 transition-all ${
+                      key={`circle-${stage.key}-${isCompleted}-${isCurrent}`}
+                      className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs z-10 shrink-0 transition-all duration-300 ease-in-out status-badge-transition ${
                         isCompleted
                           ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/25'
                           : isCurrent
@@ -122,7 +127,7 @@ export default function OrderTrackingModal({ order, onClose }) {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2">
                         <h4
-                          className={`text-xs sm:text-sm font-extrabold ${
+                          className={`text-xs sm:text-sm font-extrabold transition-colors duration-300 ease-in-out ${
                             isCurrent
                               ? 'text-blue-600'
                               : isCompleted
@@ -133,7 +138,10 @@ export default function OrderTrackingModal({ order, onClose }) {
                           {t(stage.labelKey || 'processingOrderStage')}
                         </h4>
                         {isCurrent && (
-                          <span className="bg-blue-100 text-blue-800 text-[10px] font-black px-2 py-0.5 rounded-full uppercase shrink-0">
+                          <span
+                            key={`stage-badge-${stage.key}`}
+                            className="status-badge-transition bg-blue-100 text-blue-800 text-[10px] font-black px-2 py-0.5 rounded-full uppercase shrink-0 transition-all duration-300 ease-in-out"
+                          >
                             Current Stage
                           </span>
                         )}
