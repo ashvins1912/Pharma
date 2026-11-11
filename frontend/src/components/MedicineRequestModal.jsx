@@ -171,7 +171,7 @@ export default function MedicineRequestModal({ isOpen, onClose, initialMedicineN
           <button
             onClick={onClose}
             className="text-slate-400 hover:text-slate-700 w-8 h-8 rounded-full flex items-center justify-center bg-slate-100 hover:bg-slate-200 transition cursor-pointer shrink-0"
-            aria-label="Close"
+            aria-label={t("close")}
           >
             ✕
           </button>
@@ -201,12 +201,12 @@ export default function MedicineRequestModal({ isOpen, onClose, initialMedicineN
 
           <div>
             <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
-              Medicine / Formulation Name *
+              {t('medicine')} *
             </label>
             <input
               type="text"
               required
-              placeholder="e.g. Augmentin 625 Duo, Remdesivir, Thyronorm 50mcg"
+              placeholder={t("medicine")}
               value={medicineName}
               onChange={(e) => setMedicineName(e.target.value)}
               className="w-full px-3.5 py-2.5 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white transition"
@@ -215,11 +215,11 @@ export default function MedicineRequestModal({ isOpen, onClose, initialMedicineN
 
           <div>
             <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
-              Active Salt / Composition (Optional)
+              {t('activeFormulation')}
             </label>
             <input
               type="text"
-              placeholder="e.g. Amoxicillin + Clavulanic Acid"
+              placeholder={t("requestDetailsPlaceholder")}
               value={saltComposition}
               onChange={(e) => setSaltComposition(e.target.value)}
               className="w-full px-3.5 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white transition"
@@ -229,7 +229,7 @@ export default function MedicineRequestModal({ isOpen, onClose, initialMedicineN
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
-                Required Units / Quantity *
+                {t('quantity')} *
               </label>
               <input
                 type="number"
