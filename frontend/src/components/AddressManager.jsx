@@ -615,7 +615,7 @@ export default function AddressManager({
             {googleMapsApiKey && (
               <div
                 ref={mapContainerRef}
-                aria-label="Select delivery location on map"
+                aria-label={t("selectDeliveryDestination")}
                 className="h-52 w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-100"
               />
             )}
@@ -690,11 +690,11 @@ export default function AddressManager({
             </div>
             <div>
               <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                Contact Mobile
+                {t("mobileNumber")}
               </label>
               <input
                 type="tel"
-                placeholder="+91 95899 16475"
+                placeholder={t("mobileNumber")}
                 value={mobile}
                 onChange={(e) => setMobile(e.target.value)}
                 className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500"
@@ -707,13 +707,13 @@ export default function AddressManager({
           <div className="space-y-2">
             <div>
               <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                Flat / House No. / Building / Street
+                {t("address")}
               </label>
               <div ref={placesWidgetRef}>
                 <input
                   ref={addressInputRef}
                   type="text"
-                  placeholder="e.g. Flat 402, Greenfield Heights, Richmond Road"
+                  placeholder={t("address")}
                   value={addressLine1}
                   onChange={(e) => setAddressLine1(e.target.value)}
                   className={`w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 ${modernPlacesEnabled ? 'hidden' : ''}`}
@@ -728,11 +728,11 @@ export default function AddressManager({
             )}
             <div>
               <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                Area / Colony / Sector
+                {t("address")}
               </label>
               <input
                 type="text"
-                placeholder="e.g. Shanthala Nagar"
+                placeholder={t("address")}
                 value={addressLine2}
                 onChange={(e) => setAddressLine2(e.target.value)}
                 className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500"
@@ -776,7 +776,7 @@ export default function AddressManager({
               <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">{t("landmark")}</label>
               <input
                 type="text"
-                placeholder="Near Circle"
+                placeholder={t("landmark")}
                 value={landmark}
                 onChange={(e) => setLandmark(e.target.value)}
                 className="w-full px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none"
