@@ -26,19 +26,26 @@ export default function GoogleProfileOnboarding({ user, onComplete, onLogout }) 
     event.preventDefault();
     setError('');
 
-    if (!firstName.trim() || !dateOfBirth || !gender || !mobileNumber.trim() || !mobileValid || !password || !confirmPassword) {
-      setError('Please complete the required profile fields and create a password.');
+    if (!firstName.trim() || !dateOfBirth || !gender || !mobileNumber.trim() || !mobileValid) {
+      setError('Please complete all required profile fields.');
       return;
     }
 
-    if (password !== confirmPassword) {
-      setError('Passwords do not match.');
-      return;
-    }
-
-    if (password.length < 8 || !/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password)) {
-      setError('Password must be at least 8 characters with uppercase, lowercase and a number.');
-      return;
+    // Google users may keep Google as their only sign-in method, or optionally
+    // create a local password to also sign in with email and password.
+    if (password || confirmPassword) {
+      if (!password || !confirmPassword) {
+        setError('Enter and confirm your password, or leave both password fields empty.');
+        return;
+      }
+      if (password !== confirmPassword) {
+        setError('Passwords do not match.');
+        return;
+      }
+      if (password.length < 8 || !/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password)) {
+        setError('Password must be at least 8 characters with uppercase, lowercase and a number.');
+        return;
+      }
     }
 
     setSaving(true);
@@ -49,8 +56,8 @@ export default function GoogleProfileOnboarding({ user, onComplete, onLogout }) 
         dateOfBirth,
         gender,
         mobileNumber,
-        password,
-        confirmPassword
+        password: password || '',
+        confirmPassword: confirmPassword || ''
       });
     } catch (err) {
       setError(err?.message || 'Could not complete your profile. Please try again.');
@@ -158,6 +165,7 @@ export default function GoogleProfileOnboarding({ user, onComplete, onLogout }) 
               autoComplete="tel"
               placeholder="+91 98765 43210"
               value={mobileNumber}
+              required
               onChange={(e) => setMobileNumber(e.target.value)}
               className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm font-medium text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
             />
@@ -169,7 +177,7 @@ export default function GoogleProfileOnboarding({ user, onComplete, onLogout }) 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label htmlFor="profile-password" className="mb-1.5 block text-[11px] font-black uppercase tracking-wider text-slate-500">
-                Create password <span className="text-rose-500">*</span>
+                Create password <span className="font-medium normal-case tracking-normal text-slate-400">(optional)</span>
               </label>
               <input
                 id="profile-password"
@@ -193,7 +201,7 @@ export default function GoogleProfileOnboarding({ user, onComplete, onLogout }) 
             </div>
             <div>
               <label htmlFor="profile-confirm-password" className="mb-1.5 block text-[11px] font-black uppercase tracking-wider text-slate-500">
-                Confirm password <span className="text-rose-500">*</span>
+                Confirm password <span className="font-medium normal-case tracking-normal text-slate-400">(optional)</span>
               </label>
               <input
                 id="profile-confirm-password"
