@@ -129,16 +129,16 @@ export default function NotificationBell({ onOpenOrders, onRequireAuth }) {
                     }}
                     disabled={clearingAll}
                     className="min-h-8 shrink-0 rounded-lg border border-blue-100 bg-blue-50 px-2.5 py-1.5 text-[10px] font-extrabold text-blue-700 transition hover:bg-blue-100 disabled:cursor-wait disabled:opacity-50"
-                    aria-label="Clear all notifications"
+                    aria-label={t("clearAllNotifications")}
                   >
-                    {clearingAll ? 'Clearing…' : 'Clear all'}
+                    {clearingAll ? t('clearingNotifications') : t('clearAllNotifications')}
                   </button>
                 )}
                 <button
                   type="button"
                   onClick={() => setIsOpen(false)}
                   className="text-slate-400 hover:text-slate-700 text-xs font-bold p-1 rounded-full hover:bg-slate-100"
-                  aria-label="Close notifications"
+                  aria-label={t("close")}
                 >
                   ✕
                 </button>

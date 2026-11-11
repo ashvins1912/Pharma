@@ -525,25 +525,25 @@ export default function PlatformTenantsView() {
 
       {/* Unified Super Admin tenant workspace */}
       <div className="platform-directory-tabs flex border-b border-slate-200 gap-2 sm:gap-4 overflow-x-auto no-scrollbar max-w-full">
-        <button type="button" onClick={() => setPlatformTab('tenants')} className={`platform-directory-tab pb-3 text-xs font-black border-b-2 whitespace-nowrap ${platformTab === 'tenants' ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500'}`}>🏢 Tenants Directory ({totalCount})</button>
-        <button type="button" onClick={() => setPlatformTab('profile')} className={`platform-directory-tab pb-3 text-xs font-black border-b-2 whitespace-nowrap ${platformTab === 'profile' ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500'}`}>🏥 Tenant Profile & Branches</button>
-        <button type="button" onClick={() => setPlatformTab('compare')} className={`platform-directory-tab pb-3 text-xs font-black border-b-2 whitespace-nowrap ${platformTab === 'compare' ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500'}`}>⚖️ Compare Tenants ({compareTenantIds.length})</button>
+        <button type="button" onClick={() => setPlatformTab('tenants')} className={`platform-directory-tab pb-3 text-xs font-black border-b-2 whitespace-nowrap ${platformTab === 'tenants' ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500'}`}>🏢 {t('pharmacyDirectory')} ({totalCount})</button>
+        <button type="button" onClick={() => setPlatformTab('profile')} className={`platform-directory-tab pb-3 text-xs font-black border-b-2 whitespace-nowrap ${platformTab === 'profile' ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500'}`}>🏥 {t('tenantProfileBranches')}</button>
+        <button type="button" onClick={() => setPlatformTab('compare')} className={`platform-directory-tab pb-3 text-xs font-black border-b-2 whitespace-nowrap ${platformTab === 'compare' ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500'}`}>⚖️ {t('comparePharmacies')} ({compareTenantIds.length})</button>
         <button type="button" onClick={() => setPlatformTab('vendors')} className={`platform-directory-tab pb-3 text-xs font-black border-b-2 whitespace-nowrap ${platformTab === 'vendors' ? 'border-teal-600 text-teal-700' : 'border-transparent text-slate-500'}`}>✉️ Vendor Invitations ({vendors.length})</button>
       </div>
-      <section className="platform-governance-strip" aria-label="Access governance review">
+      <section className="platform-governance-strip" aria-label={t('accessOverviewTitle')}>
         <div className="platform-governance-intro">
           <span className="platform-governance-icon" aria-hidden="true">🛡️</span>
-          <div><h3>Access governance overview</h3><p>Review the scope boundaries used by platform and tenant administration.</p></div>
+          <div><h3>{t('accessOverviewTitle')}</h3><p>{t('accessOverviewDesc')}</p></div>
         </div>
-        <div className="platform-governance-check"><span className="platform-governance-checkmark">01</span><div><strong>Tenant boundary</strong><span>Server-side tenant context</span></div></div>
-        <div className="platform-governance-check"><span className="platform-governance-checkmark">02</span><div><strong>Branch scope</strong><span>Memberships can be branch-bound</span></div></div>
-        <div className="platform-governance-check"><span className="platform-governance-checkmark">03</span><div><strong>Admin delegation</strong><span>Tenant-scoped admin invitations</span></div></div>
+        <div className="platform-governance-check"><span className="platform-governance-checkmark">01</span><div><strong>{t('pharmacyAccessLabel')}</strong><span>{t('pharmacyDataSeparate')}</span></div></div>
+        <div className="platform-governance-check"><span className="platform-governance-checkmark">02</span><div><strong>{t('branchAccessLabel')}</strong><span>{t('staffBranchAccess')}</span></div></div>
+        <div className="platform-governance-check"><span className="platform-governance-checkmark">03</span><div><strong>{t('staffInvitationsLabel')}</strong><span>{t('inviteStaffToPharmacy')}</span></div></div>
       </section>
 
       {platformTab === 'profile' ? (
         <section className="space-y-4">
           <div className="rounded-2xl border border-slate-200 bg-white p-4">
-            <label htmlFor="platform-profile-tenant" className="block text-xs font-black uppercase text-slate-600">Search tenant to manage</label>
+            <label htmlFor="platform-profile-tenant" className="block text-xs font-black uppercase text-slate-600">{t('searchPharmacyAccounts')}</label>
             <div className="relative mt-2">
               <input
                 id="platform-profile-tenant"
@@ -553,14 +553,14 @@ export default function PlatformTenantsView() {
                 onChange={event => { setWorkspaceTenantQuery(event.target.value); setWorkspaceTenantId(''); setWorkspaceTenantSuggestionsOpen(true); }}
                 onFocus={() => setWorkspaceTenantSuggestionsOpen(true)}
                 onKeyDown={handleWorkspaceTenantSearchKeyDown}
-                placeholder="Type pharmacy name, slug, email or tenant ID; press Enter"
+                placeholder={t('searchPharmacyAccounts')}
                 className="w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-900"
                 aria-controls="platform-profile-tenant-suggestions"
                 aria-expanded={workspaceTenantSuggestionsOpen}
               />
               {workspaceTenantSuggestionsOpen && (
                 <div id="platform-profile-tenant-suggestions" role="listbox" className="absolute z-30 mt-1 max-h-72 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white p-1 shadow-xl">
-                  {workspaceTenantSearchLoading ? <p className="px-3 py-3 text-xs text-slate-500">Searching tenants…</p> : workspaceTenantSuggestions.length ? workspaceTenantSuggestions.map(tenant => {
+                  {workspaceTenantSearchLoading ? <p className="px-3 py-3 text-xs text-slate-500">{t('searchingPharmacies')}</p> : workspaceTenantSuggestions.length ? workspaceTenantSuggestions.map(tenant => {
                     const id = String(tenant.id || tenant._id);
                     return (
                       <button key={id} type="button" role="option" aria-selected={workspaceTenantId === id} onClick={() => selectWorkspaceTenant(tenant)} className="flex w-full flex-col items-start rounded-lg px-3 py-2 text-left hover:bg-blue-50">
@@ -569,24 +569,24 @@ export default function PlatformTenantsView() {
                         <span className="text-[10px] text-slate-400">{tenant.status || 'UNKNOWN'}{tenant.createdAt ? ` · Added ${new Date(tenant.createdAt).toLocaleDateString()}` : ''}</span>
                       </button>
                     );
-                  }) : <p className="px-3 py-3 text-xs text-slate-500">{workspaceTenantQuery.trim().length >= 2 ? 'No matching tenants. Try another name or ID.' : 'No recent tenants found.'}</p>}
-                  <div className="border-t border-slate-100 px-3 py-2 text-[10px] text-slate-400">Showing the 5 newest tenants initially. Enter at least 2 characters and press Enter to search.</div>
+                  }) : <p className="px-3 py-3 text-xs text-slate-500">{workspaceTenantQuery.trim().length >= 2 ? t('noPharmacyMatches') : t('noRecentPharmacies')}</p>}
+                  <div className="border-t border-slate-100 px-3 py-2 text-[10px] text-slate-400">{t('showingLatestPharmacies')}</div>
                 </div>
               )}
             </div>
-            {workspaceTenantId && <p className="mt-2 break-all text-xs text-slate-600">Selected Tenant ID: <code className="font-mono font-bold text-slate-900">{workspaceTenantId}</code></p>}
-            <p className="mt-2 text-xs text-slate-500">Manage the selected tenant's persisted profile, edit policy, geolocation, personnel and branch registry in this workspace.</p>
+            {workspaceTenantId && <p className="mt-2 break-all text-xs text-slate-600">{t('selectedPharmacyAccount')}:  <code className="font-mono font-bold text-slate-900">{workspaceTenantId}</code></p>}
+            <p className="mt-2 text-xs text-slate-500">{t('manageSelectedPharmacy')}</p>
           </div>
-          {workspaceTenantId ? <TenantProfileDashboard key={workspaceTenantId} tenantId={workspaceTenantId} showTenantSelector={false} /> : <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">Select a tenant to open its profile and branches.</div>}
+          {workspaceTenantId ? <TenantProfileDashboard key={workspaceTenantId} tenantId={workspaceTenantId} showTenantSelector={false} /> : <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">{t('selectPharmacyToOpen')}</div>}
         </section>
       ) : platformTab === 'compare' ? (
         <section className="space-y-4">
           <div className="rounded-2xl border border-slate-200 bg-white p-4">
-            <h3 className="text-sm font-black text-slate-900">Compare selected tenants</h3>
-            <p className="mt-1 text-xs text-slate-500">Select at least two tenants from the directory. Comparison uses each tenant's persisted profile, branches and membership records.</p>
+            <h3 className="text-sm font-black text-slate-900">{t('comparePharmacies')}</h3>
+            <p className="mt-1 text-xs text-slate-500">{t('selectTwoPharmacies')}</p>
             <div className="mt-3 flex flex-wrap gap-2">
               {safeTenants.filter(tenant => compareTenantIds.includes(String(tenant.id || tenant._id))).map(tenant => <span key={tenant.id || tenant._id} className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold">{tenant.name || tenant.id}</span>)}
-              {compareTenantIds.length < 2 && <span className="text-xs text-amber-700">Choose at least two tenants in the Tenants Directory.</span>}
+              {compareTenantIds.length < 2 && <span className="text-xs text-amber-700">{t('selectTwoPharmacies')}</span>}
             </div>
           </div>
           {compareLoading ? <div className="rounded-2xl bg-white p-8 text-center text-sm text-slate-500">Loading comparison data…</div> : compareTenantIds.length >= 2 ? (
@@ -595,7 +595,7 @@ export default function PlatformTenantsView() {
                 <thead><tr className="border-b bg-slate-50"><th className="p-3">Attribute</th>{compareTenantIds.map(id => <th className="p-3" key={id}>{safeTenants.find(tenant => String(tenant.id || tenant._id) === id)?.name || id}</th>)}</tr></thead>
                 <tbody className="divide-y divide-slate-100">
                   {[
-                    ['Tenant ID', id => id],
+                    [t('tenantIdLabel'), id => id],
                     ['Status', id => safeTenants.find(tenant => String(tenant.id || tenant._id) === id)?.status || '—'],
                     ['Legal name', id => compareDetails[id]?.legalName || safeTenants.find(tenant => String(tenant.id || tenant._id) === id)?.legalName || '—'],
                     ['Contact email', id => compareDetails[id]?.contactEmail || safeTenants.find(tenant => String(tenant.id || tenant._id) === id)?.contactEmail || '—'],
@@ -613,7 +613,7 @@ export default function PlatformTenantsView() {
                     ['Branch locations', id => Array.isArray(compareDetails[id]?.branches) && compareDetails[id].branches.length ? compareDetails[id].branches.map(branch => [branch.name || branch.code, branch.address?.city, branch.address?.state].filter(Boolean).join(' · ')).join(' | ') : 'No branch records'],
                     ['Memberships', id => Array.isArray(compareDetails[id]?.memberships) ? compareDetails[id].memberships.length : 'Not available'],
                     ['Active memberships', id => Array.isArray(compareDetails[id]?.memberships) ? compareDetails[id].memberships.filter(member => String(member.status || '').toUpperCase() === 'ACTIVE').length : 'Not available'],
-                    ['Tenant as main branch', id => compareDetails[id]?.usesTenantAsBranch === true ? 'Yes' : 'No / Not configured']
+                    [t('pharmacyAsMainBranch'), id => compareDetails[id]?.usesTenantAsBranch === true ? 'Yes' : 'No']
                   ].map(([label, value]) => <tr key={label}><th className="p-3 font-bold text-slate-600">{label}</th>{compareTenantIds.map(id => <td key={id} className="p-3 text-slate-800">{value(id)}</td>)}</tr>)}
                 </tbody>
               </table>
@@ -762,7 +762,7 @@ export default function PlatformTenantsView() {
                       {/* Identifiers */}
                       <td className="py-3.5 px-4 font-mono text-[11px]">
                         <div className="text-blue-600 font-semibold">{tenantRow.id}</div>
-                        <div className="text-slate-400 text-[10px]">slug: {tenantRow.slug || '—'}</div>
+                        
                       </td>
 
                       {/* Status (Unboxed subtle typography with indicator dot, no pill candy) */}
@@ -940,7 +940,7 @@ export default function PlatformTenantsView() {
                             </span>
                           </td>
                           <td className="py-3 px-4 text-[11px] text-slate-500">
-                            <div>Invited: {v.createdAt ? new Date(v.createdAt).toLocaleDateString() : '—'}</div>
+                            <div>{t('invitedOn')}: {v.createdAt ? new Date(v.createdAt).toLocaleDateString() : '—'}</div>
                             {isCompleted && v.onboardingCompletedAt && (
                               <div className="text-emerald-600 font-semibold">
                                 Completed: {new Date(v.onboardingCompletedAt).toLocaleDateString()}
@@ -1008,12 +1008,12 @@ export default function PlatformTenantsView() {
 
                 <div>
                   <label className="block text-slate-700 font-bold mb-1">
-                    Pharmacy Brand Name <span className="text-rose-500">*</span>
+                    {t('pharmacyNameField')} <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="text"
                     required
-                    placeholder="e.g. Apollo Life Care"
+                    placeholder={t("pharmacyNameField")}
                     value={onboardForm.name}
                     onChange={(e) => {
                       const name = e.target.value;
@@ -1031,11 +1031,11 @@ export default function PlatformTenantsView() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-slate-700 font-bold mb-1">
-                      Unique Tenant Slug
+                      {t('shortPharmacyNameField')}
                     </label>
                     <input
                       type="text"
-                      placeholder="e.g. apollo-life-care"
+                      placeholder={t("shortPharmacyNameField")}
                       value={onboardForm.slug}
                       onChange={(e) => setOnboardForm(prev => ({ ...prev, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') }))}
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono text-[11px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
@@ -1044,11 +1044,11 @@ export default function PlatformTenantsView() {
 
                   <div>
                     <label className="block text-slate-700 font-bold mb-1">
-                      Legal Entity Name
+                      {t('registeredBusinessNameField')}
                     </label>
                     <input
                       type="text"
-                      placeholder="e.g. Apollo Healthcare LLP"
+                      placeholder={t("registeredBusinessNameField")}
                       value={onboardForm.legalName}
                       onChange={(e) => setOnboardForm(prev => ({ ...prev, legalName: e.target.value }))}
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
@@ -1059,11 +1059,11 @@ export default function PlatformTenantsView() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-slate-700 font-bold mb-1">
-                      Contact Email
+                      {t('emailAddress')}
                     </label>
                     <input
                       type="email"
-                      placeholder="care@tenant.example.com"
+                      placeholder="care@pharmacy.com"
                       value={onboardForm.contactEmail}
                       onChange={(e) => setOnboardForm(prev => ({ ...prev, contactEmail: e.target.value }))}
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
@@ -1072,7 +1072,7 @@ export default function PlatformTenantsView() {
 
                   <div>
                     <label className="block text-slate-700 font-bold mb-1">
-                      Contact Phone
+                      {t('mobileNumber')}
                     </label>
                     <input
                       type="tel"
@@ -1086,17 +1086,17 @@ export default function PlatformTenantsView() {
 
                 <div>
                   <label className="block text-slate-700 font-bold mb-1">
-                    Initial Tenant Administrator Email (Optional)
+                    {t('initialPharmacyManagerEmailField')}
                   </label>
                   <input
                     type="email"
-                    placeholder="owner@tenant.example.com"
+                    placeholder="owner@pharmacy.com"
                     value={onboardForm.initialAdminEmail}
                     onChange={(e) => setOnboardForm(prev => ({ ...prev, initialAdminEmail: e.target.value }))}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
                   />
                   <span className="text-[10px] text-slate-500 mt-1 block">
-                    If provided, an invitation token and Tenant Admin membership will be provisioned immediately.
+                    {t('pharmacyInviteHelp')}
                   </span>
                 </div>
               </div>
@@ -1159,7 +1159,7 @@ export default function PlatformTenantsView() {
                     <span>{t('invitationIssued')}</span>
                   </div>
                   <p className="text-[11px] text-emerald-700">
-                    An administrator record has been registered for <strong>{issuedInvitation.email}</strong> under <strong>{selectedTenant.name}</strong>.
+                    {t('pharmacyInvitationSent').replace('{email}', issuedInvitation.email).replace('{name}', selectedTenant.name)}
                   </p>
                   <div className="bg-white p-2.5 rounded-xl border border-emerald-200 font-mono text-[10px] break-all select-all text-slate-800">
                     Token: {issuedInvitation.invitationToken}
@@ -1297,7 +1297,7 @@ export default function PlatformTenantsView() {
                               </div>
                             </div>
                             <div className="text-right text-[11px] text-slate-600 font-mono">
-                              <div>Radius: {b.serviceRadiusKm} km</div>
+                              <div>{t('deliveryAreaLabel')}: {b.serviceRadiusKm} km</div>
                               <div className="text-slate-400">Min: ₹{b.minimumOrderValue}</div>
                             </div>
                           </div>
@@ -1311,7 +1311,7 @@ export default function PlatformTenantsView() {
                   {/* Memberships Section */}
                   <div className="border border-slate-200 rounded-2xl p-4 bg-slate-50 space-y-2">
                     <span className="font-extrabold text-slate-800 block">
-                      Administrative Staff & Delegated Memberships ({tenantDetails.memberships?.length || 0})
+                      {t('pharmacyStaffAccess')} ({tenantDetails.memberships?.length || 0})
                     </span>
                     {tenantDetails.memberships && tenantDetails.memberships.length > 0 ? (
                       <div className="space-y-2">
@@ -1338,7 +1338,7 @@ export default function PlatformTenantsView() {
                   </div>
                 </div>
               ) : (
-                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-800">Tenant details are unavailable. Refresh and try again; no placeholder branch or membership data is displayed.</div>
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-800">{t('pharmacyDetailsUnavailable')}</div>
               )}
             </div>
 

@@ -1,6 +1,8 @@
 import React from 'react';
+import { useLanguage } from '../context/LanguageContext';
 
 export default function ProofOfDeliveryModal({ isOpen, onClose, order }) {
+  const { t } = useLanguage();
   if (!isOpen || !order) return null;
 
   return (
@@ -14,7 +16,7 @@ export default function ProofOfDeliveryModal({ isOpen, onClose, order }) {
         <button
           type="button"
           onClick={onClose}
-          aria-label="Close"
+          aria-label={t("close")}
           className="absolute top-4 right-4 flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition cursor-pointer z-20"
         >
           ✕

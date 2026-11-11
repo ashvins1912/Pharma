@@ -1329,7 +1329,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh, dateRange = 
               <div>
                 <h4 id="assign-rider-title" className="text-sm font-black text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
                   <span>🛵</span>
-                  <span>Assign Delivery Rider</span>
+                  <span>{t('assignDeliveryPartner')}</span>
                 </h4>
                 <p className="text-xs text-slate-500 mt-0.5">
                   Order #{(assignRiderModal._id || '').slice(-6).toUpperCase()}
@@ -1337,7 +1337,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh, dateRange = 
               </div>
               <button
                 onClick={() => setAssignRiderModal(null)}
-                aria-label="Close rider assignment"
+                aria-label={t('close')}
                 className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition cursor-pointer"
               >
                 ✕
@@ -1346,25 +1346,25 @@ export default function AdminFulfillmentKanban({ orders, onRefresh, dateRange = 
 
             <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 sm:p-5 space-y-4">
               <div className="space-y-3">
-                <p className="text-[11px] font-bold text-slate-500">Available riders</p>
+                <p className="text-[11px] font-bold text-slate-500">{t('availableDeliveryPartners')}</p>
                 {loadingAvailableRiders && (
-                  <p className="rounded-xl bg-slate-50 p-3 text-xs text-slate-500">Loading available riders...</p>
+                  <p className="rounded-xl bg-slate-50 p-3 text-xs text-slate-500">{t('loading')}</p>
                 )}
                 {availableRidersError && (
                   <p role="alert" className="rounded-xl bg-rose-50 p-3 text-xs text-rose-700">{availableRidersError}</p>
                 )}
                 {!loadingAvailableRiders && !availableRidersError && availableRiders.length === 0 && (
-                  <p className="rounded-xl bg-amber-50 p-3 text-xs text-amber-800">No riders are currently available.</p>
+                  <p className="rounded-xl bg-amber-50 p-3 text-xs text-amber-800">{t('noRidersAvailable')}</p>
                 )}
                 {!loadingAvailableRiders && availableRiders.length > 0 && (
                   <div className="space-y-2">
-                    <label htmlFor="fulfillment-rider-search" className="sr-only">Search available riders</label>
+                    <label htmlFor="fulfillment-rider-search" className="sr-only">{t("searchDeliveryPartner")}</label>
                     <input
                       id="fulfillment-rider-search"
                       type="search"
                       value={riderSearch}
                       onChange={(event) => setRiderSearch(event.target.value)}
-                      placeholder="Search by rider name or mobile"
+                      placeholder={t('searchDeliveryPartner')}
                       className="min-h-11 w-full min-w-0 rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
                     />
                     <div className="space-y-2">
@@ -1478,7 +1478,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh, dateRange = 
                     </span>
                   </div>
                   <p className="text-[11px] sm:text-xs text-slate-500 truncate">
-                    Stage: <strong className="text-slate-700">{prescriptionModalOrder.orderStatus}</strong> • Customer: <span className="font-semibold text-slate-700">{prescriptionModalOrder.customerName || prescriptionModalOrder.addressDetails?.fullName || 'Customer'}</span>
+                    {t('status')} : <strong className="text-slate-700">{prescriptionModalOrder.orderStatus}</strong> • {t('customer')} : <span className="font-semibold text-slate-700">{prescriptionModalOrder.customerName || prescriptionModalOrder.addressDetails?.fullName || 'Customer'}</span>
                   </p>
                 </div>
               </div>
@@ -1492,13 +1492,13 @@ export default function AdminFulfillmentKanban({ orders, onRefresh, dateRange = 
                     className="hidden sm:inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition shadow-sm"
                   >
                     <span>⬇</span>
-                    <span>Open in New Tab</span>
+                    <span>{t('openSeparately')}</span>
                   </a>
                 )}
                 <button
                   type="button"
                   onClick={closePrescriptionPreview}
-                  aria-label="Close prescription review"
+                  aria-label={t('close')}
                   className="absolute top-4 right-4 flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition cursor-pointer z-20"
                 >
                   ✕
@@ -1513,7 +1513,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh, dateRange = 
                 <div className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600">
                   <span className="flex items-center gap-1.5">
                     <span>📄</span>
-                    <span>Prescription Document</span>
+                    <span>{t('prescriptionDocument')}</span>
                   </span>
                   {prescriptionPreview?.type?.startsWith('image/') && (
                     <div className="flex items-center gap-1.5">
@@ -1627,11 +1627,11 @@ export default function AdminFulfillmentKanban({ orders, onRefresh, dateRange = 
                     <div className="flex items-center gap-2">
                       <span className="text-emerald-600 font-bold text-sm">✓</span>
                       <span className="text-xs font-black text-emerald-900">
-                        Prescription verification passed
+                        {t('prescriptionChecked')}
                       </span>
                     </div>
                     <p className="text-xs text-emerald-800">
-                      Status: <strong>MATCHED</strong>.
+                      {t('prescriptionChecked')}.
                       {prescriptionModalOrder.prescriptionVerification?.manualApproved && (
                         <span> Manually approved by {prescriptionModalOrder.prescriptionVerification.manualApprovedBy || 'Pharmacist'}.</span>
                       )}
@@ -1738,14 +1738,14 @@ export default function AdminFulfillmentKanban({ orders, onRefresh, dateRange = 
                 <div className="p-3 sm:p-4 border-t border-slate-200 bg-slate-50 space-y-2 mt-auto">
                   <div>
                     <label htmlFor="modal-approval-reason" className="block text-[11px] font-bold text-slate-700 mb-1">
-                      Pharmacist Clinical Decision Note (required):
+                      {t('pharmacistNoteRequired')}:
                     </label>
                     <input
                       id="modal-approval-reason"
                       type="text"
                       value={approvalReason}
                       onChange={e => setApprovalReason(e.target.value)}
-                      placeholder="Required: note what you verified on the prescription"
+                      placeholder={t('verifyPrescriptionNote')}
                       className="w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs outline-none focus:border-blue-500"
                     />
                   </div>
@@ -1757,7 +1757,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh, dateRange = 
                       disabled={isProcessing || !verifiedOrderIds.includes(String(prescriptionModalOrder._id)) || !approvalReason.trim() || !(prescriptionModalOrder.prescriptionUrl || prescriptionModalOrder.prescriptionId)}
                       className="min-h-10 flex-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs px-3 py-2 transition shadow-md shadow-emerald-600/20 disabled:opacity-50"
                     >
-                      {updatingId === prescriptionModalOrder._id ? 'Saving…' : '✓ Approve Prescription & Order'}
+                      {updatingId === prescriptionModalOrder._id ? 'Saving…' : t('approvePrescriptionAndOrder')}
                     </button>
 
                     {prescriptionModalOrder.prescriptionId && (

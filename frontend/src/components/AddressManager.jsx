@@ -605,7 +605,7 @@ export default function AddressManager({
               className="w-full bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 text-xs font-extrabold py-2.5 rounded-xl cursor-pointer transition flex items-center justify-center gap-2"
             >
               <span>📍</span>
-              <span>{locating ? 'Locating device GPS...' : 'Use My Current Location'}</span>
+              <span>{locating ? t('gettingLocation') : t('useCurrentLocation')}</span>
             </button>
             {gpsStatus && (
               <p className={`text-[11px] font-semibold text-center mt-1 ${gpsStatus.includes('✅') ? 'text-emerald-700' : 'text-amber-700'}`}>
@@ -615,7 +615,7 @@ export default function AddressManager({
             {googleMapsApiKey && (
               <div
                 ref={mapContainerRef}
-                aria-label="Select delivery location on map"
+                aria-label={t("selectDeliveryOnMap")}
                 className="h-52 w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-100"
               />
             )}
@@ -690,11 +690,11 @@ export default function AddressManager({
             </div>
             <div>
               <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                Contact Mobile
+                {t("mobileNumber")}
               </label>
               <input
                 type="tel"
-                placeholder="+91 95899 16475"
+                placeholder={t("mobileNumber")}
                 value={mobile}
                 onChange={(e) => setMobile(e.target.value)}
                 className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500"
@@ -707,13 +707,13 @@ export default function AddressManager({
           <div className="space-y-2">
             <div>
               <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                Flat / House No. / Building / Street
+                {t("addressLine")}
               </label>
               <div ref={placesWidgetRef}>
                 <input
                   ref={addressInputRef}
                   type="text"
-                  placeholder="e.g. Flat 402, Greenfield Heights, Richmond Road"
+                  placeholder={t("addressLine")}
                   value={addressLine1}
                   onChange={(e) => setAddressLine1(e.target.value)}
                   className={`w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 ${modernPlacesEnabled ? 'hidden' : ''}`}
@@ -728,11 +728,11 @@ export default function AddressManager({
             )}
             <div>
               <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                Area / Colony / Sector
+                {t("areaOrColony")}
               </label>
               <input
                 type="text"
-                placeholder="e.g. Shanthala Nagar"
+                placeholder={t("areaOrColony")}
                 value={addressLine2}
                 onChange={(e) => setAddressLine2(e.target.value)}
                 className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500"
@@ -776,7 +776,7 @@ export default function AddressManager({
               <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">{t("landmark")}</label>
               <input
                 type="text"
-                placeholder="Near Circle"
+                placeholder={t("landmark")}
                 value={landmark}
                 onChange={(e) => setLandmark(e.target.value)}
                 className="w-full px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none"

@@ -7,29 +7,29 @@ import { useLanguage } from '../context/LanguageContext';
 
 const signupFields = ['name', 'mobile', 'dateOfBirth', 'gender', 'email', 'password', 'confirmPassword'];
 
-function validateSignupField(field, values) {
+function validateSignupField(field, values, t) {
   switch (field) {
     case 'name':
-      return values.name.trim().length < 2 ? 'Full name must be at least 2 characters.' : '';
+      return values.name.trim().length < 2 ? t('signupNameTooShort') : '';
     case 'mobile':
-      return values.mobile && values.mobile.replace(/\D/g, '').length < 10 ? 'Mobile number must be at least 10 digits.' : '';
+      return values.mobile && values.mobile.replace(/\D/g, '').length < 10 ? t('signupMobileTooShort') : '';
     case 'dateOfBirth':
-      return !values.dateOfBirth ? 'Date of birth is required.' : '';
+      return !values.dateOfBirth ? t('signupDobRequired') : '';
     case 'gender':
-      return !values.gender ? 'Please select your gender.' : '';
+      return !values.gender ? t('signupGenderRequired') : '';
     case 'email':
       return /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(values.email.trim())
         ? ''
-        : 'Enter a valid email address.';
+        : t('signupEmailInvalid');
     case 'password':
-      if (values.password.length < 8) return 'Password must contain at least 8 characters.';
+      if (values.password.length < 8) return t('signupPasswordTooShort');
       if (!/[A-Z]/.test(values.password) || !/[a-z]/.test(values.password) || !/[0-9]/.test(values.password)) {
-        return 'Use at least one uppercase letter, one lowercase letter, and one number.';
+        return t('signupPasswordStrength');
       }
       return '';
     case 'confirmPassword':
-      if (!values.confirmPassword) return 'Please confirm your password.';
-      return values.confirmPassword !== values.password ? 'Passwords do not match.' : '';
+      if (!values.confirmPassword) return t('signupConfirmPassword');
+      return values.confirmPassword !== values.password ? t('signupPasswordMismatch') : '';
     default:
       return '';
   }
@@ -116,7 +116,7 @@ export default function AuthModal({ isOpen, onClose }) {
   const validateSignup = () => {
     const values = getSignupValues();
     const errors = Object.fromEntries(
-      signupFields.map((field) => [field, validateSignupField(field, values)])
+      signupFields.map((field) => [field, validateSignupField(field, values, t)])
     );
     setSignupErrors(errors);
     return Object.values(errors).every((error) => !error);
@@ -126,10 +126,10 @@ export default function AuthModal({ isOpen, onClose }) {
     setSignupErrors((current) => {
       const updated = {
         ...current,
-        [field]: validateSignupField(field, values)
+        [field]: validateSignupField(field, values, t)
       };
       if (field === 'password' && values.confirmPassword) {
-        updated.confirmPassword = validateSignupField('confirmPassword', values);
+        updated.confirmPassword = validateSignupField('confirmPassword', values, t);
       }
       return updated;
     });
@@ -151,7 +151,7 @@ export default function AuthModal({ isOpen, onClose }) {
     try {
       if (passwordRecoveryRequired) {
         if (password !== confirmPassword) {
-          setErrorMsg('Passwords do not match.');
+          setErrorMsg(t('signupPasswordMismatch'));
           setLoading(false);
           return;
         }
@@ -160,7 +160,7 @@ export default function AuthModal({ isOpen, onClose }) {
         handleClose(true);
       } else if (isSignUp) {
         if (password !== confirmPassword) {
-          setErrorMsg('Passwords do not match.');
+          setErrorMsg(t('signupPasswordMismatch'));
           setLoading(false);
           return;
         }
@@ -314,7 +314,7 @@ export default function AuthModal({ isOpen, onClose }) {
             onClick={handleClose}
             disabled={loading || googleLoading}
             className="absolute top-4 right-4 text-slate-400 hover:text-slate-700 w-8 h-8 rounded-full flex items-center justify-center bg-slate-100 hover:bg-slate-200 transition cursor-pointer"
-            aria-label="Close"
+            aria-label={t("close")}
           >
             ✕
           </button>
@@ -488,11 +488,11 @@ export default function AuthModal({ isOpen, onClose }) {
                 {isSignUp && !passwordRecoveryRequired && (
                   <div>
                     <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                      Full Name
+                      {t("fullName")}
                     </label>
                     <input
                       type="text"
-                      placeholder="e.g. Ashvin Singh"
+                      placeholder={t("fullName")}
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                       onBlur={() => handleSignupBlur('name')}
@@ -507,11 +507,11 @@ export default function AuthModal({ isOpen, onClose }) {
                 {isSignUp && !passwordRecoveryRequired && (
                   <div>
                     <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                      Mobile Number (Optional — verification can be added later)
+                      {t("mobileNumber")}
                     </label>
                     <input
                       type="tel"
-                      placeholder="e.g. +91 95899 16475"
+                      placeholder={t("mobileNumber")}
                       value={mobile}
                       onChange={(e) => setMobile(e.target.value)}
                       onBlur={() => handleSignupBlur('mobile')}
@@ -526,7 +526,7 @@ export default function AuthModal({ isOpen, onClose }) {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="min-w-0">
                       <label htmlFor="signup-date-of-birth" className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                        Date of Birth <span className="text-rose-500">*</span>
+                        {t("dateOfBirth")} <span className="text-rose-500">*</span>
                       </label>
                       <input
                         id="signup-date-of-birth"
@@ -545,7 +545,7 @@ export default function AuthModal({ isOpen, onClose }) {
                     </div>
                     <div className="min-w-0">
                       <label htmlFor="signup-gender" className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                        Gender <span className="text-rose-500">*</span>
+                        {t("gender")} <span className="text-rose-500">*</span>
                       </label>
                       <select
                         id="signup-gender"
@@ -571,11 +571,11 @@ export default function AuthModal({ isOpen, onClose }) {
                 {!passwordRecoveryRequired && (
                 <div>
                   <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                    Email Address
+                    {t("emailAddress")}
                   </label>
                   <input
                     type="email"
-                    placeholder="you@ashvinpharma.com"
+                    placeholder={t("emailAddress")}
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     onBlur={isSignUp ? () => handleSignupBlur('email') : undefined}

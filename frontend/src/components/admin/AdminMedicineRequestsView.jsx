@@ -404,11 +404,11 @@ export default function AdminMedicineRequestsView() {
 
               <div>
                 <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
-                  Pharmacist Procurement / Storage Note
+                  {t('pharmacyNote')}
                 </label>
                 <textarea
                   rows={2}
-                  placeholder="e.g. Certified cold-chain temperature monitoring maintained during transit."
+                  placeholder={t("deliveryHandlingNotesPlaceholder")}
                   value={propPharmacyNote}
                   onChange={(e) => setPropPharmacyNote(e.target.value)}
                   className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none"

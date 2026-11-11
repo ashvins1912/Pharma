@@ -615,12 +615,12 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
             {previewData.errorsCount > 0 && (
               <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl text-xs space-y-2">
                 <div className="flex flex-col sm:flex-row justify-between items-start gap-2 text-rose-800 font-bold">
-                  <span>⚠️ {previewData.errorsCount} rows failed schema checks (will be logged to failure report)</span>
+                  <span>⚠️ {t('importRowsNeedFixing').replace('{count}', previewData.errorsCount)}</span>
                   <button
                     onClick={() => setShowErrorsOnly(!showErrorsOnly)}
                     className="underline text-[11px] font-extrabold cursor-pointer"
                   >
-                    {showErrorsOnly ? 'Show Valid Preview' : 'View Errors'}
+                    {showErrorsOnly ? t('showValidPreview') : t('viewErrors')}
                   </button>
                 </div>
                 {showErrorsOnly && (
