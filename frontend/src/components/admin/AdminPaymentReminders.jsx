@@ -2,6 +2,23 @@ import React, { useCallback, useEffect, useState } from 'react';
 import apiClient from '../../api/apiClient';
 import { useLanguage } from '../../context/LanguageContext';
 
+function SectionPagination({ page, pageSize, total, onPageChange, label = 'records' }) {
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  const start = total ? (page - 1) * pageSize + 1 : 0;
+  const end = Math.min(page * pageSize, total);
+  if (total <= pageSize) return null;
+  return (
+    <nav aria-label={`${label} pagination`} className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3">
+      <p className="text-xs text-slate-500">Showing <strong className="text-slate-700">{start}–{end}</strong> of <strong className="text-slate-700">{total}</strong> {label}</p>
+      <div className="flex items-center gap-1.5">
+        <button type="button" onClick={() => onPageChange(Math.max(1, page - 1))} disabled={page <= 1} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40">Previous</button>
+        <span className="min-w-16 text-center text-xs font-bold tabular-nums text-slate-600">Page {page} / {pageCount}</span>
+        <button type="button" onClick={() => onPageChange(Math.min(pageCount, page + 1))} disabled={page >= pageCount} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40">Next</button>
+      </div>
+    </nav>
+  );
+}
+
 const currency = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' });
 
 export default function AdminPaymentReminders({ canManage = false }) {
@@ -13,6 +30,9 @@ export default function AdminPaymentReminders({ canManage = false }) {
   const [notice, setNotice] = useState('');
   const [totalOutstanding, setTotalOutstanding] = useState(0);
   const [truncated, setTruncated] = useState(false);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 10;
+  const visibleCustomers = customers.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -21,6 +41,7 @@ export default function AdminPaymentReminders({ canManage = false }) {
       const response = await apiClient.get('/api/v1/admin/payments/outstanding');
       const data = response.data?.data || {};
       setCustomers(data.customers || []);
+      setPage(1);
       setTotalOutstanding(Number(data.totalOutstanding || 0));
       setTruncated(Boolean(data.truncated));
     } catch (requestError) {
@@ -66,7 +87,7 @@ export default function AdminPaymentReminders({ canManage = false }) {
       {loading ? <p className="py-10 text-center text-sm text-slate-500">{t('loadingPaymentRecords')}</p>
         : customers.length === 0 ? <p className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">{t('noOutstandingPayments')}</p>
           : <div className="grid gap-3 lg:grid-cols-2">
-            {customers.map(customer => (
+            {visibleCustomers.map(customer => (
               <article key={customer.customerId} className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                 <header className="flex items-start justify-between gap-3">
                   <div>
@@ -91,6 +112,7 @@ export default function AdminPaymentReminders({ canManage = false }) {
               </article>
             ))}
           </div>}
+      {!loading && customers.length > 0 && <SectionPagination page={page} pageSize={PAGE_SIZE} total={customers.length} onPageChange={setPage} label="pending payment records"/>}
     </section>
   );
 }
