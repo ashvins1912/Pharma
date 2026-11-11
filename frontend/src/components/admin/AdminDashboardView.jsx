@@ -257,13 +257,27 @@ export default function AdminDashboardView() {
   const activeCount = processingCount + pendingReviewCount + approvedCount + readyCount + dispatchedCount;
   const totalRevenue = orders.reduce((sum, o) => sum + (Number(o.finalTotal) || 0), 0);
 
+  // Open the selected module and move keyboard/screen-reader focus to its workspace.
+  // Two animation frames allow React to commit the selected tab before scrolling.
+  const openWorkspaceTab = (tab) => {
+    setAdminTab(tab);
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        const workspace = document.getElementById('admin-workspace-content');
+        if (!workspace) return;
+        workspace.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        workspace.focus({ preventScroll: true });
+      });
+    });
+  };
+
   const renderWorkspaceItem = (tab, label, icon, count = null, tone = 'default') => {
     const active = adminTab === tab;
     return (
       <button
         key={tab}
         type="button"
-        onClick={() => setAdminTab(tab)}
+        onClick={() => openWorkspaceTab(tab)}
         aria-current={active ? 'page' : undefined}
         className={`dashboard-nav-item${active ? ' is-active' : ''}${tone === 'governance' ? ' is-governance' : ''}`}
       >
@@ -488,12 +502,12 @@ export default function AdminDashboardView() {
           </label>
           <div className="dashboard-command-signals" aria-label="Operational attention indicators">
             {canViewAdminRequests && (
-              <button type="button" className={pendingMedicineRequestCount > 0 ? 'is-alert' : ''} onClick={() => setAdminTab('requests')}>
+              <button type="button" className={pendingMedicineRequestCount > 0 ? 'is-alert' : ''} onClick={() => openWorkspaceTab('requests')}>
                 <span className="signal-dot" /> Requests <strong>{pendingMedicineRequestCount}</strong>
               </button>
             )}
             {hasPermission('inventory.read') && (
-              <button type="button" className={(inventoryAlerts.lowStockCount || 0) > 0 ? 'is-warning' : ''} onClick={() => setAdminTab('inventory')}>
+              <button type="button" className={(inventoryAlerts.lowStockCount || 0) > 0 ? 'is-warning' : ''} onClick={() => openWorkspaceTab('inventory')}>
                 <span className="signal-dot" /> Low stock <strong>{inventoryAlerts.lowStockCount || 0}</strong>
               </button>
             )}
@@ -503,7 +517,7 @@ export default function AdminDashboardView() {
               </button>
             )}
             {canViewFulfillment && (
-              <button type="button" onClick={() => setAdminTab('fulfillment')}>
+              <button type="button" onClick={() => openWorkspaceTab('fulfillment')}>
                 <span className="signal-dot" /> Active orders <strong>{activeCount}</strong>
               </button>
             )}

@@ -3621,3 +3621,43 @@ html.dark .admin-fulfillment-workspace .fulfillment-metric {
 }
 html.dark .admin-fulfillment-workspace .fulfillment-metric p:first-child { color: #94a3b8; }
 html.dark .admin-fulfillment-workspace .fulfillment-metric p:nth-child(2) { color: #f8fafc; }
+
+
+/* Command-center navigation: make the opened module the immediate focus target. */
+#admin-workspace-content {
+  scroll-margin-top: clamp(.75rem, 2vh, 1.5rem);
+  min-width: 0;
+}
+#admin-workspace-content:focus {
+  outline: none;
+}
+#admin-workspace-content:focus-visible {
+  outline: 2px solid rgb(37 99 235 / .35);
+  outline-offset: 4px;
+  border-radius: 1rem;
+}
+.dashboard-workspace--command-center .dashboard-nav-item {
+  scroll-margin-block: 1rem;
+}
+.dashboard-workspace--command-center .dashboard-nav-item.is-active {
+  border-color: #2563eb !important;
+  background: linear-gradient(110deg, #eff6ff, #fff) !important;
+  color: #1d4ed8 !important;
+  box-shadow: inset 3px 0 0 #2563eb, 0 4px 12px rgb(37 99 235 / .08);
+}
+.dashboard-workspace--command-center .dashboard-nav-item.is-active .dashboard-nav-item-label {
+  color: #1d4ed8 !important;
+  font-weight: 800;
+}
+html.dark .dashboard-workspace--command-center .dashboard-nav-item.is-active {
+  border-color: #3b82f6 !important;
+  background: linear-gradient(110deg, rgb(30 58 138 / .42), rgb(15 23 42 / .9)) !important;
+  color: #bfdbfe !important;
+  box-shadow: inset 3px 0 0 #60a5fa, 0 4px 14px rgb(37 99 235 / .12);
+}
+html.dark .dashboard-workspace--command-center .dashboard-nav-item.is-active .dashboard-nav-item-label {
+  color: #bfdbfe !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  #admin-workspace-content { scroll-behavior: auto; }
+}
