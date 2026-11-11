@@ -1195,6 +1195,13 @@ const messages = {
     pharmacyInviteHelp: "We'll invite this person to manage the pharmacy.",
     pharmacyInvitationSent: "Invitation sent to {email} for {name}.",
     invitedOn: "Invited on",
+    pharmacyDirectory: "Pharmacy directory",
+    comparePharmacies: "Compare pharmacies",
+    noPharmacyMatches: "No matching pharmacies. Try another name or account number.",
+    noRecentPharmacies: "No recent pharmacies found.",
+    selectTwoPharmacies: "Choose at least two pharmacies to compare their details, branches and staff.",
+    pharmacyAsMainBranch: "Pharmacy is the main branch",
+    pharmacyDetailsUnavailable: "Pharmacy details are unavailable. Refresh and try again.",
   },
 
   hi: {
@@ -2382,6 +2389,13 @@ const messages = {
     pharmacyInviteHelp: "हम इस व्यक्ति को फार्मेसी संभालने का निमंत्रण भेजेंगे।",
     pharmacyInvitationSent: "{name} के लिए {email} पर निमंत्रण भेजा गया।",
     invitedOn: "निमंत्रण की तारीख",
+    pharmacyDirectory: "फार्मेसी की सूची",
+    comparePharmacies: "फार्मेसियों की तुलना करें",
+    noPharmacyMatches: "कोई फार्मेसी नहीं मिली। दूसरा नाम या खाता नंबर खोजें।",
+    noRecentPharmacies: "हाल की कोई फार्मेसी नहीं मिली।",
+    selectTwoPharmacies: "कम से कम दो फार्मेसियाँ चुनें और उनके विवरण, शाखाओं व कर्मचारियों की तुलना करें।",
+    pharmacyAsMainBranch: "फार्मेसी ही मुख्य शाखा है",
+    pharmacyDetailsUnavailable: "फार्मेसी का विवरण उपलब्ध नहीं है। फिर से खोलें और कोशिश करें।",
   },
 
   kn: {
@@ -3569,6 +3583,13 @@ const messages = {
     pharmacyInviteHelp: "ಈ ವ್ಯಕ್ತಿಗೆ ಫಾರ್ಮಸಿ ನಿರ್ವಹಿಸಲು ಆಹ್ವಾನ ಕಳುಹಿಸುತ್ತೇವೆ.",
     pharmacyInvitationSent: "{name}ಗಾಗಿ {email}ಗೆ ಆಹ್ವಾನ ಕಳುಹಿಸಲಾಗಿದೆ.",
     invitedOn: "ಆಹ್ವಾನಿಸಿದ ದಿನಾಂಕ",
+    pharmacyDirectory: "ಫಾರ್ಮಸಿ ಪಟ್ಟಿ",
+    comparePharmacies: "ಫಾರ್ಮಸಿಗಳನ್ನು ಹೋಲಿಸಿ",
+    noPharmacyMatches: "ಯಾವುದೇ ಫಾರ್ಮಸಿ ಕಂಡುಬಂದಿಲ್ಲ. ಬೇರೆ ಹೆಸರು ಅಥವಾ ಖಾತೆ ಸಂಖ್ಯೆಯಿಂದ ಹುಡುಕಿ.",
+    noRecentPharmacies: "ಇತ್ತೀಚಿನ ಫಾರ್ಮಸಿಗಳು ಕಂಡುಬಂದಿಲ್ಲ.",
+    selectTwoPharmacies: "ಕನಿಷ್ಠ ಎರಡು ಫಾರ್ಮಸಿಗಳನ್ನು ಆಯ್ಕೆಮಾಡಿ. ಅವುಗಳ ವಿವರ, ಶಾಖೆ ಮತ್ತು ಸಿಬ್ಬಂದಿಯನ್ನು ಹೋಲಿಸಿ.",
+    pharmacyAsMainBranch: "ಫಾರ್ಮಸಿಯೇ ಮುಖ್ಯ ಶಾಖೆ",
+    pharmacyDetailsUnavailable: "ಫಾರ್ಮಸಿ ವಿವರಗಳು ಲಭ್ಯವಿಲ್ಲ. ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
   },
 
   bn: {
@@ -4756,6 +4777,13 @@ const messages = {
     pharmacyInviteHelp: "এই ব্যক্তিকে ফার্মেসি পরিচালনার আমন্ত্রণ পাঠানো হবে।",
     pharmacyInvitationSent: "{name}-এর জন্য {email}-এ আমন্ত্রণ পাঠানো হয়েছে।",
     invitedOn: "আমন্ত্রণের তারিখ",
+    pharmacyDirectory: "ফার্মেসির তালিকা",
+    comparePharmacies: "ফার্মেসিগুলির তুলনা করুন",
+    noPharmacyMatches: "কোনো ফার্মেসি মেলেনি। অন্য নাম বা অ্যাকাউন্ট নম্বর দিয়ে খুঁজুন।",
+    noRecentPharmacies: "সাম্প্রতিক কোনো ফার্মেসি পাওয়া যায়নি।",
+    selectTwoPharmacies: "অন্তত দুটি ফার্মেসি বেছে তাদের বিবরণ, শাখা ও কর্মীদের তুলনা করুন।",
+    pharmacyAsMainBranch: "ফার্মেসিটিই প্রধান শাখা",
+    pharmacyDetailsUnavailable: "ফার্মেসির বিবরণ পাওয়া যাচ্ছে না। আবার চেষ্টা করুন।",
   },
 
   te: {
@@ -5944,6 +5972,13 @@ const messages = {
     pharmacyInviteHelp: "ఈ వ్యక్తికి ఫార్మసీ నిర్వహణ కోసం ఆహ్వానం పంపిస్తాం.",
     pharmacyInvitationSent: "{name} కోసం {email}కు ఆహ్వానం పంపాం.",
     invitedOn: "ఆహ్వానించిన తేదీ",
+    pharmacyDirectory: "ఫార్మసీల జాబితా",
+    comparePharmacies: "ఫార్మసీలను పోల్చండి",
+    noPharmacyMatches: "ఫార్మసీలు కనిపించలేదు. వేరే పేరు లేదా ఖాతా నంబర్‌తో వెతకండి.",
+    noRecentPharmacies: "ఇటీవలి ఫార్మసీలు ఏవీ లేవు.",
+    selectTwoPharmacies: "కనీసం రెండు ఫార్మసీలను ఎంచుకుని వాటి వివరాలు, శాఖలు మరియు సిబ్బందిని పోల్చండి.",
+    pharmacyAsMainBranch: "ఫార్మసీ ప్రధాన శాఖగా ఉంది",
+    pharmacyDetailsUnavailable: "ఫార్మసీ వివరాలు అందుబాటులో లేవు. మళ్లీ ప్రయత్నించండి.",
   }
 };
 
