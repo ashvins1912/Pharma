@@ -405,7 +405,7 @@ export default function Header({
             {/* Backdrop */}
             <div
               onClick={closeMobileMenu}
-              aria-label={t("closeDialog")}
+              aria-label={t("close")}
               className="absolute inset-0 bg-black/40 backdrop-blur-[2px] transition-opacity"
             />
 
@@ -425,7 +425,7 @@ export default function Header({
                   type="button"
                   onClick={closeMobileMenu}
                   className="w-10 h-10 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center transition cursor-pointer"
-                  aria-label={t("closeDialog")}
+                  aria-label={t("close")}
                 >
                   ✕
                 </button>
