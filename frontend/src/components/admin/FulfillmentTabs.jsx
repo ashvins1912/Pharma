@@ -1,4 +1,5 @@
 import React from 'react';
+import { useLanguage } from '../../context/LanguageContext';
 
 export default function FulfillmentTabs({
     viewMode,
@@ -10,6 +11,7 @@ export default function FulfillmentTabs({
     columns,
     counts
 }) {
+    const { t } = useLanguage();
     return (
         <div className="fulfillment-toolbar flex flex-wrap items-center justify-between gap-3 bg-white border border-slate-200 p-3.5 rounded-2xl shadow-sm">
             <div className="fulfillment-mode-actions flex items-center gap-1.5 flex-wrap">
@@ -23,7 +25,7 @@ export default function FulfillmentTabs({
                     }`}
                 >
                     <span>📋</span>
-                    <span>Tabbed Stage View</span>
+                    <span>{t('stageView')}</span>
                 </button>
                 <button
                     type="button"
@@ -35,7 +37,7 @@ export default function FulfillmentTabs({
                     }`}
                 >
                     <span>🗂️</span>
-                    <span>All Columns Grid</span>
+                    <span>{t('allOrdersView')}</span>
                 </button>
             </div>
 
