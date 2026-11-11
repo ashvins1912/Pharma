@@ -201,7 +201,7 @@ export default function AdminMedicineRequestsTab({ initialData = null, initialLo
   ];
 
   return (
-    <div className="admin-screen admin-screen--requests admin-request-center w-full min-w-0 space-y-4 animate-fade-in">
+    <div className="admin-screen admin-screen--requests admin-request-center grid w-full min-w-0 grid-cols-1 gap-4 animate-fade-in">
       <section className="request-center-hero">
         <div className="request-center-hero-copy">
           <span className="request-center-eyebrow">PROCUREMENT WORKSPACE</span>
@@ -214,7 +214,7 @@ export default function AdminMedicineRequestsTab({ initialData = null, initialLo
         </div>
       </section>
 
-      <section className="request-center-metrics" aria-label="Request overview">
+      <section className="request-center-metrics grid grid-cols-2 gap-3 xl:grid-cols-4" aria-label="Request overview">
         <article className="request-center-metric request-center-metric--attention">
           <span className="request-center-metric-label">Needs review</span>
           <strong>{metrics.pendingReviewCount + metrics.underReviewCount}</strong>
@@ -305,7 +305,7 @@ export default function AdminMedicineRequestsTab({ initialData = null, initialLo
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{t('noMedicineRequestsHelp')}</p>
           </div>
         ) : !loadError && requests.length > 0 ? (
-          <div className="request-center-card-grid grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-4">
+          <div className="request-center-card-grid grid grid-cols-1 gap-4 pt-4 md:grid-cols-2 2xl:grid-cols-3">
             {requests.map(req => {
               const items = Array.isArray(req.requestedItems) ? req.requestedItems : [];
               const visibleItems = items.slice(0, 3);
