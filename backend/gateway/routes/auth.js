@@ -5,7 +5,7 @@
  * - POST /auth/activate & POST /auth/verify-email
  * - POST /auth/login
  * - POST /auth/google
- * - POST /auth/resend-verification
+ * - POST /auth/resend-verification & POST /auth/verify-email-code
  * - PUT  /auth/onboarding & PUT /auth/complete-profile
  * - GET  /auth/me
  * - POST /auth/logout
@@ -483,7 +483,8 @@ const handleProfileCompletion = async (req, res) => {
             dateOfBirth,
             mobileNumber: phone,
             gender,
-            password
+            password,
+            confirmPassword
         });
         const completedUser = result?.user || {};
         try {
