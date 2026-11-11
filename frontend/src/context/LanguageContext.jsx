@@ -1155,6 +1155,7 @@ const messages = {
     deliveryHandlingNotesPlaceholder: "Add delivery or storage notes (optional).",
     stageView: "By order stage",
     allOrdersView: "All orders",
+    noRidersAvailable: "No delivery partners are available right now.",
   },
 
   hi: {
@@ -2302,6 +2303,7 @@ const messages = {
     deliveryHandlingNotesPlaceholder: "डिलीवरी या रखरखाव के बारे में जानकारी लिखें (ज़रूरी नहीं)।",
     stageView: "ऑर्डर के चरण के अनुसार",
     allOrdersView: "सभी ऑर्डर",
+    noRidersAvailable: "अभी कोई डिलीवरी पार्टनर उपलब्ध नहीं है।",
   },
 
   kn: {
@@ -3449,6 +3451,7 @@ const messages = {
     deliveryHandlingNotesPlaceholder: "ವಿತರಣೆ ಅಥವಾ ಸಂಗ್ರಹಣೆಯ ಬಗ್ಗೆ ಟಿಪ್ಪಣಿ ಬರೆಯಿರಿ (ಐಚ್ಛಿಕ).",
     stageView: "ಆರ್ಡರ್ ಹಂತದ ಪ್ರಕಾರ",
     allOrdersView: "ಎಲ್ಲಾ ಆರ್ಡರ್‌ಗಳು",
+    noRidersAvailable: "ಈಗ ಯಾವುದೇ ವಿತರಣಾ ಸಿಬ್ಬಂದಿ ಲಭ್ಯವಿಲ್ಲ.",
   },
 
   bn: {
@@ -4596,6 +4599,7 @@ const messages = {
     deliveryHandlingNotesPlaceholder: "ডেলিভারি বা সংরক্ষণ সম্পর্কে নোট লিখুন (ঐচ্ছিক)।",
     stageView: "অর্ডারের ধাপ অনুযায়ী",
     allOrdersView: "সব অর্ডার",
+    noRidersAvailable: "এখন কোনো ডেলিভারি কর্মী পাওয়া যাচ্ছে না।",
   },
 
   te: {
@@ -5744,6 +5748,7 @@ const messages = {
     deliveryHandlingNotesPlaceholder: "డెలివరీ లేదా నిల్వ గురించి గమనిక రాయండి (ఐచ్ఛికం).",
     stageView: "ఆర్డర్ దశ ప్రకారం",
     allOrdersView: "అన్ని ఆర్డర్లు",
+    noRidersAvailable: "ప్రస్తుతం డెలివరీ సిబ్బంది అందుబాటులో లేరు.",
   }
 };
 
