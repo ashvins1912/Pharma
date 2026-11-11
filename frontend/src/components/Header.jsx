@@ -137,11 +137,7 @@ export default function Header({
             className="quickmeds-brand-anchor app-header__brand" role="button" tabIndex={0} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setActiveTab('store'); } }}
           >
             <div className="quickmeds-brand-mark flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-cyan-500 text-white shadow-md shadow-blue-500/20 sm:h-11 sm:w-11" aria-hidden="true">
-              <svg viewBox="0 0 48 48" className="h-[72%] w-[72%]" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M24 5.5c-3.1 0-5.6 2.5-5.6 5.6v7.3h-7.3c-3.1 0-5.6 2.5-5.6 5.6s2.5 5.6 5.6 5.6h7.3v7.3c0 3.1 2.5 5.6 5.6 5.6s5.6-2.5 5.6-5.6v-7.3h7.3c3.1 0 5.6-2.5 5.6-5.6s-2.5-5.6-5.6-5.6h-7.3v-7.3c0-3.1-2.5-5.6-5.6-5.6Z" fill="currentColor" fillOpacity=".98"/>
-                <path d="M13.5 34.5 34.5 13.5" stroke="white" strokeWidth="3.2" strokeLinecap="round" opacity=".9"/>
-                <path d="m28.9 13.5 5.6 0 0 5.6" stroke="white" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
+              <img src="/favicon.svg" alt="" className="h-full w-full object-contain" />
             </div>
             <div className="app-header__brand-copy flex flex-col justify-center">
               <div className="quickmeds-brand-badge-container">
@@ -419,9 +415,7 @@ export default function Header({
               {/* Drawer Header */}
               <div className="flex items-center justify-between pb-4 border-b border-slate-100">
                 <div className="flex items-center gap-2">
-                  <div className="h-9 w-9 rounded-xl bg-blue-600 text-white flex items-center justify-center font-black text-base shadow-md">
-                    ⚕️
-                  </div>
+                  <div className="h-9 w-9 rounded-xl overflow-hidden shadow-md"><img src="/favicon.svg" alt="" className="h-full w-full object-contain" /></div>
                   <div>
                     <h3 id="quickmeds-mobile-navigation-title" className="font-black text-sm text-slate-900">QuickMeds Rx</h3>
                     <p className="text-[10px] text-slate-400 font-medium">{t('trustedTagline')}</p>
