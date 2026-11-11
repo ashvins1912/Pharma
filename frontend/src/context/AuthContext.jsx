@@ -558,7 +558,7 @@ export function AuthProvider({ children }) {
     }
   };
 
-  const exchangeGoogleSession = async (supaSession) => {
+  const exchangeGoogleSession = async (supaSession, { force = false } = {}) => {
     if (!supaSession?.access_token) throw new Error('Google sign-in session is unavailable.');
 
     // The initial auth hydration and Supabase onAuthStateChange can fire for
@@ -568,7 +568,7 @@ export function AuthProvider({ children }) {
     // React hydration and Supabase's INITIAL_SESSION/SIGNED_IN callbacks can
     // deliver the same access token at slightly different times. Remember a
     // successful exchange so the callback cannot immediately hit the rate limit.
-    if (googleExchangeCompletedTokenRef.current === supaSession.access_token) {
+    if (!force && googleExchangeCompletedTokenRef.current === supaSession.access_token) {
       return googleExchangeResultRef.current;
     }
 
@@ -630,12 +630,20 @@ export function AuthProvider({ children }) {
       const { data: sessionData } = await supabase.auth.getSession();
       const supaSession = sessionData?.session;
       if (!supaSession?.access_token) throw error;
-      await exchangeGoogleSession(supaSession);
+      // Force a fresh exchange so the restricted HttpOnly onboarding cookie
+      // is re-issued if the hosting proxy dropped the original Set-Cookie header.
+      await exchangeGoogleSession(supaSession, { force: true });
       const { data } = await apiClient.put('/api/v1/auth/complete-profile', profileData);
       result = data?.data || data;
     }
 
     const completedUser = result?.user || result;
+    if (!completedUser?.id
+      || completedUser.profileCompleted === false
+      || String(completedUser.accountStatus || '').toUpperCase() !== 'ACTIVE') {
+      throw new Error('Your profile was not fully saved. Please review the details and try again.');
+    }
+
     setProfileCompletionRequired(false);
     syncSession({ user: completedUser }, completedUser);
     clearSupabaseLocalSession();
