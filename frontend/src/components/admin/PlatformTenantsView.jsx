@@ -535,9 +535,9 @@ export default function PlatformTenantsView() {
           <span className="platform-governance-icon" aria-hidden="true">🛡️</span>
           <div><h3>{t('accessOverviewTitle')}</h3><p>{t('accessOverviewDesc')}</p></div>
         </div>
-        <div className="platform-governance-check"><span className="platform-governance-checkmark">01</span><div><strong>{t('pharmacyAccessLabel')}</strong><span>Each pharmacy's information stays separate.</span></div></div>
-        <div className="platform-governance-check"><span className="platform-governance-checkmark">02</span><div><strong>{t('branchAccessLabel')}</strong><span>Staff can be limited to one branch.</span></div></div>
-        <div className="platform-governance-check"><span className="platform-governance-checkmark">03</span><div><strong>{t('staffInvitationsLabel')}</strong><span>Invite staff to the right pharmacy.</span></div></div>
+        <div className="platform-governance-check"><span className="platform-governance-checkmark">01</span><div><strong>{t('pharmacyAccessLabel')}</strong><span>{t('pharmacyDataSeparate')}</span></div></div>
+        <div className="platform-governance-check"><span className="platform-governance-checkmark">02</span><div><strong>{t('branchAccessLabel')}</strong><span>{t('staffBranchAccess')}</span></div></div>
+        <div className="platform-governance-check"><span className="platform-governance-checkmark">03</span><div><strong>{t('staffInvitationsLabel')}</strong><span>{t('inviteStaffToPharmacy')}</span></div></div>
       </section>
 
       {platformTab === 'profile' ? (
