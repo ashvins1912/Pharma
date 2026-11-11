@@ -95,7 +95,7 @@ export default function Footer({ onNavigate, onOpenGuide }) {
         </div>
 
         <div className="app-footer__bottom border-t border-slate-100 mt-10 pt-6 flex flex-col sm:flex-row justify-between items-center gap-3 text-slate-400 text-[11px]">
-          <p>© {new Date().getFullYear()} QuickMeds Rx Operations. {t('allRightsReserved')}</p>
+          <p>© {new Date().getFullYear()} QuickMeds Rx. {t('allRightsReserved')}</p>
           <div className="app-footer__legal flex flex-wrap items-center gap-4">
             <label className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500">
               <span aria-hidden="true">🌐</span>
