@@ -3,6 +3,23 @@ import apiClient from '../../api/apiClient';
 import { useToast } from '../../context/ToastContext';
 import { useLanguage } from '../../context/LanguageContext';
 
+function SectionPagination({ page, pageSize, total, onPageChange, label = 'records' }) {
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  const start = total ? (page - 1) * pageSize + 1 : 0;
+  const end = Math.min(page * pageSize, total);
+  if (total <= pageSize) return null;
+  return (
+    <nav aria-label={`${label} pagination`} className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3">
+      <p className="text-xs text-slate-500">Showing <strong className="text-slate-700">{start}–{end}</strong> of <strong className="text-slate-700">{total}</strong> {label}</p>
+      <div className="flex items-center gap-1.5">
+        <button type="button" onClick={() => onPageChange(Math.max(1, page - 1))} disabled={page <= 1} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40">Previous</button>
+        <span className="min-w-16 text-center text-xs font-bold tabular-nums text-slate-600">Page {page} / {pageCount}</span>
+        <button type="button" onClick={() => onPageChange(Math.min(pageCount, page + 1))} disabled={page >= pageCount} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40">Next</button>
+      </div>
+    </nav>
+  );
+}
+
 const money = value => `₹${Number(value || 0).toLocaleString('en-IN')}`;
 
 export default function CustomerPromotionsView({ canManage = false }) {
@@ -21,6 +38,10 @@ export default function CustomerPromotionsView({ canManage = false }) {
   const [label, setLabel] = useState(t('pharmaDiscountForYou'));
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [customerPage, setCustomerPage] = useState(1);
+  const [offerPage, setOfferPage] = useState(1);
+  const CUSTOMER_PAGE_SIZE = 10;
+  const OFFER_PAGE_SIZE = 10;
 
   const load = async () => {
     setLoading(true);
@@ -40,7 +61,15 @@ export default function CustomerPromotionsView({ canManage = false }) {
 
   useEffect(() => { void load(); }, []);
 
-  const selected = useMemo(
+  const uniqueCustomers = useMemo(() => Array.from(new Map(customers.map(customer => [String(customer.customerId), customer])).values()), [customers]);
+  const visibleCustomers = useMemo(() => uniqueCustomers.slice((customerPage - 1) * CUSTOMER_PAGE_SIZE, customerPage * CUSTOMER_PAGE_SIZE), [uniqueCustomers, customerPage]);
+  const visiblePromotions = useMemo(() => promotions.slice((offerPage - 1) * OFFER_PAGE_SIZE, offerPage * OFFER_PAGE_SIZE), [promotions, offerPage]);
+
+  useEffect(() => { setCustomerPage(1); }, [search]);
+  useEffect(() => { setCustomerPage(page => Math.min(page, Math.max(1, Math.ceil(uniqueCustomers.length / CUSTOMER_PAGE_SIZE)))); }, [uniqueCustomers.length]);
+  useEffect(() => { setOfferPage(page => Math.min(page, Math.max(1, Math.ceil(promotions.length / OFFER_PAGE_SIZE)))); }, [promotions.length]);
+
+  const selected = useMemo((
     () => customers.find(customer => customer.customerId === selectedCustomer),
     [customers, selectedCustomer]
   );
@@ -119,7 +148,7 @@ export default function CustomerPromotionsView({ canManage = false }) {
             <input value={search} onChange={e => setSearch(e.target.value)} onKeyDown={e => e.key === 'Enter' && load()} placeholder={t('searchCustomer')} className="w-40 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs outline-none focus:border-blue-500" />
           </div>
           <div className="max-h-[430px] space-y-2 overflow-y-auto pr-1">
-            {customers.map(customer => {
+            {visibleCustomers.map(customer => {
               const hasActiveOffer = promotions.some(promotion => String(promotion.customerId) === String(customer.customerId) && promotion.isActive);
               return (
               <button type="button" key={customer.customerId} onClick={() => setSelectedCustomer(customer.customerId)}
@@ -137,8 +166,9 @@ export default function CustomerPromotionsView({ canManage = false }) {
               </button>
             );
             })}
-            {!customers.length && <p className="py-10 text-center text-xs text-slate-400">{t('noCustomerHistory')}</p>}
+            {!uniqueCustomers.length && <p className="py-10 text-center text-xs text-slate-400">{t('noCustomerHistory')}</p>}
           </div>
+          <SectionPagination page={customerPage} pageSize={CUSTOMER_PAGE_SIZE} total={uniqueCustomers.length} onPageChange={setCustomerPage} label="customers"/>
         </div>
 
         {canManage ? (
@@ -177,7 +207,7 @@ export default function CustomerPromotionsView({ canManage = false }) {
       <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="mb-3 flex items-center justify-between"><h4 className="text-sm font-black text-slate-900">{t('assignedOffers')}</h4><span className="text-[10px] font-bold text-slate-400">{promotions.length} {t('records')}</span></div>
         <div className="grid gap-2 md:grid-cols-2">
-          {promotions.map(promotion => (
+          {visiblePromotions.map(promotion => (
             <div key={promotion._id} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-xs font-black text-slate-900">{promotion.code}</span>
@@ -194,6 +224,8 @@ export default function CustomerPromotionsView({ canManage = false }) {
             </div>
           ))}
         </div>
+        {!promotions.length && <p className="py-8 text-center text-xs text-slate-400">No assigned offers yet.</p>}
+        <SectionPagination page={offerPage} pageSize={OFFER_PAGE_SIZE} total={promotions.length} onPageChange={setOfferPage} label="offers"/>
       </div>
     </section>
   );
