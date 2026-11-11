@@ -1337,7 +1337,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh, dateRange = 
               </div>
               <button
                 onClick={() => setAssignRiderModal(null)}
-                aria-label={t('closeDialog')}
+                aria-label={t('close')}
                 className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition cursor-pointer"
               >
                 ✕
@@ -1498,7 +1498,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh, dateRange = 
                 <button
                   type="button"
                   onClick={closePrescriptionPreview}
-                  aria-label={t('closeDialog')}
+                  aria-label={t('close')}
                   className="absolute top-4 right-4 flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition cursor-pointer z-20"
                 >
                   ✕
