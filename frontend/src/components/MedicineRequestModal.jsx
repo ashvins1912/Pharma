@@ -215,11 +215,11 @@ export default function MedicineRequestModal({ isOpen, onClose, initialMedicineN
 
           <div>
             <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
-              {t('activeFormulation')}
+              {t('ingredientsOptional')}
             </label>
             <input
               type="text"
-              placeholder={t("requestDetailsPlaceholder")}
+              placeholder={t("activeFormulation")}
               value={saltComposition}
               onChange={(e) => setSaltComposition(e.target.value)}
               className="w-full px-3.5 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white transition"
