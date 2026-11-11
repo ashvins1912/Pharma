@@ -15,7 +15,7 @@ export default function Footer({ onNavigate, onOpenGuide }) {
           {/* Pharmacy Info */}
           <div className="app-footer__brand space-y-3">
             <div className="flex items-center gap-2">
-              <span className="text-2xl">⚕️</span>
+              <img src="/favicon.svg" alt="" className="h-8 w-8 rounded-lg object-contain" />
               <span className="text-base font-black text-slate-900 tracking-tight">QuickMeds Rx</span>
             </div>
             <p className="text-slate-500 leading-relaxed text-[11px]">
