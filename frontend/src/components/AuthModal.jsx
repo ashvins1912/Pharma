@@ -321,9 +321,11 @@ export default function AuthModal({ isOpen, onClose }) {
 
           {/* Shop Logo & Title */}
           <div className="text-center px-6">
-            <div className="w-12 h-12 mx-auto rounded-2xl bg-blue-600 text-white flex items-center justify-center text-2xl shadow-md shadow-blue-500/25 mb-2">
-              {mfaRequired ? '🛡️' : '⚕️'}
-            </div>
+            {mfaRequired ? (
+              <div className="w-12 h-12 mx-auto rounded-2xl bg-blue-600 text-white flex items-center justify-center text-2xl shadow-md shadow-blue-500/25 mb-2" aria-hidden="true">🛡️</div>
+            ) : (
+              <img src="/favicon.svg" alt="" className="w-12 h-12 mx-auto rounded-2xl object-contain shadow-md shadow-blue-500/25 mb-2" />
+            )}
             <h2 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">
               {mfaRequired ? t('twoFactor') : t('authWelcome')}
             </h2>
