@@ -131,7 +131,7 @@ export default function NotificationBell({ onOpenOrders, onRequireAuth }) {
                     className="min-h-8 shrink-0 rounded-lg border border-blue-100 bg-blue-50 px-2.5 py-1.5 text-[10px] font-extrabold text-blue-700 transition hover:bg-blue-100 disabled:cursor-wait disabled:opacity-50"
                     aria-label={t("clear")}
                   >
-                    {clearingAll ? 'Clearing…' : 'Clear all'}
+                    {clearingAll ? t('updating') : t('clear')}
                   </button>
                 )}
                 <button
