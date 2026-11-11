@@ -6,6 +6,7 @@ import { useTenant } from '../../context/TenantContext';
 import { createMedicineRequest } from '../../api/medicineRequestService';
 import apiClient from '../../api/apiClient';
 import AddressManager from '../AddressManager';
+import ContextualHelpBanner from '../common/ContextualHelpBanner';
 
 // --- Client-Side Binary Signature (Magic Number) Validator ---
 // Add this right under your import statements
@@ -327,6 +328,8 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
               ✕
             </button>
           </div>
+
+          <ContextualHelpBanner topic="requests" />
 
           {/* Notice Banner */}
           <div className="bg-blue-50/70 border border-blue-200 rounded-2xl p-3 text-xs text-blue-900 flex items-start gap-2.5">

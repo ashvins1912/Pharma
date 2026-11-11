@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import apiClient from '../../../api/apiClient';
 import { useToast } from '../../../context/ToastContext';
 import { useTenant } from '../../../context/TenantContext';
+import ContextualHelpBanner from '../../common/ContextualHelpBanner';
 
 export default function RiderTerminal({ riderId, onClose }) {
   const { addToast } = useToast();
@@ -243,6 +244,8 @@ export default function RiderTerminal({ riderId, onClose }) {
           </button>
         </div>
       </div>
+
+      <ContextualHelpBanner topic="rider_terminal" className="mb-4" />
 
       {/* Main Grid: Pending Orders & Active Execution */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

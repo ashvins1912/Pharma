@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useActionLoading, LOADING_ACTIONS } from '../context/LoadingContext';
 import { useToast } from '../context/ToastContext';
 import { useLanguage } from '../context/LanguageContext';
+import ContextualHelpBanner from './common/ContextualHelpBanner';
 
 const googleMapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 let googlePlacesScriptPromise;
@@ -453,6 +454,7 @@ export default function AddressManager({
 
   return (
     <div className="pharma-address-manager bg-white border border-slate-200 rounded-3xl p-5 sm:p-6 shadow-sm space-y-5">
+      <ContextualHelpBanner topic="addresses" />
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-base font-extrabold text-slate-900">

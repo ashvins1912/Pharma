@@ -3,6 +3,7 @@ import apiClient from '../../api/apiClient';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
 import TenantProfileDashboard from './TenantProfileDashboard';
+import ContextualHelpBanner from '../common/ContextualHelpBanner';
 import './PlatformTenantsView.css';
 
 export default function PlatformTenantsView() {
@@ -486,6 +487,8 @@ export default function PlatformTenantsView() {
           </div>
         </div>
       </div>
+
+      <ContextualHelpBanner topic="platform_tenants" />
 
       {/* Notifications / Alerts */}
       {actionSuccess && (

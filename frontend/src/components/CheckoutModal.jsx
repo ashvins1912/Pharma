@@ -7,6 +7,7 @@ import apiClient from '../api/apiClient';
 import AddressManager from './AddressManager';
 import { useTenant } from '../context/TenantContext';
 import { useLanguage } from '../context/LanguageContext';
+import ContextualHelpBanner from './common/ContextualHelpBanner';
 import { buildCheckoutWaitlistRequest, buildFulfillmentQuoteItems, getCheckoutQuoteEffectAction, isCheckoutOutcomeAmbiguous } from '../utils/checkoutFulfillment.js';
 
 export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
@@ -577,6 +578,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
 
         {/* Scrollable Form Content */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 overscroll-contain">
+          <ContextualHelpBanner topic="checkout" />
           <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
             <p className="text-[10px] font-black uppercase tracking-wider text-emerald-800">{t('fulfillmentPharmacy')}</p>
             <p className="mt-1 text-sm font-extrabold text-emerald-950">{activeTenant?.shopName || activeTenant?.name || activeTenant?.pharmacyName || (tenantId ? 'Selected pharmacy' : 'Select a pharmacy')}</p>

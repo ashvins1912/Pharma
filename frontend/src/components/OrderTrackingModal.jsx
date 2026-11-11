@@ -1,5 +1,6 @@
 import React from 'react';
 import { useLanguage } from '../context/LanguageContext';
+import ContextualHelpBanner from './common/ContextualHelpBanner';
 
 const STAGES = [
   { key: 'Processing Order', labelKey: 'processingOrderStage', descKey: 'processingOrderDesc' },
@@ -90,6 +91,7 @@ export default function OrderTrackingModal({ order, onClose }) {
 
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto overscroll-contain p-5 sm:p-6 space-y-5">
+          <ContextualHelpBanner topic="order_tracking" />
           
           {/* Timeline */}
           <div className="py-2">
