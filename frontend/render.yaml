@@ -2,7 +2,7 @@ services:
   - type: web
     name: ashvin-pharmacy-frontend
     runtime: static
-    buildCommand: npm install && npm run build
+    buildCommand: npm ci --include=dev && npm run build
     staticPublishPath: ./frontend/dist
     envVars:
       - key: VITE_API_URL
@@ -14,7 +14,7 @@ services:
       - key: VITE_SUPABASE_ANON_KEY
         sync: false
       - key: VITE_FRONTEND_URL
-        value: https://pharma-1-278k.onrender.com
+        value: https://pharma-ui.onrender.com
       - key: VITE_GOOGLE_MAPS_API_KEY
         sync: false
     headers:
