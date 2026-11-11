@@ -1165,6 +1165,10 @@ const messages = {
     medicineList: "Medicine list",
     lowStockLabel: "Low stock",
     expiredLabel: "Expired",
+    delivery: "Delivery",
+    selectBranch: "Choose a branch",
+    timestamp: "Date and time",
+    deliveryAddress: "Delivery address",
   },
 
   hi: {
@@ -2322,6 +2326,10 @@ const messages = {
     medicineList: "दवाओं की सूची",
     lowStockLabel: "कम स्टॉक",
     expiredLabel: "एक्सपायर हो चुकी दवाएँ",
+    delivery: "डिलीवरी",
+    selectBranch: "शाखा चुनें",
+    timestamp: "तारीख और समय",
+    deliveryAddress: "डिलीवरी का पता",
   },
 
   kn: {
@@ -3479,6 +3487,10 @@ const messages = {
     medicineList: "ಔಷಧಿಗಳ ಪಟ್ಟಿ",
     lowStockLabel: "ಕಡಿಮೆ ಸ್ಟಾಕ್",
     expiredLabel: "ಅವಧಿ ಮೀರಿದವು",
+    delivery: "ವಿತರಣೆ",
+    selectBranch: "ಶಾಖೆ ಆಯ್ಕೆಮಾಡಿ",
+    timestamp: "ದಿನಾಂಕ ಮತ್ತು ಸಮಯ",
+    deliveryAddress: "ವಿತರಣಾ ವಿಳಾಸ",
   },
 
   bn: {
@@ -4636,6 +4648,10 @@ const messages = {
     medicineList: "ওষুধের তালিকা",
     lowStockLabel: "স্টক কম",
     expiredLabel: "মেয়াদ শেষ",
+    delivery: "ডেলিভারি",
+    selectBranch: "শাখা বেছে নিন",
+    timestamp: "তারিখ ও সময়",
+    deliveryAddress: "ডেলিভারির ঠিকানা",
   },
 
   te: {
@@ -5794,6 +5810,10 @@ const messages = {
     medicineList: "మందుల జాబితా",
     lowStockLabel: "తక్కువ స్టాక్",
     expiredLabel: "గడువు ముగిసినవి",
+    delivery: "డెలివరీ",
+    selectBranch: "శాఖను ఎంచుకోండి",
+    timestamp: "తేదీ మరియు సమయం",
+    deliveryAddress: "డెలివరీ చిరునామా",
   }
 };
 
