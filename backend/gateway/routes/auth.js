@@ -281,6 +281,38 @@ router.post('/login', authLimiter, async (req, res) => {
  * POST /auth/resend-verification
  * Safe rate-limited resend without revealing account existence
  */
+/**
+ * POST /auth/verify-email-code
+ * Verify the local-signup email code and issue a restricted profile-onboarding
+ * cookie. The user cannot access the full application until profile completion.
+ */
+router.post('/verify-email-code', authLimiter, async (req, res) => {
+    try {
+        const result = await authService.verifyEmailCode({
+            email: req.body?.email,
+            code: req.body?.code
+        });
+
+        if (result.accessToken) {
+            setSessionCookies(res, { accessToken: result.accessToken });
+        }
+
+        return sendSuccess(res, {
+            data: result,
+            message: result.message || 'Email verified. Please complete your profile.',
+            statusCode: 200,
+            req
+        });
+    } catch (err) {
+        return sendError(res, {
+            code: err.code || 'EMAIL_VERIFICATION_FAILED',
+            message: err.message || 'Could not verify the email address.',
+            statusCode: err.status || 400,
+            req
+        });
+    }
+});
+
 router.post('/resend-verification', authLimiter, async (req, res) => {
     const { email } = req.body || {};
     if (!email) {
