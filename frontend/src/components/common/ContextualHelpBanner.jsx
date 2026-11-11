@@ -294,7 +294,7 @@ const CONTEXT_HELP_DATA = {
 };
 
 export default function ContextualHelpBanner({ topic = 'storefront', className = '' }) {
-  const { language } = useLanguage();
+  const { language, t } = useLanguage();
   const [collapsed, setCollapsed] = useState(false);
   const [dismissed, setDismissed] = useState(false);
 
