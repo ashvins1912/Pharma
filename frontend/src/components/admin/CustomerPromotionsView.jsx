@@ -69,7 +69,7 @@ export default function CustomerPromotionsView({ canManage = false }) {
   useEffect(() => { setCustomerPage(page => Math.min(page, Math.max(1, Math.ceil(uniqueCustomers.length / CUSTOMER_PAGE_SIZE)))); }, [uniqueCustomers.length]);
   useEffect(() => { setOfferPage(page => Math.min(page, Math.max(1, Math.ceil(promotions.length / OFFER_PAGE_SIZE)))); }, [promotions.length]);
 
-  const selected = useMemo((
+  const selected = useMemo(
     () => customers.find(customer => customer.customerId === selectedCustomer),
     [customers, selectedCustomer]
   );
