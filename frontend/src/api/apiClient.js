@@ -128,13 +128,12 @@ async function revalidateAuthorization() {
 const configuredApiBaseUrl = String(import.meta.env.VITE_API_URL || '/api').trim();
 const rawApiBaseUrl = configuredApiBaseUrl.replace(/\/+$/, '');
 
-// The Render static site rewrites same-origin /api/* requests to the API Gateway.
-// Keep production browser traffic on the frontend origin so HttpOnly session
-// cookies remain first-party. Calling *.onrender.com API hosts directly makes
-// refresh requests cross-site, so browsers can omit SameSite=Lax cookies.
-// VITE_API_URL is still honored for local development and its Vite proxy.
+// Keep browser traffic same-origin in production. Render's static-site
+// /api/* rewrites forward requests to the API Gateway while preserving the
+// first-party HttpOnly session cookie. Local development can use Vite's proxy
+// or an explicitly configured API base URL.
 const apiBaseUrl = import.meta.env.PROD
-    ? String(import.meta.env.VITE_API_GATEWAY_URL || '').replace(/\/+$/, '')
+    ? ''
     : rawApiBaseUrl === '/api'
         ? ''
         : rawApiBaseUrl.endsWith('/api')
