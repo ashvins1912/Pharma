@@ -121,21 +121,24 @@ export class AuthService {
     async findUser(query) {
         if (getIsConnected()) {
             try {
-                // Try User model first
+                // MongoDB is authoritative whenever connected. Do not fall back to
+                // process memory on a read error or a genuine "not found" result:
+                // doing so can hide deleted accounts or create duplicate identities.
                 let doc = await User.findOne(query).lean().exec();
-                if (!doc) {
-                    doc = await UserProfile.findOne(query).lean().exec();
-                }
-                if (doc) {
-                    return {
-                        ...doc,
-                        id: doc.userId || doc.id || doc._id?.toString(),
-                        userId: doc.userId || doc.id || doc._id?.toString(),
-                        age: calculateAge(doc.dateOfBirth)
-                    };
-                }
+                if (!doc) doc = await UserProfile.findOne(query).lean().exec();
+                return doc ? {
+                    ...doc,
+                    id: doc.userId || doc.id || doc._id?.toString(),
+                    userId: doc.userId || doc.id || doc._id?.toString(),
+                    age: calculateAge(doc.dateOfBirth)
+                } : null;
             } catch (err) {
-                logger.warn('Failed querying User in Mongo:', { error: err.message });
+                logger.error('Canonical user lookup failed.', { error: err.message });
+                throw Object.assign(new Error('Account information is temporarily unavailable. Please try again.'), {
+                    code: 'IDENTITY_STORE_UNAVAILABLE',
+                    status: 503,
+                    cause: err
+                });
             }
         }
 
@@ -186,20 +189,32 @@ export class AuthService {
 
         if (getIsConnected()) {
             try {
-                // Upsert to User model
+                // The canonical User collection must be durable before signup,
+                // account linking, verification, or profile completion can succeed.
                 await User.findOneAndUpdate(
                     { $or: [{ userId }, { normalizedEmail: normEmail }] },
                     { $set: doc },
                     { upsert: true, new: true, runValidators: true }
                 );
-                // Sync to UserProfile model for backward compatibility
+            } catch (e) {
+                logger.error('Canonical user persistence failed.', { userId, error: e.message });
+                throw Object.assign(new Error('Your account could not be saved. Please try again.'), {
+                    code: 'IDENTITY_STORE_UNAVAILABLE',
+                    status: 503,
+                    cause: e
+                });
+            }
+
+            // Keep the legacy UserProfile mirror best-effort; the canonical User
+            // record above is the source of truth for authentication and profiles.
+            try {
                 await UserProfile.findOneAndUpdate(
                     { $or: [{ userId }, { supabase_user_id: userId }, { normalizedEmail: normEmail }] },
                     { $set: doc },
                     { upsert: true, new: true, runValidators: true }
                 );
             } catch (e) {
-                logger.warn('Failed to persist User to Mongo:', { error: e.message });
+                logger.warn('Legacy UserProfile mirror sync failed.', { userId, error: e.message });
             }
         }
 
@@ -217,10 +232,14 @@ export class AuthService {
     async findIdentity(provider, providerUserId) {
         if (getIsConnected()) {
             try {
-                const doc = await UserIdentity.findOne({ provider, providerUserId }).lean().exec();
-                if (doc) return doc;
+                return await UserIdentity.findOne({ provider, providerUserId }).lean().exec();
             } catch (e) {
-                logger.warn('Failed querying UserIdentity in Mongo:', { error: e.message });
+                logger.error('Canonical identity lookup failed.', { provider, error: e.message });
+                throw Object.assign(new Error('Sign-in information is temporarily unavailable. Please try again.'), {
+                    code: 'IDENTITY_STORE_UNAVAILABLE',
+                    status: 503,
+                    cause: e
+                });
             }
         }
         return inMemoryIdentities.get(`${provider}:${providerUserId}`) || null;
@@ -242,10 +261,15 @@ export class AuthService {
                 await UserIdentity.findOneAndUpdate(
                     { provider: identityData.provider, providerUserId: identityData.providerUserId },
                     { $set: doc },
-                    { upsert: true, new: true }
+                    { upsert: true, new: true, runValidators: true }
                 );
             } catch (e) {
-                logger.warn('Failed to persist UserIdentity in Mongo:', { error: e.message });
+                logger.error('Canonical identity persistence failed.', { provider: identityData.provider, error: e.message });
+                throw Object.assign(new Error('Your sign-in method could not be saved. Please try again.'), {
+                    code: 'IDENTITY_STORE_UNAVAILABLE',
+                    status: 503,
+                    cause: e
+                });
             }
         }
 
@@ -645,10 +669,15 @@ export class AuthService {
                 await EmailVerificationToken.findOneAndUpdate(
                     { userId: tokenData.userId, purpose: tokenData.purpose || 'ACCOUNT_ACTIVATION' },
                     { $set: tokenData },
-                    { upsert: true, new: true }
+                    { upsert: true, new: true, runValidators: true }
                 );
             } catch (e) {
-                logger.warn('Failed saving EmailVerificationToken to Mongo:', { error: e.message });
+                logger.error('Verification token persistence failed.', { userId: tokenData.userId, purpose: tokenData.purpose, error: e.message });
+                throw Object.assign(new Error('A verification code could not be created. Please try again.'), {
+                    code: 'IDENTITY_STORE_UNAVAILABLE',
+                    status: 503,
+                    cause: e
+                });
             }
         }
         for (const [key, existing] of inMemoryTokens.entries()) {
@@ -666,10 +695,14 @@ export class AuthService {
     async findVerificationToken(tokenHash) {
         if (getIsConnected()) {
             try {
-                const doc = await EmailVerificationToken.findOne({ tokenHash }).lean().exec();
-                if (doc) return doc;
+                return await EmailVerificationToken.findOne({ tokenHash }).lean().exec();
             } catch (e) {
-                logger.warn('Failed querying EmailVerificationToken in Mongo:', { error: e.message });
+                logger.error('Verification token lookup failed.', { error: e.message });
+                throw Object.assign(new Error('Verification information is temporarily unavailable. Please try again.'), {
+                    code: 'IDENTITY_STORE_UNAVAILABLE',
+                    status: 503,
+                    cause: e
+                });
             }
         }
         return inMemoryTokens.get(tokenHash) || null;
@@ -851,9 +884,8 @@ export class AuthService {
             verification = await EmailVerificationToken.findOne({
                 userId: user.userId || user.id,
                 purpose: 'EMAIL_VERIFICATION'
-            }).lean().exec().catch(() => null);
-        }
-        if (!verification) {
+            }).lean().exec();
+        } else {
             for (const candidate of inMemoryTokens.values()) {
                 if (candidate.userId === (user.userId || user.id) && candidate.purpose === 'EMAIL_VERIFICATION') {
                     verification = candidate;
@@ -876,7 +908,7 @@ export class AuthService {
             await EmailVerificationToken.updateOne(
                 { userId: user.userId || user.id, purpose: 'EMAIL_VERIFICATION', usedAt: null },
                 { $set: { usedAt: now } }
-            ).catch(() => {});
+            );
         }
         verification.usedAt = now;
         inMemoryTokens.set(verification.tokenHash, verification);
@@ -1569,7 +1601,7 @@ export class AuthService {
     /**
      * Complete profile onboarding (e.g. for Google OAuth users)
      */
-    async completeProfile({ userId, firstName, lastName, dateOfBirth, mobileNumber, mobile, gender, password }) {
+    async completeProfile({ userId, firstName, lastName, dateOfBirth, mobileNumber, mobile, gender, password, confirmPassword }) {
         if (!userId) {
             const err = new Error('User ID is required.');
             err.code = 'REQUIRED_FIELD';
@@ -1606,6 +1638,32 @@ export class AuthService {
         if (!isValidDOB(dateOfBirth)) {
             const err = new Error('Date of birth must be a valid date and cannot be in the future.');
             err.code = 'INVALID_DOB';
+            err.status = 400;
+            throw err;
+        }
+
+        if (!phone || !normalizedPhone) {
+            const err = new Error('A valid Indian mobile number is required.');
+            err.code = 'INVALID_MOBILE';
+            err.status = 400;
+            throw err;
+        }
+
+        if (password && !isStrongPassword(password)) {
+            const err = new Error('Password must be at least 8 characters with uppercase, lowercase and a number.');
+            err.code = 'WEAK_PASSWORD';
+            err.status = 400;
+            throw err;
+        }
+        if (password && password !== confirmPassword) {
+            const err = new Error('Passwords do not match.');
+            err.code = 'PASSWORD_MISMATCH';
+            err.status = 400;
+            throw err;
+        }
+        if (!password && confirmPassword) {
+            const err = new Error('Enter a password before confirming it.');
+            err.code = 'PASSWORD_MISMATCH';
             err.status = 400;
             throw err;
         }
@@ -1651,11 +1709,9 @@ export class AuthService {
         user.lastName = lName;
         user.name = `${fName} ${lName}`.trim();
         user.dateOfBirth = dateOfBirth;
-        if (normalizedPhone) {
-            user.mobileNumber = normalizedPhone.e164;
-            user.mobile = normalizedPhone.e164;
-        }
-        if (gender) user.gender = gender;
+        user.mobileNumber = normalizedPhone.e164;
+        user.mobile = normalizedPhone.e164;
+        user.gender = gender;
         user.profileCompleted = true;
         user.accountStatus = 'ACTIVE';
         user.status = 'ACTIVE';
@@ -1685,7 +1741,8 @@ export class AuthService {
                 name: user.name,
                 dateOfBirth,
                 age: calculateAge(dateOfBirth),
-                mobileNumber: normalizedPhone?.e164 || user.mobileNumber || user.mobile || '',
+                mobileNumber: normalizedPhone.e164,
+                gender: user.gender,
                 accountStatus: 'ACTIVE',
                 profileCompleted: true,
                 emailVerified: Boolean(user.emailVerified)
