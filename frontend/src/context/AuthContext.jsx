@@ -148,10 +148,9 @@ export function AuthProvider({ children }) {
         let response;
         let responseBody = null;
         try {
-          const gatewayBaseUrl = String(env.VITE_API_GATEWAY_URL || '').replace(/\/+$/, '');
-          const sessionProbeUrl = gatewayBaseUrl
-            ? `${gatewayBaseUrl}/api/v1/auth/me`
-            : '/api/v1/auth/me';
+          // Keep the browser request same-origin. Render forwards /api/* to
+          // the API Gateway, preserving first-party session-cookie behavior.
+          const sessionProbeUrl = '/api/v1/auth/me';
           response = await fetch(sessionProbeUrl, {
             method: 'GET',
             credentials: 'include',
