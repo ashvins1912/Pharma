@@ -43,19 +43,17 @@ function PendingMedicineRequestsNotice({ count, onOpen }) {
   return (
     <aside className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-rose-950 shadow-sm" aria-live="polite">
       <h3 className="text-sm font-black">
-        {count} Medicine Request{plural ? 's' : ''} Pending
+        {count} {t('medicineRequests')}
       </h3>
       <p className="mt-1 text-xs text-rose-800">
-        {plural
-          ? `You have ${count} medicine requests waiting for review.`
-          : 'A medicine request is waiting for review.'}
+        {t('actionRequired')}
       </p>
       <button
         type="button"
         onClick={onOpen}
         className="mt-3 text-xs font-extrabold text-rose-800 underline underline-offset-2 hover:text-rose-950"
       >
-        Open {t('medicineRequests')} &amp; Proposals →
+        {t('medicineRequests')} →
       </button>
     </aside>
   );
@@ -310,16 +308,12 @@ export default function AdminDashboardView() {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
           <div>
             <span className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-300">
-              PHARMA / OPERATIONS
+              {t('operationsDashboard')}
             </span>
             <h2 className="text-xl sm:text-2xl font-black tracking-tight text-white">
-              Command overview
+              {t('operationsDashboard')}
             </h2>
-            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] font-mono uppercase tracking-wider text-slate-400">
-              <span>Workspace: {activeTenantId ? `TENANT ${String(activeTenantId).slice(-8).toUpperCase()}` : 'PLATFORM'}</span>
-              <span>Role: {String(role || 'operator').replace(/_/g, ' ')}</span>
-              <span>IST {commandClock.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}</span>
-            </div>
+            
           </div>
 
           <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -332,20 +326,20 @@ export default function AdminDashboardView() {
                     ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
                     : 'bg-amber-500 hover:bg-amber-400 text-slate-900 animate-pulse'
                 }`}
-                title="Manage WhatsApp connection"
+                title={t('whatsappStatus')}
               >
                 <span>📲</span>
-                <span>{whatsappStatus.isConnected ? 'WhatsApp: Connected' : 'WhatsApp: Offline'}</span>
+                <span>{whatsappStatus.isConnected ? t('whatsappConnected') : t('whatsappOfflineStatus')}</span>
               </button>
             ) : (
               <span className="rounded-xl bg-slate-800 px-3.5 py-2.5 text-xs font-bold text-slate-200">
-                WhatsApp: {whatsappStatus.isConnected ? 'Connected' : 'Offline'}
+                {whatsappStatus.isConnected ? t('whatsappConnected') : t('whatsappOfflineStatus')}
               </span>
             ))}
 
             {canImportMedicineMaster && (
               <button type="button" onClick={() => { setAdminTab('medicineCatalogue'); document.getElementById('admin-workspace-content')?.scrollIntoView({ behavior: 'smooth' }); }} className="rounded-xl border border-violet-300 bg-violet-50 px-3.5 py-2.5 text-xs font-extrabold text-violet-800 transition hover:bg-violet-100">
-                <span aria-hidden="true">🧬</span> <span>Medicine Master Import</span>
+                <span aria-hidden="true">🧬</span> <span>{t('importMedicineList')}</span>
               </button>
             )}
 
@@ -477,13 +471,13 @@ export default function AdminDashboardView() {
       <section className="dashboard-workspace dashboard-workspace--command-center" aria-labelledby="operations-workspace-title">
         <header className="dashboard-workspace-header">
           <div className="dashboard-workspace-heading">
-            <span className="dashboard-workspace-eyebrow">PHARMA / OPERATIONS</span>
-            <h3 id="operations-workspace-title">Dispensary Command Center</h3>
-            <p>Real-time dispensary workflows, logistics routing, and platform governance.</p>
+            <span className="dashboard-workspace-eyebrow">{t('operationsDashboard')}</span>
+            <h3 id="operations-workspace-title">{t('dispensaryCommandCenter')}</h3>
+            <p>{t('dispensaryCommandDesc')}</p>
           </div>
           <div className="dashboard-workspace-header-actions">
-            <span className="dashboard-workspace-context"><span className="dashboard-workspace-context-dot" aria-hidden="true" /> Command center</span>
-            <span className="dashboard-workspace-tab-hint">Select a module to open its live workspace</span>
+            <span className="dashboard-workspace-context"><span className="dashboard-workspace-context-dot" aria-hidden="true" /> {t('dispensaryCommandCenter')}</span>
+            
           </div>
         </header>
 
@@ -495,12 +489,12 @@ export default function AdminDashboardView() {
               type="search"
               value={workspaceSearch}
               onChange={event => setWorkspaceSearch(event.target.value)}
-              placeholder="Find a workspace…"
+              placeholder={t('searchSections')}
               autoComplete="off"
             />
-            <kbd>FILTER</kbd>
+            
           </label>
-          <div className="dashboard-command-signals" aria-label="Operational attention indicators">
+          <div className="dashboard-command-signals" aria-label={t('needsAttention')}>
             {canViewAdminRequests && (
               <button type="button" className={pendingMedicineRequestCount > 0 ? 'is-alert' : ''} onClick={() => openWorkspaceTab('requests')}>
                 <span className="signal-dot" /> Requests <strong>{pendingMedicineRequestCount}</strong>
@@ -654,7 +648,7 @@ export default function AdminDashboardView() {
         <div className="admin-screen admin-screen--fulfillment space-y-3">
           {ordersError && (
             <ErrorState
-              title="Failed to load ongoing and delivered orders"
+              title={t('ordersCouldNotLoad')}
               message={ordersError}
               onRetry={loadAllOrders}
             />
@@ -662,8 +656,8 @@ export default function AdminDashboardView() {
           {loadingOrders && orders.length === 0 ? (
             <div className="space-y-4 animate-fade-in">
               <ComponentLoader
-                title="Loading fulfillment queue…"
-                subtitle="Fetching ongoing dispensary orders, dispatch assignments, and prescription checks."
+                title={t('loadingOrdersForReview')}
+                
                 variant="spinner"
               />
               <TableSkeleton rows={6} columns={5} />
