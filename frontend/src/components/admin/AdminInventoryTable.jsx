@@ -277,7 +277,7 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
               className="flex-1 sm:flex-initial rounded-xl bg-indigo-600 px-4 py-2 text-xs font-extrabold text-white transition hover:bg-indigo-700 shadow-sm shadow-indigo-600/20 flex items-center justify-center gap-1.5 cursor-pointer"
             >
               <span>⚡</span>
-              <span>Suggest Restock</span>
+              <span>{t('suggestRestock')}</span>
             </button>
           )}
           {canManage && (
@@ -471,7 +471,7 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
                   </div>
                 </div>
                 <label className="block space-y-1 text-xs font-bold text-slate-600">
-                  <span>Upload / replace image</span>
+                  <span>{t('uploadMedicinePhoto')}</span>
                   <input
                     type="file"
                     accept="image/*"
@@ -516,7 +516,7 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
                     isPrescriptionRequired: event.target.checked
                   }))}
                 />
-                <span>Prescription required (Rx)</span>
+                <span>{t('prescriptionRequired')}</span>
               </label>
             </div>
           </div>
