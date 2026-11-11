@@ -1156,6 +1156,15 @@ const messages = {
     stageView: "By order stage",
     allOrdersView: "All orders",
     noRidersAvailable: "No delivery partners are available right now.",
+    financeAndOffers: "Payments & offers",
+    peopleAndPharmacy: "People & pharmacy",
+    platformSettings: "Platform settings",
+    systemActivity: "System activity",
+    systemChecks: "System checks",
+    systemHealth: "System health",
+    medicineList: "Medicine list",
+    lowStockLabel: "Low stock",
+    expiredLabel: "Expired",
   },
 
   hi: {
@@ -2304,6 +2313,15 @@ const messages = {
     stageView: "ऑर्डर के चरण के अनुसार",
     allOrdersView: "सभी ऑर्डर",
     noRidersAvailable: "अभी कोई डिलीवरी पार्टनर उपलब्ध नहीं है।",
+    financeAndOffers: "भुगतान और ऑफ़र",
+    peopleAndPharmacy: "लोग और फार्मेसी",
+    platformSettings: "प्लेटफ़ॉर्म सेटिंग",
+    systemActivity: "सिस्टम गतिविधि",
+    systemChecks: "सिस्टम जाँच",
+    systemHealth: "सिस्टम की स्थिति",
+    medicineList: "दवाओं की सूची",
+    lowStockLabel: "कम स्टॉक",
+    expiredLabel: "एक्सपायर हो चुकी दवाएँ",
   },
 
   kn: {
@@ -3452,6 +3470,15 @@ const messages = {
     stageView: "ಆರ್ಡರ್ ಹಂತದ ಪ್ರಕಾರ",
     allOrdersView: "ಎಲ್ಲಾ ಆರ್ಡರ್‌ಗಳು",
     noRidersAvailable: "ಈಗ ಯಾವುದೇ ವಿತರಣಾ ಸಿಬ್ಬಂದಿ ಲಭ್ಯವಿಲ್ಲ.",
+    financeAndOffers: "ಪಾವತಿ ಮತ್ತು ಆಫರ್‌ಗಳು",
+    peopleAndPharmacy: "ಜನರು ಮತ್ತು ಫಾರ್ಮಸಿ",
+    platformSettings: "ಪ್ಲಾಟ್‌ಫಾರ್ಮ್ ಸೆಟ್ಟಿಂಗ್‌ಗಳು",
+    systemActivity: "ವ್ಯವಸ್ಥೆಯ ಚಟುವಟಿಕೆ",
+    systemChecks: "ವ್ಯವಸ್ಥೆಯ ಪರಿಶೀಲನೆ",
+    systemHealth: "ವ್ಯವಸ್ಥೆಯ ಸ್ಥಿತಿ",
+    medicineList: "ಔಷಧಿಗಳ ಪಟ್ಟಿ",
+    lowStockLabel: "ಕಡಿಮೆ ಸ್ಟಾಕ್",
+    expiredLabel: "ಅವಧಿ ಮೀರಿದವು",
   },
 
   bn: {
@@ -4600,6 +4627,15 @@ const messages = {
     stageView: "অর্ডারের ধাপ অনুযায়ী",
     allOrdersView: "সব অর্ডার",
     noRidersAvailable: "এখন কোনো ডেলিভারি কর্মী পাওয়া যাচ্ছে না।",
+    financeAndOffers: "পেমেন্ট ও অফার",
+    peopleAndPharmacy: "মানুষ ও ফার্মেসি",
+    platformSettings: "প্ল্যাটফর্মের সেটিংস",
+    systemActivity: "সিস্টেমের কাজকর্ম",
+    systemChecks: "সিস্টেম যাচাই",
+    systemHealth: "সিস্টেমের অবস্থা",
+    medicineList: "ওষুধের তালিকা",
+    lowStockLabel: "স্টক কম",
+    expiredLabel: "মেয়াদ শেষ",
   },
 
   te: {
@@ -5749,6 +5785,15 @@ const messages = {
     stageView: "ఆర్డర్ దశ ప్రకారం",
     allOrdersView: "అన్ని ఆర్డర్లు",
     noRidersAvailable: "ప్రస్తుతం డెలివరీ సిబ్బంది అందుబాటులో లేరు.",
+    financeAndOffers: "చెల్లింపులు మరియు ఆఫర్లు",
+    peopleAndPharmacy: "వ్యక్తులు మరియు ఫార్మసీ",
+    platformSettings: "ప్లాట్‌ఫారమ్ సెట్టింగ్‌లు",
+    systemActivity: "వ్యవస్థ కార్యకలాపాలు",
+    systemChecks: "వ్యవస్థ తనిఖీలు",
+    systemHealth: "వ్యవస్థ స్థితి",
+    medicineList: "మందుల జాబితా",
+    lowStockLabel: "తక్కువ స్టాక్",
+    expiredLabel: "గడువు ముగిసినవి",
   }
 };
 
