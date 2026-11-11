@@ -1185,6 +1185,9 @@ const messages = {
     selectPharmacyToOpen: "Choose a pharmacy to view its details and branches.",
     deliveryAreaLabel: "Delivery area",
     pharmacyStaffAccess: "Pharmacy staff and access",
+    pharmacyDataSeparate: "Each pharmacy's information stays separate.",
+    staffBranchAccess: "Staff can be limited to one branch.",
+    inviteStaffToPharmacy: "Invite staff to the right pharmacy.",
   },
 
   hi: {
@@ -2362,6 +2365,9 @@ const messages = {
     selectPharmacyToOpen: "विवरण और शाखाएँ देखने के लिए फार्मेसी चुनें।",
     deliveryAreaLabel: "डिलीवरी का क्षेत्र",
     pharmacyStaffAccess: "फार्मेसी कर्मचारी और उनकी पहुँच",
+    pharmacyDataSeparate: "हर फार्मेसी की जानकारी अलग रखी जाती है।",
+    staffBranchAccess: "कर्मचारियों को किसी एक शाखा तक सीमित रख सकते हैं।",
+    inviteStaffToPharmacy: "कर्मचारियों को सही फार्मेसी में आमंत्रित करें।",
   },
 
   kn: {
@@ -3539,6 +3545,9 @@ const messages = {
     selectPharmacyToOpen: "ವಿವರಗಳು ಮತ್ತು ಶಾಖೆಗಳನ್ನು ನೋಡಲು ಫಾರ್ಮಸಿ ಆಯ್ಕೆಮಾಡಿ.",
     deliveryAreaLabel: "ವಿತರಣಾ ಪ್ರದೇಶ",
     pharmacyStaffAccess: "ಫಾರ್ಮಸಿ ಸಿಬ್ಬಂದಿ ಮತ್ತು ಪ್ರವೇಶ",
+    pharmacyDataSeparate: "ಪ್ರತಿ ಫಾರ್ಮಸಿಯ ಮಾಹಿತಿಯನ್ನು ಪ್ರತ್ಯೇಕವಾಗಿ ಇಡಲಾಗುತ್ತದೆ.",
+    staffBranchAccess: "ಸಿಬ್ಬಂದಿಗೆ ಒಂದು ಶಾಖೆಯ ಪ್ರವೇಶ ಮಾತ್ರ ನೀಡಬಹುದು.",
+    inviteStaffToPharmacy: "ಸಿಬ್ಬಂದಿಯನ್ನು ಸರಿಯಾದ ಫಾರ್ಮಸಿಗೆ ಆಹ್ವಾನಿಸಿ.",
   },
 
   bn: {
@@ -4716,6 +4725,9 @@ const messages = {
     selectPharmacyToOpen: "বিবরণ ও শাখা দেখতে একটি ফার্মেসি বেছে নিন।",
     deliveryAreaLabel: "ডেলিভারির এলাকা",
     pharmacyStaffAccess: "ফার্মেসির কর্মী ও প্রবেশাধিকার",
+    pharmacyDataSeparate: "প্রতিটি ফার্মেসির তথ্য আলাদা রাখা হয়।",
+    staffBranchAccess: "কর্মীদের একটি নির্দিষ্ট শাখায় সীমাবদ্ধ রাখা যায়।",
+    inviteStaffToPharmacy: "সঠিক ফার্মেসিতে কর্মীদের আমন্ত্রণ জানান।",
   },
 
   te: {
@@ -5894,6 +5906,9 @@ const messages = {
     selectPharmacyToOpen: "వివరాలు మరియు శాఖలను చూడటానికి ఫార్మసీని ఎంచుకోండి.",
     deliveryAreaLabel: "డెలివరీ ప్రాంతం",
     pharmacyStaffAccess: "ఫార్మసీ సిబ్బంది మరియు అనుమతులు",
+    pharmacyDataSeparate: "ప్రతి ఫార్మసీ సమాచారం వేరుగా ఉంచబడుతుంది.",
+    staffBranchAccess: "సిబ్బందికి ఒక శాఖకు మాత్రమే అనుమతి ఇవ్వవచ్చు.",
+    inviteStaffToPharmacy: "సిబ్బందిని సరైన ఫార్మసీకి ఆహ్వానించండి.",
   }
 };
 
