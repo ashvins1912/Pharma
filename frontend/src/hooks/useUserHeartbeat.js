@@ -1,26 +1,23 @@
 import { useEffect } from 'react';
 import useGlobalStore from '../store/useGlobalStore';
-import apiClient from '../api/apiClient';
+import api from '../services/api';
 
 export function useUserHeartbeat() {
-  const isAuthenticated = useGlobalStore((state) => state.isAuthenticated);
+  const { isAuthenticated, logout } = useGlobalStore();
 
   useEffect(() => {
-    if (!isAuthenticated) return undefined;
+    if (!isAuthenticated) return;
 
-    const interval = window.setInterval(async () => {
+    const interval = setInterval(async () => {
       try {
-        // Use the canonical client so heartbeat requests follow the same
-        // same-origin /api routing, credentials, tracing, and error handling
-        // as the rest of the frontend.
-        await apiClient.get('/api/health');
+        await api.get('/api/health');
       } catch (err) {
         console.warn('[Heartbeat] Server ping failed:', err);
       }
     }, 30000);
 
-    return () => window.clearInterval(interval);
-  }, [isAuthenticated]);
+    return () => clearInterval(interval);
+  }, [isAuthenticated, logout]);
 }
 
 export default useUserHeartbeat;
