@@ -3466,3 +3466,158 @@ html.dark .dashboard-workspace--command-center .dashboard-command-search input {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+
+/* Order fulfillment command center — spacious desktop-first operational layout. */
+.admin-fulfillment-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: clamp(1rem, 1.45vw, 1.4rem);
+  width: 100%;
+  max-width: 100%;
+}
+.admin-fulfillment-workspace > * { min-width: 0; max-width: 100%; }
+.admin-fulfillment-workspace .fulfillment-hero {
+  min-height: 150px;
+  box-shadow: 0 8px 24px rgb(37 99 235 / .045);
+}
+.admin-fulfillment-workspace .fulfillment-hero h1 {
+  margin: 0;
+  font-size: clamp(1.5rem, 1.8vw, 2.1rem);
+  line-height: 1.12;
+  letter-spacing: -.045em;
+}
+.admin-fulfillment-workspace .fulfillment-overview {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: .85rem;
+}
+.admin-fulfillment-workspace .fulfillment-metric {
+  min-width: 0;
+  min-height: 112px;
+  box-shadow: 0 2px 10px rgb(15 23 42 / .025);
+}
+.admin-fulfillment-workspace .fulfillment-metric--blue { border-color: #bfdbfe; background: linear-gradient(140deg,#eff6ff,#fff 75%); }
+.admin-fulfillment-workspace .fulfillment-metric--amber { border-color: #fde68a; background: linear-gradient(140deg,#fffbeb,#fff 75%); }
+.admin-fulfillment-workspace .fulfillment-metric--violet { border-color: #ddd6fe; background: linear-gradient(140deg,#f5f3ff,#fff 75%); }
+.admin-fulfillment-workspace .fulfillment-metric--emerald { border-color: #a7f3d0; background: linear-gradient(140deg,#ecfdf5,#fff 75%); }
+.admin-fulfillment-workspace > form[role="search"] {
+  display: block;
+  width: 100%;
+  padding: 1.1rem 1.25rem;
+  border-radius: 1rem;
+  box-shadow: 0 2px 12px rgb(15 23 42 / .025);
+}
+.admin-fulfillment-workspace > form[role="search"] > div {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+.admin-fulfillment-workspace > form[role="search"] input {
+  min-height: 44px;
+  font-size: .875rem;
+}
+.admin-fulfillment-workspace .fulfillment-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: .85rem 1rem;
+  border-radius: 1rem;
+  box-shadow: 0 2px 12px rgb(15 23 42 / .025);
+}
+.admin-fulfillment-workspace .fulfillment-mode-actions { flex: 0 0 auto; }
+.admin-fulfillment-workspace .fulfillment-stage-tabs {
+  min-width: 0;
+  max-width: 100%;
+  padding: .15rem 0;
+}
+.admin-fulfillment-workspace .fulfillment-stage-tab {
+  min-height: 40px;
+  padding: .6rem .85rem;
+  border: 1px solid #e2e8f0;
+  font-size: .72rem;
+}
+.admin-fulfillment-workspace .fulfillment-board-columns.grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(250px, 1fr));
+  align-items: stretch;
+  gap: 1rem;
+}
+.admin-fulfillment-workspace .fulfillment-board-columns.grid > div {
+  min-width: 0;
+  min-height: 420px;
+  padding: 1rem;
+  border-radius: 1.1rem;
+}
+.admin-fulfillment-workspace .fulfillment-board-columns > div > div:first-child {
+  align-items: center;
+  gap: .65rem;
+}
+.admin-fulfillment-workspace .fulfillment-board-columns section {
+  border-radius: .95rem;
+  box-shadow: 0 2px 8px rgb(15 23 42 / .035);
+}
+.admin-fulfillment-workspace .fulfillment-board-columns section button {
+  min-height: 34px;
+}
+@media (max-width: 1280px) {
+  .admin-fulfillment-workspace .fulfillment-board-columns.grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 900px) {
+  .admin-fulfillment-workspace .fulfillment-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .admin-fulfillment-workspace .fulfillment-mode-actions {
+    display: flex;
+    flex-wrap: wrap;
+  }
+}
+@media (max-width: 767px) {
+  .admin-fulfillment-workspace { gap: .85rem; }
+  .admin-fulfillment-workspace .fulfillment-hero {
+    min-height: 0;
+    align-items: flex-start;
+    padding: 1.1rem;
+  }
+  .admin-fulfillment-workspace .fulfillment-hero h1 { font-size: 1.55rem; }
+  .admin-fulfillment-workspace .fulfillment-overview { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .admin-fulfillment-workspace > form[role="search"] { padding: .9rem; }
+  .admin-fulfillment-workspace > form[role="search"] > div { flex-direction: column; align-items: stretch; }
+  .admin-fulfillment-workspace > form[role="search"] button { width: 100%; }
+  .admin-fulfillment-workspace .fulfillment-toolbar { padding: .85rem; }
+  .admin-fulfillment-workspace .fulfillment-mode-actions { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .admin-fulfillment-workspace .fulfillment-stage-tabs {
+    display: flex;
+    width: 100%;
+    overflow-x: auto;
+    padding-bottom: .4rem;
+  }
+  .admin-fulfillment-workspace .fulfillment-board-columns.grid {
+    grid-template-columns: minmax(0,1fr);
+  }
+  .admin-fulfillment-workspace .fulfillment-board-columns.grid > div {
+    min-height: 0;
+    padding: .8rem;
+  }
+}
+@media (max-width: 380px) {
+  .admin-fulfillment-workspace .fulfillment-overview { grid-template-columns: minmax(0,1fr); }
+  .admin-fulfillment-workspace .fulfillment-mode-actions { grid-template-columns: minmax(0,1fr); }
+}
+html.dark .admin-fulfillment-workspace .fulfillment-hero {
+  border-color: #1e3a8a;
+  background: linear-gradient(110deg,#172554,#0f172a 60%,#082f49);
+}
+html.dark .admin-fulfillment-workspace .fulfillment-hero h1 { color: #f8fafc; }
+html.dark .admin-fulfillment-workspace .fulfillment-hero p { color: #cbd5e1; }
+html.dark .admin-fulfillment-workspace .fulfillment-metric {
+  border-color: #334155;
+  background: #0f172a;
+}
+html.dark .admin-fulfillment-workspace .fulfillment-metric p:first-child { color: #94a3b8; }
+html.dark .admin-fulfillment-workspace .fulfillment-metric p:nth-child(2) { color: #f8fafc; }
