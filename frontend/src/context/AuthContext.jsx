@@ -138,10 +138,31 @@ export function AuthProvider({ children }) {
         // Pharma's HttpOnly cookie is the canonical application session. Probe
         // it first; never wait for Supabase local storage/OAuth to render the
         // public storefront.
-        const probe = await withAuthBootstrapTimeout(
-          getAuthMe({ allowAnonymous: true }), 3000, 'Pharma session probe'
-        );
-        const responseBody = probe?.data ?? null;
+        // Use the browser fetch API for this one bootstrap request. Axios
+        // request interceptors also perform RBAC, storage and token work; none
+        // of that is required to read the first-party HttpOnly session cookie.
+        // Keeping bootstrap independent guarantees the request reaches the
+        // Network panel even if an application interceptor is misbehaving.
+        const controller = new AbortController();
+        const timeoutId = window.setTimeout(() => controller.abort(), 3000);
+        let response;
+        let responseBody = null;
+        try {
+          response = await fetch('/api/v1/auth/me', {
+            method: 'GET',
+            credentials: 'include',
+            headers: { 'X-Pharma-Client': 'web' },
+            signal: controller.signal
+          });
+          if (response.status !== 401) {
+            responseBody = await response.json();
+          }
+          if (!response.ok && response.status !== 401) {
+            throw new Error(`Pharma session probe failed with HTTP ${response.status}.`);
+          }
+        } finally {
+          window.clearTimeout(timeoutId);
+        }
         const data = responseBody?.data ?? responseBody;
         const sessionUser = data?.user || (data?.id ? data : null);
 
