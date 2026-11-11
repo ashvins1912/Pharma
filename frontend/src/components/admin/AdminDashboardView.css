@@ -3311,3 +3311,158 @@ html.dark .dashboard-workspace--command-center .dashboard-nav-item.is-active {
 html.dark .dashboard-workspace--command-center .dashboard-command-search input {
   color: #0f172a !important;
 }
+
+
+/* Medicine requests workspace — full-width responsive layout.
+   Overrides legacy admin-screen child selectors that previously squeezed
+   each section into narrow columns. Keep this scoped to this one tab. */
+.admin-screen--requests.admin-request-center {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: clamp(1rem, 1.35vw, 1.5rem);
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+.admin-screen--requests.admin-request-center > .request-center-hero,
+.admin-screen--requests.admin-request-center > .request-center-metrics,
+.admin-screen--requests.admin-request-center > .request-center-controls,
+.admin-screen--requests.admin-request-center > .request-center-queue {
+  grid-column: 1 / -1;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+.admin-screen--requests.admin-request-center > .request-center-hero {
+  display: flex;
+  grid-template-columns: none;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 132px;
+  padding: clamp(1.25rem, 2vw, 2rem);
+}
+.admin-screen--requests.admin-request-center .request-center-hero-copy {
+  width: min(100%, 760px);
+}
+.admin-screen--requests.admin-request-center .request-center-hero h2 {
+  font-size: clamp(1.5rem, 2vw, 2rem);
+}
+.admin-screen--requests.admin-request-center .request-center-hero p {
+  max-width: 68ch;
+  font-size: .875rem;
+}
+.admin-screen--requests.admin-request-center .request-center-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: .875rem;
+}
+.admin-screen--requests.admin-request-center .request-center-metric {
+  min-height: 112px;
+  justify-content: center;
+  gap: .45rem;
+  padding: 1rem 1.15rem;
+}
+.admin-screen--requests.admin-request-center .request-center-metric-label {
+  font-size: .75rem;
+}
+.admin-screen--requests.admin-request-center .request-center-metric strong {
+  font-size: clamp(1.5rem, 2vw, 2rem);
+}
+.admin-screen--requests.admin-request-center .request-center-metric small {
+  font-size: .72rem;
+}
+.admin-screen--requests.admin-request-center .request-center-controls,
+.admin-screen--requests.admin-request-center .request-center-queue {
+  padding: clamp(1rem, 1.5vw, 1.5rem);
+  border-radius: 1rem;
+}
+.admin-screen--requests.admin-request-center .request-center-filter-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+  align-items: end;
+  gap: 1rem;
+}
+.admin-screen--requests.admin-request-center .request-center-status-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .5rem;
+  min-width: 0;
+}
+.admin-screen--requests.admin-request-center .request-center-status-filters button {
+  min-height: 38px;
+  padding: .55rem .8rem;
+  font-size: .75rem;
+  white-space: nowrap;
+}
+.admin-screen--requests.admin-request-center .request-center-search label {
+  font-size: .72rem;
+}
+.admin-screen--requests.admin-request-center .request-center-search-field input {
+  font-size: .8125rem;
+}
+.admin-screen--requests.admin-request-center .request-center-card-grid,
+.admin-screen--requests.admin-request-center .request-center-skeletons {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+  gap: 1rem;
+}
+.admin-screen--requests.admin-request-center .request-center-card {
+  height: 100%;
+  padding: 1rem;
+}
+.admin-screen--requests.admin-request-center .request-center-empty {
+  min-height: 280px;
+}
+@media (max-width: 1100px) {
+  .admin-screen--requests.admin-request-center .request-center-filter-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .admin-screen--requests.admin-request-center .request-center-search {
+    width: 100%;
+    max-width: none;
+  }
+}
+@media (max-width: 900px) {
+  .admin-screen--requests.admin-request-center .request-center-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 640px) {
+  .admin-screen--requests.admin-request-center > .request-center-hero {
+    align-items: flex-start;
+    flex-direction: column;
+    min-height: 0;
+    gap: 1rem;
+    padding: 1.1rem;
+  }
+  .admin-screen--requests.admin-request-center .request-center-hero-status {
+    align-self: flex-start;
+  }
+  .admin-screen--requests.admin-request-center .request-center-controls,
+  .admin-screen--requests.admin-request-center .request-center-queue {
+    padding: .85rem;
+  }
+  .admin-screen--requests.admin-request-center .request-center-filter-heading {
+    align-items: flex-start;
+  }
+  .admin-screen--requests.admin-request-center .request-center-status-filters {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: .35rem;
+    scrollbar-width: thin;
+  }
+  .admin-screen--requests.admin-request-center .request-center-status-filters button {
+    flex: 0 0 auto;
+  }
+  .admin-screen--requests.admin-request-center .request-center-card-grid,
+  .admin-screen--requests.admin-request-center .request-center-skeletons {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 380px) {
+  .admin-screen--requests.admin-request-center .request-center-metrics {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
