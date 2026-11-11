@@ -46,7 +46,9 @@ export default defineConfig(({ mode }) => ({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
-    target: 'es2020',
+    // The federation plugin emits top-level await in shared dependency chunks.
+    // es2020 rejects it during esbuild's final transpilation.
+    target: 'esnext',
     minify: 'esbuild',
     cssCodeSplit: true,
     assetsInlineLimit: 4096,
