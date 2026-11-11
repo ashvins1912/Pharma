@@ -46,7 +46,9 @@ export default defineConfig(({ mode }) => ({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
-    target: 'es2020',
+    // @originjs/vite-plugin-federation emits top-level await in shared chunks.
+    // es2020 rejects that syntax during esbuild's final transpilation.
+    target: 'esnext',
     minify: 'esbuild',
     cssCodeSplit: true,
     assetsInlineLimit: 4096,
