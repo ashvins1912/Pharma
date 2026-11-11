@@ -136,8 +136,12 @@ export default function Header({
               aria-current={activeTab === 'store' ? 'page' : undefined}
             className="quickmeds-brand-anchor app-header__brand" role="button" tabIndex={0} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setActiveTab('store'); } }}
           >
-            <div className="h-9 w-9 sm:h-11 sm:w-11 rounded-xl sm:rounded-2xl bg-blue-600 text-white flex items-center justify-center font-black text-base sm:text-xl shadow-md shadow-blue-500/20 shrink-0">
-              ⚕️
+            <div className="quickmeds-brand-mark flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-cyan-500 text-white shadow-md shadow-blue-500/20 sm:h-11 sm:w-11" aria-hidden="true">
+              <svg viewBox="0 0 48 48" className="h-[72%] w-[72%]" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M24 5.5c-3.1 0-5.6 2.5-5.6 5.6v7.3h-7.3c-3.1 0-5.6 2.5-5.6 5.6s2.5 5.6 5.6 5.6h7.3v7.3c0 3.1 2.5 5.6 5.6 5.6s5.6-2.5 5.6-5.6v-7.3h7.3c3.1 0 5.6-2.5 5.6-5.6s-2.5-5.6-5.6-5.6h-7.3v-7.3c0-3.1-2.5-5.6-5.6-5.6Z" fill="currentColor" fillOpacity=".98"/>
+                <path d="M13.5 34.5 34.5 13.5" stroke="white" strokeWidth="3.2" strokeLinecap="round" opacity=".9"/>
+                <path d="m28.9 13.5 5.6 0 0 5.6" stroke="white" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
             </div>
             <div className="app-header__brand-copy flex flex-col justify-center">
               <div className="quickmeds-brand-badge-container">
