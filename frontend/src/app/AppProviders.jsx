@@ -8,7 +8,6 @@ import { LoadingProvider } from '../context/LoadingContext.jsx';
 import { TenantProvider } from '../context/TenantContext.jsx';
 import { TranslationProvider } from '../context/TranslationContext.jsx';
 import { DashboardAnalyticsProvider } from '../context/DashboardAnalyticsContext.jsx';
-import ModalInteractionGuard from '../components/ModalInteractionGuard.jsx';
 
 /**
  * Keep application-wide providers in one place and make their dependency order
@@ -26,7 +25,6 @@ export default function AppProviders() {
                 <AppProvider>
                   <TranslationProvider>
                     <DashboardAnalyticsProvider>
-                      <ModalInteractionGuard />
                       <App />
                     </DashboardAnalyticsProvider>
                   </TranslationProvider>
