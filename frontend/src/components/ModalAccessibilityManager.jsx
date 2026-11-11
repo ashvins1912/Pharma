@@ -65,9 +65,9 @@ export default function ModalAccessibilityManager() {
       // Ensure root container is never left in an inert state
       const root = document.getElementById('root');
       if (root) {
-        root.inert = false;
-        root.removeAttribute('inert');
-        root.removeAttribute('aria-hidden');
+        if (root.inert) root.inert = false;
+        if (root.hasAttribute('inert')) root.removeAttribute('inert');
+        if (root.hasAttribute('aria-hidden')) root.removeAttribute('aria-hidden');
       }
     };
 
@@ -118,10 +118,10 @@ export default function ModalAccessibilityManager() {
 
       if (!nextDialog) {
         restoreBackground();
-        document.body.style.overflow = '';
-        document.documentElement.style.overflow = '';
-        document.documentElement.classList.remove('modal-open');
-        document.body.classList.remove('modal-open');
+        if (document.body.style.overflow) document.body.style.overflow = '';
+        if (document.documentElement.style.overflow) document.documentElement.style.overflow = '';
+        if (document.documentElement.classList.contains('modal-open')) document.documentElement.classList.remove('modal-open');
+        if (document.body.classList.contains('modal-open')) document.body.classList.remove('modal-open');
         return;
       }
 
