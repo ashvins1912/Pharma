@@ -7,6 +7,21 @@ import { useActionLoading, LOADING_ACTIONS } from './LoadingContext';
 
 const AuthContext = createContext(null);
 
+// Authentication must never hold the public storefront behind an unbounded
+// storage or network operation. A slow identity provider/API should degrade
+// to an anonymous storefront and allow late auth callbacks to restore a user.
+function withAuthBootstrapTimeout(promise, timeoutMs, operation) {
+  let timeoutId;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => {
+      const error = new Error(`Authentication bootstrap timed out during ${operation}.`);
+      error.code = 'AUTH_BOOTSTRAP_TIMEOUT';
+      reject(error);
+    }, timeoutMs);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timeoutId));
+}
+
 // These capabilities identify staff workspaces, rather than customer self-service
 // access (for example, customers can read their own orders and medicine requests).
 
@@ -100,7 +115,9 @@ export function AuthProvider({ children }) {
         let upstreamGoogleSession = null;
         if (isSupabaseConfigured && supabase) {
           try {
-            const { data: supaData } = await supabase.auth.getSession();
+            const { data: supaData } = await withAuthBootstrapTimeout(
+              supabase.auth.getSession(), 4000, 'Supabase session restore'
+            );
             upstreamGoogleSession = supaData?.session || null;
           } catch {
             upstreamGoogleSession = null;
@@ -108,7 +125,9 @@ export function AuthProvider({ children }) {
         }
 
         if (upstreamGoogleSession) {
-          const result = await exchangeGoogleSession(upstreamGoogleSession);
+          const result = await withAuthBootstrapTimeout(
+            exchangeGoogleSession(upstreamGoogleSession), 8000, 'Google session exchange'
+          );
           const sessionUser = result?.user || null;
           if (mounted && sessionUser && sessionUser.profileCompleted !== false
               && String(sessionUser.accountStatus || 'ACTIVE').toUpperCase() === 'ACTIVE') {
@@ -116,7 +135,9 @@ export function AuthProvider({ children }) {
             setAal(result?.aal || 'aal1');
           }
         } else {
-          const probe = await getAuthMe({ allowAnonymous: true });
+          const probe = await withAuthBootstrapTimeout(
+            getAuthMe({ allowAnonymous: true }), 6000, 'Pharma session probe'
+          );
           // Axios returns the HTTP body in response.data, while the backend
           // success contract wraps the profile again in body.data. Unwrap both
           // layers before resolving the canonical user.
