@@ -38,7 +38,6 @@ import './AdminDashboardView.css';
 function PendingMedicineRequestsNotice({ count, onOpen }) {
   const { t } = useLanguage();
   if (count < 1) return null;
-  const plural = count !== 1;
 
   return (
     <aside className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-rose-950 shadow-sm" aria-live="polite">
