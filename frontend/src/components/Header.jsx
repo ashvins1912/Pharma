@@ -16,6 +16,7 @@ export default function Header({
   onOpenAuth,
   onOpenProfile,
   onOpenAdminAlerts,
+  onOpenGuide,
   onToggleMobileMenu
 }) {
   const {
@@ -271,6 +272,17 @@ export default function Header({
 
           {/* Right: Actions Bar */}
           <div className="quickmeds-actions-group app-header__actions">
+
+            {/* App Guide Button */}
+            <button
+              type="button"
+              onClick={onOpenGuide}
+              className="h-8 sm:h-9 px-2.5 sm:px-3 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-extrabold text-[11px] sm:text-xs transition cursor-pointer flex items-center gap-1.5 shrink-0 border border-indigo-200/60 shadow-xs"
+              title="Application Guide & Manual"
+            >
+              <span>📖</span>
+              <span className="hidden sm:inline font-black">{t('appGuide') || 'Guide'}</span>
+            </button>
 
             <label className="app-header__language qm-select-shell hidden min-[380px]:flex items-center gap-1 px-2 py-1.5 text-[11px] font-semibold text-slate-600" title={t('selectLanguage')}>
               <span aria-hidden="true">🌐</span>

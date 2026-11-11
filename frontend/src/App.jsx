@@ -19,6 +19,7 @@ import OrderHistoryView from './components/OrderHistoryView';
 import AddressManager from './components/AddressManager';
 import AuthModal from './components/AuthModal';
 import UserProfileModal from './components/UserProfileModal';
+import ApplicationGuideModal from './components/common/ApplicationGuideModal';
 const AdminDashboardView = React.lazy(() => import('./components/admin/AdminDashboardView'));
 import WhatsAppConnectModal from './components/admin/WhatsAppConnectModal';
 import AdminNewStockModal from './components/admin/AdminNewStockModal';
@@ -109,6 +110,7 @@ function MainApp() {
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [appGuideOpen, setAppGuideOpen] = useState(false);
   const [placedOrder, setPlacedOrder] = useState(null);
   const [ratingPromptOrder, setRatingPromptOrder] = useState(null);
   const [dismissedRatingOrderIds, setDismissedRatingOrderIds] = useState([]);
@@ -385,6 +387,7 @@ function MainApp() {
         onOpenAdminAlerts={() => {
           if (canAccessOperations) setActiveTab('admin');
         }}
+        onOpenGuide={() => setAppGuideOpen(true)}
         onToggleMobileMenu={(isOpen) => {
           if (isOpen) setAuthOpen(false);
         }}
@@ -593,7 +596,13 @@ function MainApp() {
       </main>
 
       {/* Persistent Pharmacy Footer */}
-      <Footer onNavigate={handleTabSwitch} />
+      <Footer onNavigate={handleTabSwitch} onOpenGuide={() => setAppGuideOpen(true)} />
+
+      {/* Multi-Language Application Guide Modal */}
+      <ApplicationGuideModal
+        isOpen={appGuideOpen}
+        onClose={() => setAppGuideOpen(false)}
+      />
 
       {/* Slide-over Cart Drawer */}
       <CartDrawer
