@@ -1348,17 +1348,17 @@ export default function AdminFulfillmentKanban({ orders, onRefresh, dateRange = 
               <div className="space-y-3">
                 <p className="text-[11px] font-bold text-slate-500">{t('availableDeliveryPartners')}</p>
                 {loadingAvailableRiders && (
-                  <p className="rounded-xl bg-slate-50 p-3 text-xs text-slate-500">Loading available riders...</p>
+                  <p className="rounded-xl bg-slate-50 p-3 text-xs text-slate-500">{t('loading')}</p>
                 )}
                 {availableRidersError && (
                   <p role="alert" className="rounded-xl bg-rose-50 p-3 text-xs text-rose-700">{availableRidersError}</p>
                 )}
                 {!loadingAvailableRiders && !availableRidersError && availableRiders.length === 0 && (
-                  <p className="rounded-xl bg-amber-50 p-3 text-xs text-amber-800">No riders are currently available.</p>
+                  <p className="rounded-xl bg-amber-50 p-3 text-xs text-amber-800">{t('noRidersAvailable')}</p>
                 )}
                 {!loadingAvailableRiders && availableRiders.length > 0 && (
                   <div className="space-y-2">
-                    <label htmlFor="fulfillment-rider-search" className="sr-only">Search available riders</label>
+                    <label htmlFor="fulfillment-rider-search" className="sr-only">{t("searchDeliveryPartner")}</label>
                     <input
                       id="fulfillment-rider-search"
                       type="search"
@@ -1478,7 +1478,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh, dateRange = 
                     </span>
                   </div>
                   <p className="text-[11px] sm:text-xs text-slate-500 truncate">
-                    Stage: <strong className="text-slate-700">{prescriptionModalOrder.orderStatus}</strong> • Customer: <span className="font-semibold text-slate-700">{prescriptionModalOrder.customerName || prescriptionModalOrder.addressDetails?.fullName || 'Customer'}</span>
+                    {t('orderStatus')} : <strong className="text-slate-700">{prescriptionModalOrder.orderStatus}</strong> • {t('customer')} : <span className="font-semibold text-slate-700">{prescriptionModalOrder.customerName || prescriptionModalOrder.addressDetails?.fullName || 'Customer'}</span>
                   </p>
                 </div>
               </div>
