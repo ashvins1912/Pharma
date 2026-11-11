@@ -134,7 +134,7 @@ const rawApiBaseUrl = configuredApiBaseUrl.replace(/\/+$/, '');
 // refresh requests cross-site, so browsers can omit SameSite=Lax cookies.
 // VITE_API_URL is still honored for local development and its Vite proxy.
 const apiBaseUrl = import.meta.env.PROD
-    ? ''
+    ? String(import.meta.env.VITE_API_GATEWAY_URL || '').replace(/\/+$/, '')
     : rawApiBaseUrl === '/api'
         ? ''
         : rawApiBaseUrl.endsWith('/api')
