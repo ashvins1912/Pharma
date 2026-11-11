@@ -82,7 +82,7 @@ for (const language of requiredLanguages) {
 }
 
 // Keep customer-facing English copy free of internal engineering and data terms.
-const technicalTerms = /\\b(API|backend|frontend|database|token|payload|cache|gateway|tenant|telemetry|geohash|GeoJSON|SKU|RBAC|MFA|OAuth|webhook|dispatch queue|fulfillment queue|infrastructure|pipeline|orchestration|middleware|endpoint|JSON|CSV|SMTP|OTP|schema|microservice|session)\\b/i;
+const technicalTerms = /\b(API|backend|frontend|database|token|payload|cache|gateway|tenant|telemetry|geohash|GeoJSON|SKU|RBAC|MFA|OAuth|webhook|dispatch queue|fulfillment queue|infrastructure|pipeline|orchestration|middleware|endpoint|JSON|CSV|SMTP|OTP|schema|microservice|session)\b/i;
 const technicalCopy = [...reference].filter(([, value]) => typeof value === 'string' && technicalTerms.test(value));
 if (technicalCopy.length) {
   console.error(`Technical wording in English translations: ${technicalCopy.map(([key]) => key).join(', ')}`);
