@@ -81,23 +81,29 @@ for (const language of requiredLanguages) {
   }
 }
 
-// Keep customer-facing English copy free of internal engineering and data terms.
+// Keep every supported language free of internal engineering and data terms.
 const technicalTerms = /\b(API|backend|frontend|database|token|payload|cache|gateway|tenant|telemetry|geohash|GeoJSON|SKU|RBAC|MFA|OAuth|webhook|dispatch queue|fulfillment queue|infrastructure|pipeline|orchestration|middleware|endpoint|JSON|CSV|SMTP|OTP|schema|microservice|session)\b/i;
-const technicalCopy = [...reference].filter(([, value]) => typeof value === 'string' && technicalTerms.test(value));
-if (technicalCopy.length) {
-  console.error(`Technical wording in English translations: ${technicalCopy.map(([key]) => key).join(', ')}`);
-  process.exitCode = 1;
-}
+for (const language of requiredLanguages) {
+  const dictionary = dictionaries.get(language);
+  if (!dictionary) continue;
 
-// Keep help text and descriptions short enough to scan quickly.
-const longDescriptions = [...reference].filter(([key, value]) =>
-  typeof value === 'string'
-  && value.length > 140
-  && /(desc|description|instructions|help|notice|message)/i.test(key)
-);
-if (longDescriptions.length) {
-  console.error(`Long descriptions in English translations: ${longDescriptions.map(([key]) => key).join(', ')}`);
-  process.exitCode = 1;
+  const technicalCopy = [...dictionary].filter(([, value]) =>
+    typeof value === 'string' && technicalTerms.test(value)
+  );
+  if (technicalCopy.length) {
+    console.error(`Technical wording in ${language} translations: ${technicalCopy.map(([key]) => key).join(', ')}`);
+    process.exitCode = 1;
+  }
+
+  const longDescriptions = [...dictionary].filter(([key, value]) =>
+    typeof value === 'string'
+    && value.length > 140
+    && /(desc|description|instructions|help|notice|message)/i.test(key)
+  );
+  if (longDescriptions.length) {
+    console.error(`Long descriptions in ${language} translations: ${longDescriptions.map(([key]) => key).join(', ')}`);
+    process.exitCode = 1;
+  }
 }
 
 if (process.exitCode) {
