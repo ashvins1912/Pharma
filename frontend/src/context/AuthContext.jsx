@@ -609,12 +609,13 @@ export function AuthProvider({ children }) {
   };
 
   const completeGoogleProfile = async (profileData) => {
+    const isGoogleOnboarding = user?.onboardingProvider === 'GOOGLE';
     let result;
     try {
       // Ensure the restricted Pharma onboarding cookie is freshly established
       // before profile completion. This prevents a lost/expired HttpOnly
       // onboarding cookie from producing a 401 on the first PUT.
-      if (supabase) {
+      if (isGoogleOnboarding && supabase) {
         const { data: sessionData } = await supabase.auth.getSession();
         if (sessionData?.session?.access_token) {
           await exchangeGoogleSession(sessionData.session);
@@ -626,7 +627,7 @@ export function AuthProvider({ children }) {
       // If a hosting proxy dropped the Set-Cookie from the Google exchange,
       // recover the restricted onboarding session from the still-active
       // upstream Google session and retry exactly once.
-      if (Number(error?.status) !== 401 || !supabase) throw error;
+      if (Number(error?.status) !== 401 || !isGoogleOnboarding || !supabase) throw error;
       const { data: sessionData } = await supabase.auth.getSession();
       const supaSession = sessionData?.session;
       if (!supaSession?.access_token) throw error;
@@ -646,7 +647,7 @@ export function AuthProvider({ children }) {
 
     setProfileCompletionRequired(false);
     syncSession({ user: completedUser }, completedUser);
-    clearSupabaseLocalSession();
+    if (isGoogleOnboarding) clearSupabaseLocalSession();
 
     // Profile completion is the first point at which the application should
     // re-hydrate the canonical Pharma session from /auth/me.
