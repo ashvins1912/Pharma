@@ -1169,6 +1169,9 @@ const messages = {
     selectBranch: "Choose a branch",
     timestamp: "Date and time",
     deliveryAddress: "Delivery address",
+    suggestRestock: "Suggest a stock refill",
+    uploadMedicinePhoto: "Upload medicine photo",
+    prescriptionRequired: "Prescription required",
   },
 
   hi: {
@@ -2330,6 +2333,9 @@ const messages = {
     selectBranch: "शाखा चुनें",
     timestamp: "तारीख और समय",
     deliveryAddress: "डिलीवरी का पता",
+    suggestRestock: "स्टॉक फिर से मँगाने का सुझाव दें",
+    uploadMedicinePhoto: "दवा की फोटो जोड़ें",
+    prescriptionRequired: "पर्चा ज़रूरी है",
   },
 
   kn: {
@@ -3491,6 +3497,9 @@ const messages = {
     selectBranch: "ಶಾಖೆ ಆಯ್ಕೆಮಾಡಿ",
     timestamp: "ದಿನಾಂಕ ಮತ್ತು ಸಮಯ",
     deliveryAddress: "ವಿತರಣಾ ವಿಳಾಸ",
+    suggestRestock: "ಸ್ಟಾಕ್ ಮರುಪೂರಣಕ್ಕೆ ಸಲಹೆ ನೀಡಿ",
+    uploadMedicinePhoto: "ಔಷಧಿಯ ಫೋಟೋ ಸೇರಿಸಿ",
+    prescriptionRequired: "ಔಷಧಿ ಚೀಟಿ ಅಗತ್ಯ",
   },
 
   bn: {
@@ -4652,6 +4661,9 @@ const messages = {
     selectBranch: "শাখা বেছে নিন",
     timestamp: "তারিখ ও সময়",
     deliveryAddress: "ডেলিভারির ঠিকানা",
+    suggestRestock: "স্টক আবার আনার পরামর্শ দিন",
+    uploadMedicinePhoto: "ওষুধের ছবি যোগ করুন",
+    prescriptionRequired: "প্রেসক্রিপশন আবশ্যক",
   },
 
   te: {
@@ -5814,6 +5826,9 @@ const messages = {
     selectBranch: "శాఖను ఎంచుకోండి",
     timestamp: "తేదీ మరియు సమయం",
     deliveryAddress: "డెలివరీ చిరునామా",
+    suggestRestock: "స్టాక్ మళ్లీ తెప్పించమని సూచించండి",
+    uploadMedicinePhoto: "మందు ఫోటోను అప్‌లోడ్ చేయండి",
+    prescriptionRequired: "ప్రిస్క్రిప్షన్ అవసరం",
   }
 };
 
