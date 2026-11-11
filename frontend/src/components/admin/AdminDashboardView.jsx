@@ -418,16 +418,16 @@ export default function AdminDashboardView() {
 
       {/* WhatsApp Disconnection Warning Banner */}
       {!whatsappStatus.isConnected && (
-        <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-amber-900 shadow-sm animate-fade-in">
-          <div className="flex items-start sm:items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-200 text-amber-900 flex items-center justify-center text-xl flex-shrink-0">
+        <div className="bg-amber-50 border-2 border-amber-400/90 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-amber-950 shadow-sm animate-fade-in">
+          <div className="flex items-start sm:items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-amber-200 text-amber-950 flex items-center justify-center text-xl flex-shrink-0 font-bold shadow-inner">
               ⚠️
             </div>
-            <div>
-              <h4 className="font-extrabold text-xs sm:text-sm text-amber-950">
+            <div className="min-w-0 flex-1">
+              <h4 className="font-black text-xs sm:text-sm text-amber-950 tracking-tight">
                 {t('missDeliveryUpdatesTitle')}
               </h4>
-              <p className="text-[11px] text-amber-800 mt-0.5">
+              <p className="text-xs text-amber-900 font-bold mt-0.5 leading-relaxed">
                 {t('whatsappDisconnectedDesc')}
               </p>
             </div>
@@ -435,10 +435,10 @@ export default function AdminDashboardView() {
           {canManageWhatsApp && (
             <button
               onClick={() => setWhatsappModalOpen(true)}
-              className="bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs px-4 py-2 rounded-xl transition cursor-pointer flex items-center gap-1.5 flex-shrink-0 shadow-sm"
+              className="bg-amber-600 hover:bg-amber-700 text-white font-black text-xs px-4 py-2.5 rounded-xl transition cursor-pointer flex items-center gap-2 flex-shrink-0 shadow-md shadow-amber-600/25 active:scale-95"
             >
-              <span>📲</span>
-              <span>{t('linkWhatsAppQr')}</span>
+              <span className="text-sm">📲</span>
+              <span className="font-black text-white">{t('linkWhatsAppQr')}</span>
             </button>
           )}
         </div>

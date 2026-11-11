@@ -2751,17 +2751,30 @@ html.dark .request-center-empty h4 { color:#e2e8f0; }
   pointer-events: none;
 }
 .dashboard-shell--command-center > .bg-amber-50 {
-  border-color: rgb(245 158 11 / 0.36);
-  background: rgb(120 53 15 / 0.2);
-  color: #fde68a;
+  border-color: #fcd34d !important;
+  background: #fffbeb !important;
+  color: #451a03 !important;
+  box-shadow: 0 4px 14px rgba(245, 158, 11, 0.08) !important;
 }
-.dashboard-shell--command-center > .bg-amber-50 h4,
+.dashboard-shell--command-center > .bg-amber-50 h4 {
+  color: #451a03 !important;
+  font-weight: 900 !important;
+}
 .dashboard-shell--command-center > .bg-amber-50 p {
-  color: #fcd34d;
+  color: #78350f !important;
+  font-weight: 700 !important;
 }
 .dashboard-shell--command-center > .bg-amber-50 .bg-amber-200 {
-  background: rgb(245 158 11 / 0.18);
-  color: #fbbf24;
+  background: #fde68a !important;
+  color: #78350f !important;
+}
+.dashboard-shell--command-center > .bg-amber-50 button {
+  background-color: #d97706 !important;
+  color: #ffffff !important;
+  font-weight: 900 !important;
+}
+.dashboard-shell--command-center > .bg-amber-50 button:hover {
+  background-color: #b45309 !important;
 }
 .dashboard-shell--command-center > .rounded-2xl.border.border-slate-200.bg-white {
   border-color: var(--cc-border);
