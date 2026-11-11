@@ -2,11 +2,11 @@ import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 import federation from '@originjs/vite-plugin-federation';
 
-// Keep local development on the same API path as production: /api requests
-// must reach the API Gateway proxy. Mock responses previously intercepted every
-// /api request (including /auth/me), hiding gateway/authentication failures and
-// making local behaviour differ from the deployed application.
-export default defineConfig({
+// One Vite configuration is used for local development and Render builds.
+// API requests stay on /api so local Vite proxying and the production Render
+// rewrite exercise the same frontend request paths.
+export default defineConfig(({ mode }) => ({
+  base: '/',
   plugins: [
     react(),
     federation({
@@ -19,20 +19,38 @@ export default defineConfig({
       shared: ['react', 'react-dom', 'zustand', 'axios']
     })
   ],
+  resolve: {
+    extensions: ['.mjs', '.js', '.jsx', '.ts', '.tsx', '.json']
+  },
   server: {
     host: '0.0.0.0',
     port: 3000,
+    strictPort: true,
     allowedHosts: true,
     proxy: {
       '/api': {
         target: process.env.VITE_DEV_API_PROXY || 'http://localhost:8080',
-        changeOrigin: true
+        changeOrigin: true,
+        secure: mode !== 'development'
       }
     }
   },
+  preview: {
+    host: '0.0.0.0',
+    port: 4173,
+    strictPort: true
+  },
+  optimizeDeps: {
+    include: ['react', 'react-dom', 'axios', '@supabase/supabase-js', 'zustand']
+  },
   build: {
-    target: 'esnext',
+    outDir: 'dist',
+    emptyOutDir: true,
+    target: 'es2020',
     minify: 'esbuild',
-    cssCodeSplit: true
+    cssCodeSplit: true,
+    assetsInlineLimit: 4096,
+    reportCompressedSize: false,
+    chunkSizeWarningLimit: 1500
   }
-});
+}));
