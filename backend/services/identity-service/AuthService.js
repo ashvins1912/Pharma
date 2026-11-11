@@ -109,6 +109,15 @@ export const inMemoryIdentities = new Map();
 export const inMemoryTokens = new Map();
 export const inMemoryRefreshSessions = new Map();
 
+function requireDurableIdentityStore() {
+    if (process.env.NODE_ENV === 'production' && !getIsConnected()) {
+        throw Object.assign(new Error('Account services are temporarily unavailable. Please try again.'), {
+            code: 'IDENTITY_STORE_UNAVAILABLE',
+            status: 503
+        });
+    }
+}
+
 // Rate limiter for verification resend (key -> timestamps array)
 const resendRateLimitMap = new Map();
 const passwordResetRateLimitMap = new Map();
@@ -119,6 +128,7 @@ export class AuthService {
      * Locate user by query (MongoDB with in-memory fallback)
      */
     async findUser(query) {
+        requireDurableIdentityStore();
         if (getIsConnected()) {
             try {
                 // MongoDB is authoritative whenever connected. Do not fall back to
@@ -168,6 +178,7 @@ export class AuthService {
      * Persist or update user document
      */
     async saveUser(userId, userData) {
+        requireDurableIdentityStore();
         const normEmail = (userData.email || userData.normalizedEmail || '').trim().toLowerCase();
         const doc = {
             ...userData,
@@ -230,6 +241,7 @@ export class AuthService {
      * Locate UserIdentity by provider and providerUserId
      */
     async findIdentity(provider, providerUserId) {
+        requireDurableIdentityStore();
         if (getIsConnected()) {
             try {
                 return await UserIdentity.findOne({ provider, providerUserId }).lean().exec();
@@ -249,6 +261,7 @@ export class AuthService {
      * Persist UserIdentity
      */
     async saveIdentity(identityData) {
+        requireDurableIdentityStore();
         const id = identityData.id || crypto.randomUUID();
         const doc = {
             ...identityData,
@@ -664,6 +677,7 @@ export class AuthService {
      * Persist EmailVerificationToken
      */
     async saveVerificationToken(tokenData) {
+        requireDurableIdentityStore();
         if (getIsConnected()) {
             try {
                 await EmailVerificationToken.findOneAndUpdate(
@@ -693,6 +707,7 @@ export class AuthService {
      * Find EmailVerificationToken by tokenHash
      */
     async findVerificationToken(tokenHash) {
+        requireDurableIdentityStore();
         if (getIsConnected()) {
             try {
                 return await EmailVerificationToken.findOne({ tokenHash }).lean().exec();
