@@ -101,65 +101,64 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     let mounted = true;
 
-    async function initAuth() {
+    async function restoreGoogleBrokerSession() {
+      if (!isSupabaseConfigured || !supabase || !mounted) return;
       try {
-        // Do not make CSRF bootstrap part of anonymous landing. Login,
-        // Google exchange, refresh and other session-establishing responses set
-        // the XSRF-TOKEN cookie themselves. This keeps initial page hydration
-        // independent of a backend CSRF request.
-        // Do not probe /auth/me while an upstream Google OAuth session is
-        // waiting to be exchanged or while the account is in PROFILE_INCOMPLETE.
-        // The Google exchange returns the Pharma user and establishes the
-        // restricted onboarding session; protected profile APIs start only
-        // after profile completion.
-        let upstreamGoogleSession = null;
-        if (isSupabaseConfigured && supabase) {
-          try {
-            const { data: supaData } = await withAuthBootstrapTimeout(
-              supabase.auth.getSession(), 4000, 'Supabase session restore'
-            );
-            upstreamGoogleSession = supaData?.session || null;
-          } catch {
-            upstreamGoogleSession = null;
-          }
-        }
+        // Google is an optional identity broker, not a prerequisite for opening
+        // the public storefront. Restore it only after the first-party session
+        // probe has released the initial screen.
+        const { data: supaData } = await withAuthBootstrapTimeout(
+          supabase.auth.getSession(), 4000, 'Supabase session restore'
+        );
+        const upstreamSession = supaData?.session || null;
+        if (!mounted || !upstreamSession) return;
 
-        if (upstreamGoogleSession) {
-          const result = await withAuthBootstrapTimeout(
-            exchangeGoogleSession(upstreamGoogleSession), 8000, 'Google session exchange'
-          );
-          const sessionUser = result?.user || null;
-          if (mounted && sessionUser && sessionUser.profileCompleted !== false
-              && String(sessionUser.accountStatus || 'ACTIVE').toUpperCase() === 'ACTIVE') {
-            setMfaEnabled(Boolean(result?.mfaEnabled));
-            setAal(result?.aal || 'aal1');
-          }
-        } else {
-          const probe = await withAuthBootstrapTimeout(
-            getAuthMe({ allowAnonymous: true }), 6000, 'Pharma session probe'
-          );
-          // Axios returns the HTTP body in response.data, while the backend
-          // success contract wraps the profile again in body.data. Unwrap both
-          // layers before resolving the canonical user.
-          const responseBody = probe?.data ?? null;
-          const data = responseBody?.data ?? responseBody;
-          const sessionUser = data?.user || (data?.id ? data : null);
-          if (mounted && sessionUser && sessionUser.profileCompleted !== false
-              && String(sessionUser.accountStatus || 'ACTIVE').toUpperCase() === 'ACTIVE') {
-            syncSession({ user: sessionUser }, sessionUser);
-            setMfaEnabled(Boolean(data.mfaEnabled));
-            setAal(data.aal || 'aal1');
-          }
+        const provider = upstreamSession.user?.app_metadata?.provider
+          || upstreamSession.user?.identities?.[0]?.provider;
+        if (provider !== 'google') return;
+
+        const result = await withAuthBootstrapTimeout(
+          exchangeGoogleSession(upstreamSession), 8000, 'Google session exchange'
+        );
+        const sessionUser = result?.user || null;
+        if (mounted && sessionUser && sessionUser.profileCompleted !== false
+            && String(sessionUser.accountStatus || 'ACTIVE').toUpperCase() === 'ACTIVE') {
+          setMfaEnabled(Boolean(result?.mfaEnabled));
+          setAal(result?.aal || 'aal1');
         }
       } catch (error) {
-        // Do not treat cached identity data as a valid authenticated session.
+        // Broker restore is best-effort. A failed Google restore must not block
+        // anonymous storefront access or a first-party email/password session.
+        console.warn('Google broker session restore skipped.', error);
+      }
+    }
+
+    async function initAuth() {
+      try {
+        // Pharma's HttpOnly cookie is the canonical application session. Probe
+        // it first; never wait for Supabase local storage/OAuth to render the
+        // public storefront.
+        const probe = await withAuthBootstrapTimeout(
+          getAuthMe({ allowAnonymous: true }), 3000, 'Pharma session probe'
+        );
+        const responseBody = probe?.data ?? null;
+        const data = responseBody?.data ?? responseBody;
+        const sessionUser = data?.user || (data?.id ? data : null);
+
+        if (mounted && sessionUser && sessionUser.profileCompleted !== false
+            && String(sessionUser.accountStatus || 'ACTIVE').toUpperCase() === 'ACTIVE') {
+          syncSession({ user: sessionUser }, sessionUser);
+          setMfaEnabled(Boolean(data.mfaEnabled));
+          setAal(data.aal || 'aal1');
+        } else if (mounted) {
+          syncSession(null);
+        }
+      } catch (error) {
+        // A missing/expired session is the normal anonymous storefront state.
+        // Do not let a slow or unavailable gateway hold the entire UI hostage.
         if (mounted) {
           syncSession(null);
-          localStorage.removeItem('demo_session');
-          localStorage.removeItem('demo_auth_token');
-          // Never clear the temporary Supabase OAuth session here. During the
-          // Google redirect callback, /me can legitimately return 401 before
-          // the Supabase session is exchanged for a Pharma session.
+          console.warn('Initial Pharma session restore skipped.', error);
         }
       } finally {
         if (mounted) {
@@ -167,6 +166,10 @@ export function AuthProvider({ children }) {
           setAuthTransitionLoading(false);
         }
       }
+
+      // Run the upstream Google restore after releasing the initial loading
+      // screen. It can still complete an OAuth callback and update AuthContext.
+      void restoreGoogleBrokerSession();
     }
 
     if (window.location.pathname === '/reset-password' && new URLSearchParams(window.location.search).get('token')) {
