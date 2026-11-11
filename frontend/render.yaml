@@ -2,7 +2,7 @@ services:
   - type: web
     name: ashvin-pharmacy-frontend
     runtime: static
-    buildCommand: npm ci --include=dev && npm run build
+    buildCommand: cd frontend && npm install --include=dev --workspaces=false && npm run build
     staticPublishPath: ./frontend/dist
     envVars:
       - key: VITE_API_URL
@@ -30,11 +30,7 @@ services:
         value: public, max-age=31536000, immutable
     routes:
       # Keep browser API calls same-origin while routing them through the
-      # public API Gateway. This also preserves legacy /api/orders/*
-      # prescription URLs stored on existing orders.
-      # Route authentication endpoints explicitly before the general API rule.
-      # This prevents a stale/broader SPA fallback rule from serving index.html
-      # for /api/v1/auth/* requests such as login, refresh, and /auth/me.
+      # public API Gateway, preserving first-party session-cookie behavior.
       - type: rewrite
         source: /api/v1/auth/*
         destination: https://pharma-api-gateway.onrender.com/api/v1/auth/*
