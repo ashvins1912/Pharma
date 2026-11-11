@@ -138,7 +138,7 @@ export default function NotificationBell({ onOpenOrders, onRequireAuth }) {
                   type="button"
                   onClick={() => setIsOpen(false)}
                   className="text-slate-400 hover:text-slate-700 text-xs font-bold p-1 rounded-full hover:bg-slate-100"
-                  aria-label={t("closeDialog")}
+                  aria-label={t("close")}
                 >
                   ✕
                 </button>
