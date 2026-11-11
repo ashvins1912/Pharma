@@ -68,9 +68,7 @@ export default function GoogleProfileOnboarding({ user, onComplete, onLogout }) 
       >
         <div className="border-b border-slate-100 bg-gradient-to-br from-blue-50 via-white to-slate-50 px-5 py-6 sm:px-8">
           <div className="flex items-start gap-4">
-            <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-blue-600 text-2xl text-white shadow-lg shadow-blue-600/20">
-              ⚕️
-            </div>
+            <img src="/favicon.svg" alt="" className="h-12 w-12 flex-shrink-0 rounded-2xl object-contain shadow-lg shadow-blue-600/20" />
             <div className="min-w-0">
               <div className="mb-2 inline-flex items-center rounded-full border border-blue-100 bg-blue-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-blue-700">
                 Profile setup · 1 of 1
