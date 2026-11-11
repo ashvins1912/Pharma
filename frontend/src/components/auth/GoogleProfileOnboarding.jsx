@@ -187,9 +187,7 @@ export default function GoogleProfileOnboarding({ user, onComplete, onLogout }) 
                 autoComplete="new-password"
                 minLength={8}
                 className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 pr-20 text-sm font-medium text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
-                placeholder={t('createStrongPassword')}
-                required
-              />
+                placeholder={t('createStrongPassword')}/>
               <button
                 type="button"
                 onClick={() => setShowPassword((visible) => !visible)}
@@ -211,9 +209,7 @@ export default function GoogleProfileOnboarding({ user, onComplete, onLogout }) 
                 autoComplete="new-password"
                 minLength={8}
                 className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 pr-20 text-sm font-medium text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
-                placeholder={t('reenterPassword')}
-                required
-              />
+                placeholder={t('reenterPassword')}/>
               <button
                 type="button"
                 onClick={() => setShowConfirmPassword((visible) => !visible)}
