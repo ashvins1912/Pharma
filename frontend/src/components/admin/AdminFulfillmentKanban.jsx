@@ -1478,7 +1478,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh, dateRange = 
                     </span>
                   </div>
                   <p className="text-[11px] sm:text-xs text-slate-500 truncate">
-                    {t('orderStatus')} : <strong className="text-slate-700">{prescriptionModalOrder.orderStatus}</strong> • {t('customer')} : <span className="font-semibold text-slate-700">{prescriptionModalOrder.customerName || prescriptionModalOrder.addressDetails?.fullName || 'Customer'}</span>
+                    {t('status')} : <strong className="text-slate-700">{prescriptionModalOrder.orderStatus}</strong> • {t('customer')} : <span className="font-semibold text-slate-700">{prescriptionModalOrder.customerName || prescriptionModalOrder.addressDetails?.fullName || 'Customer'}</span>
                   </p>
                 </div>
               </div>
