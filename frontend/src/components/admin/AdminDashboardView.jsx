@@ -496,33 +496,32 @@ export default function AdminDashboardView() {
           <div className="dashboard-command-signals" aria-label={t('needsAttention')}>
             {canViewAdminRequests && (
               <button type="button" className={pendingMedicineRequestCount > 0 ? 'is-alert' : ''} onClick={() => openWorkspaceTab('requests')}>
-                <span className="signal-dot" /> Requests <strong>{pendingMedicineRequestCount}</strong>
+                <span className="signal-dot" /> {t('requests')} <strong>{pendingMedicineRequestCount}</strong>
               </button>
             )}
             {hasPermission('inventory.read') && (
               <button type="button" className={(inventoryAlerts.lowStockCount || 0) > 0 ? 'is-warning' : ''} onClick={() => openWorkspaceTab('inventory')}>
-                <span className="signal-dot" /> Low stock <strong>{inventoryAlerts.lowStockCount || 0}</strong>
+                <span className="signal-dot" /> {t('lowStockLabel')} <strong>{inventoryAlerts.lowStockCount || 0}</strong>
               </button>
             )}
             {hasPermission('inventory.read') && (
               <button type="button" className={(inventoryAlerts.expiredCount || 0) > 0 ? 'is-alert' : ''} onClick={() => setAdminTab('inventory')}>
-                <span className="signal-dot" /> Expired <strong>{inventoryAlerts.expiredCount || 0}</strong>
+                <span className="signal-dot" /> {t('expiredLabel')} <strong>{inventoryAlerts.expiredCount || 0}</strong>
               </button>
             )}
             {canViewFulfillment && (
               <button type="button" onClick={() => openWorkspaceTab('fulfillment')}>
-                <span className="signal-dot" /> Active orders <strong>{activeCount}</strong>
+                <span className="signal-dot" /> {t('activeOrders')} <strong>{activeCount}</strong>
               </button>
             )}
           </div>
         </div>
 
-        <nav className="dashboard-workspace-nav dashboard-workspace-nav--dense" aria-label="Operations command center">
+        <nav className="dashboard-workspace-nav dashboard-workspace-nav--dense" aria-label={t('operationsDashboard')}>
           {[
             {
               id: 'orders',
-              title: 'Orders & requests',
-              description: 'Fulfillment and procurement',
+              title: `${t('orders')} & ${t('requests')}`,
               items: [
                 canViewFulfillment && { tab: 'fulfillment', label: t('fulfillmentQueue'), icon: '📦', count: orders.length },
                 canViewAdminRequests && { tab: 'requests', label: t('medicineRequests'), icon: '📋', count: pendingMedicineRequestCount, tone: 'attention' },
@@ -531,8 +530,7 @@ export default function AdminDashboardView() {
             },
             {
               id: 'delivery',
-              title: 'Delivery & logistics',
-              description: 'Riders, dispatch and routes',
+              title: t('delivery'),
               items: [
                 canManageRiders && { tab: 'riders', label: t('riderFleet'), icon: '🛵' },
                 canManageRoutes && { tab: 'routes', label: t('smartRoute'), icon: '🗺️' }
@@ -540,18 +538,16 @@ export default function AdminDashboardView() {
             },
             {
               id: 'inventory',
-              title: 'Inventory',
-              description: 'Stock and traceability',
+              title: t('stock'),
               items: [
                 canViewInventory && { tab: 'inventory', label: t('inventoryCatalog'), icon: '📊' },
-                canImportMedicineMaster && { tab: 'medicineCatalogue', label: 'Medicine Master Catalogue', icon: '🧬', tone: 'governance' },
+                canImportMedicineMaster && { tab: 'medicineCatalogue', label: t('medicineList'), icon: '🧬', tone: 'governance' },
                 canViewAudits && { tab: 'audits', label: t('inventoryAudits'), icon: '📜' }
               ]
             },
             {
               id: 'growth',
-              title: 'Finance & growth',
-              description: 'Payments, offers and savings',
+              title: t('financeAndOffers'),
               items: [
                 canViewPromotions && { tab: 'promotions', label: t('customerOffers'), icon: '🏷️' },
                 canViewSurplusSavings && { tab: 'surplusSavings', label: t('surplusSavings'), icon: '⚡' },
@@ -561,36 +557,33 @@ export default function AdminDashboardView() {
             },
             {
               id: 'workspace',
-              title: 'People & workspace',
-              description: 'Team and pharmacy profile',
+              title: t('peopleAndPharmacy'),
               items: [
-                canManageMembers && { tab: 'members', label: 'Members & Staff', icon: '👥' },
+                canManageMembers && { tab: 'members', label: t('tenantPersonnel'), icon: '👥' },
                 !isSuperAdmin && { tab: 'tenantProfile', label: t('tenantProfileBranches'), icon: '🏢' }
               ]
             },
             {
               id: 'governance',
-              title: 'Platform governance',
-              description: 'Security and platform oversight',
+              title: t('platformSettings'),
               items: [
                 canViewTenants && { tab: 'tenants', label: t('platformTenants'), icon: '🌐', tone: 'governance' },
                 canManagePlatformAccess && { tab: 'access', label: t('securityAccess'), icon: '🛡️', tone: 'governance' },
-                isSuperAdmin && { tab: 'serviceLogs', label: 'Service logs', icon: '🧾', tone: 'governance' },
+                isSuperAdmin && { tab: 'serviceLogs', label: t('systemActivity'), icon: '🧾', tone: 'governance' },
                 isSuperAdmin && { tab: 'telemetry', label: t('liveTelemetry'), icon: '📡', tone: 'governance' },
                 isSuperAdmin && { tab: 'matrix', label: t('roleFeatureMatrix'), icon: '📐', tone: 'governance' },
-                isSuperAdmin && { tab: 'automation', label: 'Automation test engine', icon: '🧪', tone: 'governance' },
-                isSuperAdmin && { tab: 'featureHealth', label: 'Feature health & blockers', icon: '🩺', tone: 'governance' }
+                isSuperAdmin && { tab: 'automation', label: t('systemChecks'), icon: '🧪', tone: 'governance' },
+                isSuperAdmin && { tab: 'featureHealth', label: t('systemHealth'), icon: '🩺', tone: 'governance' }
               ]
             }
           ].map(group => {
             const query = workspaceSearch.trim().toLocaleLowerCase();
-            const items = group.items.filter(Boolean).filter(item => !query || `${item.label} ${group.title} ${group.description}`.toLocaleLowerCase().includes(query));
+            const items = group.items.filter(Boolean).filter(item => !query || `${item.label} ${group.title}`.toLocaleLowerCase().includes(query));
             if (!items.length) return null;
             return (
               <section key={group.id} className={`dashboard-nav-group dashboard-nav-group--${group.id}`} aria-label={group.title}>
                 <div className="dashboard-nav-group-heading">
                   <h4 className="dashboard-nav-group-title">{group.title}</h4>
-                  <p>{group.description}</p>
                 </div>
                 <div className="dashboard-nav-group-items">
                   {items.map(item => item.externalUrl ? (
