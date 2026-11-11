@@ -454,7 +454,7 @@ select, textarea) {
 
 /* Fulfilment board: preserve lane workflows while making each lane scroll-safe. */
 .admin-screen--fulfillment {
-  overflow: hidden;
+  overflow: visible;
 }
 
 .admin-screen--fulfillment :where(.overflow-x-auto) {
@@ -1518,7 +1518,7 @@ html.dark .admin-screen :where(.overflow-x-auto) {
   align-items:start; gap:clamp(1rem,1.6vw,1.5rem);
 }
 .dashboard-workspace-nav { min-width:0; align-content:start; }
-.dashboard-content { min-width:0; overflow:clip; }
+.dashboard-content { min-width:0; overflow:visible; }
 .admin-screen > * { min-width:0; max-width:100%; }
 .admin-screen :where(.flex,.grid) { min-width:0; }
 .admin-screen :where(input,select,textarea,button) { box-sizing:border-box; }

@@ -4,9 +4,16 @@ function getTopmostModal() {
   if (typeof document === 'undefined') return null;
   return Array.from(document.querySelectorAll('[aria-modal="true"]'))
     .filter((element) => {
+      if (!element.isConnected) return false;
       const style = window.getComputedStyle(element);
-      return style.display !== 'none' && style.visibility !== 'hidden' &&
-        style.pointerEvents !== 'none' && !element.hasAttribute('hidden');
+      const rect = element.getBoundingClientRect();
+      return style.display !== 'none' &&
+        style.visibility !== 'hidden' &&
+        style.pointerEvents !== 'none' &&
+        style.opacity !== '0' &&
+        !element.hasAttribute('hidden') &&
+        rect.width > 0 &&
+        rect.height > 0;
     })
     .sort((a, b) => {
       const za = Number.parseInt(window.getComputedStyle(a).zIndex, 10) || 0;
@@ -48,26 +55,6 @@ export default function ModalInteractionGuard() {
       }
     };
 
-    const canScrollWithin = (target, modal) => {
-      let current = target instanceof Element ? target : null;
-      while (current && current !== modal.parentElement) {
-        if (current === modal) return false;
-        const style = window.getComputedStyle(current);
-        if (/(auto|scroll)/.test(style.overflowY) &&
-            current.scrollHeight > current.clientHeight + 1) return true;
-        current = current.parentElement;
-      }
-      return false;
-    };
-
-    const preventBackgroundScroll = (event) => {
-      const modal = getTopmostModal();
-      if (!modal) return;
-      const target = event.target instanceof Element ? event.target : null;
-      if (target && modal.contains(target) && canScrollWithin(target, modal)) return;
-      if (event.cancelable) event.preventDefault();
-    };
-
     const observer = new MutationObserver(updateLock);
     observer.observe(document.body, {
       subtree: true,
@@ -75,18 +62,14 @@ export default function ModalInteractionGuard() {
       attributes: true,
       attributeFilter: ['class', 'style', 'aria-modal', 'hidden']
     });
-    window.addEventListener('wheel', preventBackgroundScroll, { passive: false });
-    window.addEventListener('touchmove', preventBackgroundScroll, { passive: false });
     updateLock();
 
     return () => {
       observer.disconnect();
-      window.removeEventListener('wheel', preventBackgroundScroll);
-      window.removeEventListener('touchmove', preventBackgroundScroll);
-      if (locked && previous) {
-        document.documentElement.style.overflow = previous.htmlOverflow || '';
-        document.body.style.overflow = previous.bodyOverflow || '';
-        document.body.style.paddingRight = previous.bodyPaddingRight || '';
+      if (locked) {
+        document.documentElement.style.overflow = previous?.htmlOverflow || '';
+        document.body.style.overflow = previous?.bodyOverflow || '';
+        document.body.style.paddingRight = previous?.bodyPaddingRight || '';
         document.documentElement.classList.remove('modal-open');
         document.body.classList.remove('modal-open');
       }
@@ -94,3 +77,4 @@ export default function ModalInteractionGuard() {
   }, []);
   return null;
 }
+

@@ -11,7 +11,14 @@ const FOCUSABLE_SELECTOR = [
 function isVisible(element) {
   if (!element?.isConnected) return false;
   const style = window.getComputedStyle(element);
-  return style.display !== 'none' && style.visibility !== 'hidden' && element.getClientRects().length > 0;
+  const rect = element.getBoundingClientRect();
+  return style.display !== 'none' &&
+    style.visibility !== 'hidden' &&
+    style.opacity !== '0' &&
+    element.getAttribute('aria-hidden') !== 'true' &&
+    !element.hasAttribute('hidden') &&
+    rect.width > 0 &&
+    rect.height > 0;
 }
 
 function getTopmostDialog() {

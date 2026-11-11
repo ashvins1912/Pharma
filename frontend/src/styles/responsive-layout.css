@@ -181,7 +181,8 @@ html.dark .pharma-modal-surface {
 :is(.pharma-responsive-scope, .admin-screen) :where(.overflow-x-auto, [data-table-scroll="true"], .pharma-table-container) {
   position: relative;
   max-width: 100%;
-  overflow: auto;
+  overflow-x: auto;
+  overflow-y: visible;
   border: 1px solid var(--qm-border, #e2e8f0);
   border-radius: 0.875rem;
   background: var(--qm-surface, #fff);
