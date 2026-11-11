@@ -572,8 +572,7 @@ export default function AdminDashboardView() {
                 isSuperAdmin && { tab: 'telemetry', label: t('liveTelemetry'), icon: '📡', tone: 'governance' },
                 isSuperAdmin && { tab: 'matrix', label: t('roleFeatureMatrix'), icon: '📐', tone: 'governance' },
                 isSuperAdmin && { tab: 'automation', label: 'Automation test engine', icon: '🧪', tone: 'governance' },
-                isSuperAdmin && { tab: 'featureHealth', label: 'Feature health & blockers', icon: '🩺', tone: 'governance' },
-                isSuperAdmin && { tab: 'renderHealthMonitor', label: 'Production Render Microservices Health Monitor', icon: '🖥️', tone: 'governance', externalUrl: 'https://pharma-1-278k.onrender.com' }
+                isSuperAdmin && { tab: 'featureHealth', label: 'Feature health & blockers', icon: '🩺', tone: 'governance' }
               ]
             }
           ].map(group => {

@@ -57,6 +57,13 @@ export const MONITORED_SERVICES = [
     url: 'https://websockt.onrender.com/health',
     required: true,
     category: 'SOCKET'
+  },
+  {
+    id: 'production-render-service',
+    name: 'Production Render Web App Host',
+    url: 'https://pharma-1-278k.onrender.com',
+    required: true,
+    category: 'WEB'
   }
 ];
 

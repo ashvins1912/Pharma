@@ -46,6 +46,13 @@ const RENDER_MICROSERVICES = [
     name: 'WebSocket Real-time Engine',
     url: 'https://websockt.onrender.com/health',
     description: 'Real-time order telemetry, rider GPS location updates & notification streams.'
+  },
+  {
+    id: 'production_render_app',
+    gatewayServiceId: 'production-render-service',
+    name: 'Production Render Web App Host',
+    url: 'https://pharma-1-278k.onrender.com',
+    description: 'Production Render web application host and static asset delivery server.'
   }
 ];
 

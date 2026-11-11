@@ -381,7 +381,7 @@ export default function FeatureHealthDashboard() {
               Backend Microservices Health &amp; Wake-Up Radar
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              Live automated status pinging all 6 core microservice endpoints. Click &ldquo;Probe&rdquo; to wake cold-start instances with up to 60s tolerance.
+              Live automated status pinging all core microservices &amp; Production Render Host (https://pharma-1-278k.onrender.com). Click &ldquo;Probe&rdquo; to wake cold-start instances.
             </p>
           </div>
           <span className="text-xs font-bold text-slate-400">
@@ -420,8 +420,17 @@ export default function FeatureHealthDashboard() {
                 </div>
 
                 <div className="mt-2 text-[11px] text-slate-500 dark:text-slate-400 space-y-1">
-                  <p className="truncate font-mono text-[10px]" title={svc.url}>
-                    {svc.url}
+                  <p className="truncate font-mono text-[10px] flex items-center justify-between gap-1" title={svc.url}>
+                    <span className="truncate">{svc.url}</span>
+                    <a
+                      href={svc.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[9px] font-bold text-blue-600 hover:text-blue-800 shrink-0 underline"
+                      title="Open service URL"
+                    >
+                      ↗
+                    </a>
                   </p>
                   <div className="flex items-center justify-between text-[10px] font-medium pt-1 text-slate-600 dark:text-slate-300">
                     <span>Latency: <strong>{svc.latencyMs ?? '--'} ms</strong></span>
@@ -435,7 +444,7 @@ export default function FeatureHealthDashboard() {
                 </div>
 
                 <div className="mt-3 pt-2 border-t border-slate-200/60 dark:border-gray-800 flex justify-between items-center">
-                  <span className="text-[9px] text-slate-400">
+                  <span className="text-[9px] text-slate-400 font-bold uppercase">
                     {svc.category}
                   </span>
                   <button
