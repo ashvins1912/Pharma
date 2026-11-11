@@ -274,28 +274,6 @@ export default function Header({
           {/* Right: Actions Bar */}
           <div className="quickmeds-actions-group app-header__actions">
 
-            {/* Product Tour Button */}
-            <button
-              type="button"
-              onClick={onStartTour}
-              className="h-8 sm:h-9 px-2.5 sm:px-3 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 font-extrabold text-[11px] sm:text-xs transition cursor-pointer flex items-center gap-1.5 shrink-0 border border-blue-200/60 shadow-xs"
-              title="Start Interactive Guided Tour"
-            >
-              <span>✨</span>
-              <span className="hidden sm:inline font-black">Tour</span>
-            </button>
-
-            {/* App Guide Button */}
-            <button
-              type="button"
-              onClick={onOpenGuide}
-              className="h-8 sm:h-9 px-2.5 sm:px-3 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-extrabold text-[11px] sm:text-xs transition cursor-pointer flex items-center gap-1.5 shrink-0 border border-indigo-200/60 shadow-xs"
-              title="Application Guide & Manual"
-            >
-              <span>📖</span>
-              <span className="hidden sm:inline font-black">{t('appGuide') || 'Guide'}</span>
-            </button>
-
             <label className="app-header__language qm-select-shell hidden min-[380px]:flex items-center gap-1 px-2 py-1.5 text-[11px] font-semibold text-slate-600" title={t('selectLanguage')}>
               <span aria-hidden="true">🌐</span>
               <span className="sr-only">{t('language')}</span>
@@ -395,7 +373,7 @@ export default function Header({
               </button>
             )}
 
-            {/* Mobile / Small Screen Navigation Hamburger Menu Toggle */}
+            {/* Hamburger Navigation Menu Toggle (Visible on all screen sizes to access Menu & Guidance) */}
             <button
               type="button"
               ref={mobileMenuToggleRef}
@@ -404,7 +382,7 @@ export default function Header({
                 setMobileMenuOpen(nextState);
                 onToggleMobileMenu?.(nextState);
               }}
-              className="app-header__menu-toggle lg:hidden h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer items-center justify-center shrink-0"
+              className="app-header__menu-toggle flex h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer items-center justify-center shrink-0 border border-slate-200"
               aria-label={t('toggleMenu')}
               aria-expanded={mobileMenuOpen}
               aria-controls="quickmeds-mobile-navigation"
@@ -421,7 +399,7 @@ export default function Header({
           </div>
         </div>
 
-        {/* Slide-in Mobile Navigation Drawer from the Right (Rendered via Portal) */}
+        {/* Slide-in Mobile / Global Navigation Drawer from the Right (Rendered via Portal) */}
         {mobileMenuOpen && typeof document !== 'undefined' && createPortal(
           <div className="fixed inset-0 z-[99999] overflow-hidden animate-fade-in" aria-modal="true" role="dialog" aria-labelledby="quickmeds-mobile-navigation-title">
             {/* Backdrop */}
@@ -456,7 +434,7 @@ export default function Header({
               </div>
 
               {/* Drawer Body: Navigation & Selectors */}
-              <div className="py-4 space-y-3 flex-1">
+              <div className="py-4 space-y-4 flex-1">
                 {/* Language & Branch Selectors */}
                 <div className="space-y-2 pb-3 border-b border-slate-100">
                   <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700">
@@ -560,6 +538,29 @@ export default function Header({
                       <span>👤</span> {t('signIn')}
                     </button>
                   )}
+                </div>
+
+                {/* Exclusive Help & In-App Guidance Section in Hamburger Menu */}
+                <div className="pt-3 border-t border-slate-100 space-y-1.5">
+                  <p className="px-3.5 text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                    {t('helpAndGuidance') || 'Help & Guidance'}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => { closeMobileMenu(); onStartTour?.(); }}
+                    className="w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-extrabold text-blue-700 bg-blue-50/80 hover:bg-blue-100/80 transition flex items-center gap-2.5 border border-blue-100 cursor-pointer"
+                  >
+                    <span className="text-sm">✨</span>
+                    <span>{t('interactiveProductTour') || 'Interactive Product Tour'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { closeMobileMenu(); onOpenGuide?.(); }}
+                    className="w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-extrabold text-indigo-700 bg-indigo-50/80 hover:bg-indigo-100/80 transition flex items-center gap-2.5 border border-indigo-100 cursor-pointer"
+                  >
+                    <span className="text-sm">📖</span>
+                    <span>{t('appGuideAndManual') || t('appGuide') || 'Application Guide & Manual'}</span>
+                  </button>
                 </div>
               </div>
 

@@ -59,14 +59,6 @@ export default function Footer({ onNavigate, onOpenGuide }) {
           <div className="app-footer__section">
             <h4 className="font-extrabold text-slate-900 uppercase tracking-wider text-[11px] mb-3">{t('footerCustomer')}</h4>
             <ul className="space-y-2 text-[11px]">
-              {onOpenGuide && (
-                <li>
-                  <button type="button" onClick={onOpenGuide} className="hover:text-blue-600 font-bold text-blue-700 transition cursor-pointer flex items-center gap-1">
-                    <span>📖</span>
-                    <span>{t('appGuide') || 'Application Guide & Manual'}</span>
-                  </button>
-                </li>
-              )}
               <li>
                 <button onClick={() => onNavigate('orders')} className="hover:text-blue-600 transition cursor-pointer">
                   {t('orderTracking')}
