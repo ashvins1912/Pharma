@@ -311,7 +311,7 @@ function scoreVoiceCandidate(query, candidate) {
     const queryNumbers = getVoiceNumbers(query);
     const candidateNumbers = getVoiceNumbers([
         candidate.brandName, candidate.name, candidate.productName,
-        candidate.strength, candidate.packSize
+        candidate.strength
     ].filter(Boolean).join(' '));
     if (queryNumbers.length && candidateNumbers.length
         && !queryNumbers.some(number => candidateNumbers.includes(number))) return 0;
