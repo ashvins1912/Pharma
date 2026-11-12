@@ -100,7 +100,11 @@ export default function SearchFilter() {
             )}
           </div>
           <VoiceSearchButton
-            onTranscript={(spokenText) => setSearchQuery(spokenText)}
+            onTranscript={(spokenText) => {
+              // Updating the shared query immediately runs the existing catalogue/product filtering.
+              setSearchQuery(spokenText);
+              setMicError(null);
+            }}
             onError={(err) => setMicError(err)}
             onListeningChange={(listening) => setIsVoiceListening(listening)}
             currentQuery={searchQuery}
