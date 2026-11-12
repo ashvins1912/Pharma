@@ -31,6 +31,7 @@ export default function SearchFilter() {
   const isFilterActive = searchQuery || selectedCategory !== 'All' || hideRx || sortOption !== 'default';
 
   const [isVoiceListening, setIsVoiceListening] = useState(false);
+  const [micError, setMicError] = useState(null);
 
   const clearAllFilters = () => {
     setSearchQuery('');
