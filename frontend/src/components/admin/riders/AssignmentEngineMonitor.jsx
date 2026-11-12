@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 
+import { getReadableErrorMessage } from '../../../utils/errorMessage';
 /**
  * Pure Presentation Component: AssignmentEngineMonitor
  * Visualizes the expandable strategy pipeline, manual overrides, and real-time execution logs.
@@ -26,7 +27,7 @@ export default function AssignmentEngineMonitor({
                 text: res.message || res.reason
             });
         } catch (err) {
-            setActionMessage({ type: 'error', text: err.message });
+            setActionMessage({ type: 'error', text: getReadableErrorMessage(err, 'The assignment engine action failed.') });
         }
     };
 
@@ -42,7 +43,7 @@ export default function AssignmentEngineMonitor({
             setSelectedOrderId(null);
             setSelectedRiderId('');
         } catch (err) {
-            setActionMessage({ type: 'error', text: err.message });
+            setActionMessage({ type: 'error', text: getReadableErrorMessage(err, 'The assignment engine action failed.') });
         }
     };
 
