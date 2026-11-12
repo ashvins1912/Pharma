@@ -118,11 +118,10 @@ export default function AdminMedicineRequestsTab({ initialData = null, initialLo
       });
     } catch (error) {
       console.error('[MedicineRequestPrescription] Failed to open prescription:', error);
-      setPrescriptionError(
-        error?.response?.status === 404
-          ? 'Prescription file was not found. Please re-upload the prescription.'
-          : 'Could not open the prescription file. Please try again.'
-      );
+      const fallbackMessage = error?.response?.status === 404
+        ? 'Prescription file was not found. Please re-upload the prescription.'
+        : 'Could not open the prescription file. Please try again.';
+      setPrescriptionError(getReadableErrorMessage(error, fallbackMessage));
     } finally {
       setPrescriptionLoading(false);
     }
