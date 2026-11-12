@@ -72,12 +72,17 @@ function scoreCandidate(query, product) {
   if (!queryKey) return 0;
   const queryNumbers = numbers(query);
   const productNumbers = numbers([product.name, product.genericName, product.strength].filter(Boolean).join(' '));
+  const formTerms = ['tablet', 'capsule', 'syrup', 'suspension', 'injection', 'cream', 'ointment', 'drop', 'gel'];
+  const queryForm = normalize(query).split(' ').find(token => formTerms.includes(token));
+  const productForm = normalize(product.form);
+  if (queryForm && productForm && !productForm.split(' ').some(token => formTerms.includes(token) && token === queryForm)) return 0;
   if (queryNumbers.length && productNumbers.length
     && !queryNumbers.some(number => productNumbers.includes(number))) return 0;
 
   const fields = [
     product.name,
     product.genericName,
+    product.form,
     product.strength ? `${product.name || ''} ${product.strength}` : '',
     product.strength ? `${product.genericName || ''} ${product.strength}` : ''
   ].map(normalize).filter(Boolean);
