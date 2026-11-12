@@ -742,63 +742,7 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
               />
             </div>
 
-            {/* Attachments Section: Prescription and Product Photo */}
-            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 sm:p-4 space-y-3">
-            <span className="text-[11px] font-black uppercase tracking-wider text-slate-500 block">
-              Attachments (Optional & Secure)
-            </span>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {/* Doctor Prescription */}
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    📄 Doctor Prescription
-                  </label>
-                  <input
-                      type="file"
-                      accept="application/pdf,image/jpeg,image/png,image/webp,image/heic,image/heif"
-                      onChange={handlePrescriptionChange}
-                      className="text-xs file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-[11px] file:font-bold file:bg-blue-100 file:text-blue-700 hover:file:bg-blue-200 cursor-pointer w-full text-slate-500"
-                  />
-                  {prescriptionPreview && (
-                      <div className="mt-2 w-16 h-16 rounded-lg overflow-hidden border border-slate-200">
-                        <img src={prescriptionPreview} alt="Prescription Preview" className="w-full h-full object-cover" />
-                      </div>
-                  )}
-                  {prescriptionFile && !prescriptionPreview && (
-                      <p className="text-[10px] text-emerald-700 mt-1 font-bold">
-                        ✓ {prescriptionFile.name}
-                      </p>
-                  )}
-                </div>
-
-                {/* Product Reference Photo */}
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    📷 Product / Strip Photo
-                  </label>
-                  <input
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
-                      onChange={handleProductImageChange}
-                      className="text-xs file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-[11px] file:font-bold file:bg-blue-100 file:text-blue-700 hover:file:bg-blue-200 cursor-pointer w-full text-slate-500"
-                  />
-                  {imagePreview && (
-                      <div className="mt-2 w-16 h-16 rounded-lg overflow-hidden border border-slate-200">
-                        <img src={imagePreview} alt="Product Photo Preview" className="w-full h-full object-cover" />
-                      </div>
-                  )}
-                  {productImageFile && (
-                      <p className="text-[10px] text-emerald-700 mt-1 font-bold">
-                        ✓ {productImageFile.name}
-                      </p>
-                  )}
-                </div>
-              </div>
-              <p className="text-[10px] text-slate-400">
-                Attached files are securely encrypted and accessible only to registered pharmacists and your account.
-              </p>
-            </div>
+            {/* Scan controls above also attach the selected source files to this request. */}
 
             {/* Form Actions */}
             <div className="pt-2 flex items-center justify-end gap-2.5 border-t border-slate-100">
