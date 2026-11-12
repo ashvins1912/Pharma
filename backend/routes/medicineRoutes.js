@@ -423,6 +423,10 @@ router.get('/', async (req, res) => {
         }
 
         const medicines = (result?.items || []).map(publicMedicine);
+        // Public catalogue data is tenant/branch scoped by the query string. A short
+        // private browser cache reuses identical reads without exposing one pharmacy's
+        // inventory to shared caches; checkout still revalidates stock server-side.
+        res.set('Cache-Control', 'private, max-age=10, stale-while-revalidate=20');
         if (typeof search === 'string' && search.trim()) {
             const skuIds = medicines.map(medicine => medicine.sku || medicine.code)
                 .filter(sku => typeof sku === 'string' && sku.trim());
