@@ -60,7 +60,7 @@ export default function UserProfileModal({ isOpen, onClose, onNavigate }) {
   };
 
   const signOut = async () => { if(signingOut)return; await logout(); addToast('Signed out successfully','info'); onClose(); };
-  const disable = async () => { setDisablingMfa(true); try { await disableMfa(); addToast(t('twoFactorDisabled'),'info'); } catch(e){addToast(e.message || t('couldNotDisable2fa'),'error');} finally{setDisablingMfa(false);} };
+  const disable = async () => { setDisablingMfa(true); try { await disableMfa(); addToast(t('twoFactorDisabled'),'info'); } catch(e){addToast(getReadableErrorMessage(e, t('couldNotDisable2fa')),'error');} finally{setDisablingMfa(false);} };
 
   return <>
     <div className="fixed inset-0 z-[1100] flex items-center justify-center p-3 sm:p-5 bg-black/45 backdrop-blur-[2px] animate-fade-in overscroll-none" aria-modal="true" role="dialog" onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); onClose?.(); } }}>
