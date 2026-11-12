@@ -32,8 +32,9 @@ test('edit and token-sort similarity are deterministic and bounded', () => {
 });
 
 test('character n-grams and Dice similarity handle short and empty inputs', () => {
-  assert.deepEqual(characterNgrams(''), [' ', ' ', ' ', ' ']);
+  assert.deepEqual(characterNgrams(''), ['  ', '  ']);
   assert.equal(charNgramDice('', ''), 100);
+  assert.equal(charNgramDice('a', 'a'), 100);
   assert.equal(charNgramDice('a', 'b'), 0);
   assert.ok(charNgramDice('paracetamol', 'parasetamol') > 70);
 });
