@@ -63,7 +63,10 @@ export class CharacterNgramCandidateIndex {
 
   static searchTerms(query, { limit = 24 } = {}) {
     const terms = [...nameGrams(query)];
-    return terms.sort((left, right) => right.length - left.length || left.localeCompare(right))
-      .slice(0, Math.max(1, Math.floor(Number(limit) || 1)));
+    const safeLimit = Math.max(1, Math.floor(Number(limit) || 1));
+    if (terms.length <= safeLimit) return terms;
+    // Sample across the complete name instead of retaining only alphabetically early grams.
+    return Array.from({ length: safeLimit }, (_, index) =>
+      terms[Math.floor(index * terms.length / safeLimit)]);
   }
 }
