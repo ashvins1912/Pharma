@@ -1,5 +1,6 @@
 import {
   calculateDamerauLevenshteinSimilarity,
+  calculateEnsembleSimilarity,
   calculateJaroWinklerSimilarity,
   normalizeText
 } from './similarity.js';
@@ -97,10 +98,12 @@ export function rankScannedMedicineCandidates(extracted, catalogue = [], { minim
     const names = [item.name, item.brandName, item.productName].filter(Boolean);
     const generics = [item.genericName, item.composition].filter(Boolean);
     const nameScore = Math.max(0, ...names.map(value => Math.max(
+      calculateEnsembleSimilarity(extracted.name, value),
       calculateJaroWinklerSimilarity(extracted.name, value),
       calculateDamerauLevenshteinSimilarity(extracted.name, value),
       tokenCoverage(extracted.name, value))));
     const genericScore = Math.max(0, ...generics.map(value => Math.max(
+      calculateEnsembleSimilarity(extracted.normalizedText, value),
       calculateJaroWinklerSimilarity(extracted.normalizedText, value), tokenCoverage(extracted.normalizedText, value))));
     const strengthConflict = hasStrengthConflict(extracted, item);
     const candidateForm = clean(item.dosageForm || item.form);
