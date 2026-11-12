@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, mkdirSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -7,10 +7,8 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const mode = process.argv[2] || 'start';
 const isWindows = process.platform === 'win32';
 const python = process.env.PYTHON || (isWindows ? 'python' : 'python3');
-const npm = process.env.npm_execpath
-  ? (isWindows ? process.env.ComSpec || 'cmd.exe' : process.execPath)
-  : (isWindows ? 'npm.cmd' : 'npm');
-const npmPrefix = process.env.npm_execpath && isWindows ? ['/d', '/s', '/c', 'node', process.env.npm_execpath] : [];
+const npm = process.env.npm_execpath ? process.execPath : (isWindows ? 'npm.cmd' : 'npm');
+const npmPrefix = process.env.npm_execpath ? [process.env.npm_execpath] : [];
 const envDirs = {
   common: 'env/common/.env',
   frontend: 'frontend/env/.env',
@@ -41,11 +39,11 @@ function parseEnvFile(path) {
 }
 
 const commonEnv = parseEnvFile(resolve(root, envDirs.common));
-function serviceEnv(name, file) {
+function serviceEnv(file) {
   return { ...commonEnv, ...parseEnvFile(resolve(root, file)), ...process.env };
 }
 const services = [
-  { name: 'backend', env: envDirs.backend, command: 'npm', args: ['--workspace', 'backend', 'run', 'dev'] , defaults: { PORT: '3001' } },
+  { name: 'backend', env: envDirs.backend, command: 'npm', args: ['--workspace', 'backend', 'run', 'dev'], defaults: { PORT: '3001' } },
   { name: 'api-gateway', env: envDirs.gateway, command: 'npm', args: ['--workspace', 'api-gateway', 'run', 'dev'], defaults: { PORT: '8080' } },
   { name: 'inventory-service', env: envDirs.inventory, command: 'npm', args: ['--workspace', 'services/inventory-service', 'run', 'dev'], defaults: { PORT: '8091' } },
   { name: 'medicine-master-service', env: envDirs.medicineMaster, command: 'npm', args: ['--workspace', 'services/medicine-master-service', 'run', 'dev'], defaults: { PORT: '8092' } },
@@ -70,12 +68,11 @@ async function setup() {
   console.log('\n[workspace] Installing JavaScript workspace dependencies...');
   run(npm, [...npmPrefix, 'install']);
   for (const service of services.filter(item => item.venv)) {
-    const venvPath = resolve(root, service.venv);
     if (!existsSync(pythonExecutable(service.venv))) {
-      console.log(`\n[workspace] Creating Python environment: ${service.name}`);
+      console.log('\n[workspace] Creating Python environment: ' + service.name);
       run(python, ['-m', 'venv', service.venv]);
     }
-    console.log(`[workspace] Installing Python dependencies: ${service.name}`);
+    console.log('[workspace] Installing Python dependencies: ' + service.name);
     run(pythonExecutable(service.venv), ['-m', 'pip', 'install', '--disable-pip-version-check', '-r', 'requirements.txt'], { cwd: resolve(root, service.cwd) });
   }
   console.log('\n[workspace] Dependency installation completed.');
@@ -85,8 +82,8 @@ function build() {
   console.log('\n[workspace] Building frontend and checking Python services...');
   run(npm, [...npmPrefix, '--workspace', 'frontend', 'run', 'build']);
   for (const service of services.filter(item => item.venv)) {
-    const files = service.name === 'prescription-service' ? ['main.py'] : ['server.py'];
-    run(pythonExecutable(service.venv), ['-m', 'py_compile', ...files], { cwd: resolve(root, service.cwd) });
+    const file = service.name === 'prescription-service' ? 'main.py' : 'server.py';
+    run(pythonExecutable(service.venv), ['-m', 'py_compile', file], { cwd: resolve(root, service.cwd) });
   }
   console.log('\n[workspace] Build checks completed.');
 }
@@ -103,22 +100,22 @@ function start() {
   process.once('SIGTERM', () => stop());
 
   for (const service of services) {
-    const env = { ...serviceEnv(service.name, service.env), ...service.defaults };
+    const env = { ...service.defaults, ...serviceEnv(service.env) };
     const command = service.venv ? pythonExecutable(service.venv) : (service.command === 'npm' ? npm : service.command);
     const args = service.venv ? service.args : [...(service.command === 'npm' ? npmPrefix : []), ...service.args];
     const cwd = resolve(root, service.cwd || '.');
     if (service.venv && !existsSync(command)) {
-      console.error(`[workspace] Missing Python environment for ${service.name}. Run npm run setup:all first.`);
+      console.error('[workspace] Missing Python environment for ' + service.name + '. Run npm run setup:all first.');
       stop();
       process.exitCode = 1;
       return;
     }
-    const child = spawn(command, args, { cwd, env, stdio: 'inherit', shell: isWindows && !service.venv });
+    const child = spawn(command, args, { cwd, env, stdio: 'inherit' });
     children.push(child);
-    child.on('error', error => { console.error(`[${service.name}] failed to start:`, error.message); process.exitCode = 1; stop(); });
+    child.on('error', error => { console.error('[' + service.name + '] failed to start:', error.message); process.exitCode = 1; stop(); });
     child.on('exit', (code, signal) => {
       if (!stopping) {
-        console.error(`[workspace] ${service.name} exited (${signal || code}). Stopping the stack.`);
+        console.error('[workspace] ' + service.name + ' exited (' + (signal || code) + '). Stopping the stack.');
         process.exitCode = code || 1;
         stop();
       }
