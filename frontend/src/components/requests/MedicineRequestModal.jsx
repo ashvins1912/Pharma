@@ -11,6 +11,7 @@ import { compressImageFile } from '../../utils/imageCompressor';
 import { fetchMedicineCatalog } from '../../api/medicineCatalogService';
 import { scanMedicineProductLabel, uploadAndReadPrescription } from '../../api/medicineScanService';
 import { extractMedicineLabelDetails, isValidGtin, rankScannedMedicineCandidates } from '../../utils/medicineScanMatching';
+import MedicineMatchSuggestions from '../common/MedicineMatchSuggestions';
 
 // --- Client-Side Binary Signature (Magic Number) Validator ---
 // Add this right under your import statements
@@ -649,6 +650,27 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
                         value={item.requestedName}
                         onChange={(e) => updateRequestedItem(index, 'requestedName', e.target.value)}
                         className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-medium outline-none transition focus:border-blue-500"
+                    />
+                    <MedicineMatchSuggestions
+                      query={[item.requestedName, item.strength].filter(Boolean).join(' ')}
+                      tenantId={tenantId}
+                      onSelect={product => {
+                        const selectedName = product.name || product.productName || product.brandName || product.genericName || item.requestedName;
+                        setRequestedItems(current => current.map((currentItem, currentIndex) => currentIndex === index ? {
+                          ...currentItem,
+                          requestedName: selectedName,
+                          medicineId: product.productId || product._id || product.medicineId || null,
+                          productId: product.productId || product._id || product.medicineId || null,
+                          composition: product.composition || product.genericName || currentItem.composition,
+                          strength: product.strength || currentItem.strength,
+                          dosageForm: product.dosageForm || product.form || currentItem.dosageForm,
+                          manufacturer: product.manufacturer || product.brandName || currentItem.manufacturer,
+                          validationStatus: 'REVIEW_REQUIRED',
+                          requiresReview: true
+                        } : currentItem));
+                        addToast('Catalogue match selected. Verify all details before submitting.', 'success');
+                      }}
+                      title="Possible matches — select only after checking details"
                     />
 
                     <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
