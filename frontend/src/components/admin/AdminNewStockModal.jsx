@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { getReadableErrorMessage } from '../../utils/errorMessage';
 import { useLanguage } from '../../context/LanguageContext';
 import apiClient from '../../api/apiClient';
 import { useToast } from '../../context/ToastContext';
@@ -82,7 +83,7 @@ export default function AdminNewStockModal({ isOpen, onClose, onStockCreated }) 
         setBranchId(nextBranchId || null);
         setTenantId(tenantId);
       } catch (error) {
-        if (!cancelled) { setAvailableBranches([]); setSelectedBranchId(''); setBranchLoadError(error?.response?.data?.message || 'Unable to load active pharmacy branches.'); }
+        if (!cancelled) { setAvailableBranches([]); setSelectedBranchId(''); setBranchLoadError(getReadableErrorMessage(error, 'Unable to load active pharmacy branches.')); }
       } finally { if (!cancelled) setBranchesLoading(false); }
     };
     loadBranches();
