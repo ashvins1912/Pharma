@@ -28,6 +28,7 @@ export function refineSpokenQueryWithFuzzyMatch(rawTranscript, catalog = [], lan
     const ranked = rankVoiceMedicineMatches(cleaned, catalog);
     return {
         originalText: cleaned,
+        isConfident: ranked.isConfident,
         refinedText: ranked.isConfident ? (ranked.best.name || cleaned) : cleaned,
         confidence: ranked.confidence,
         isRefined: ranked.isConfident && Boolean(ranked.best?.name)
@@ -93,10 +94,19 @@ export default function VoiceSearchButton({ onTranscript, onError, onListeningCh
                 if (finalText.trim()) {
                     try { recognition.stop(); } catch {}
                     const match = refineSpokenQueryWithFuzzyMatch(finalText, medicinesRef.current, language);
-                    setFuzzyMatchInfo(match); setFinalText(match.refinedText);
-                    callbacksRef.current.onTranscript?.(match.refinedText);
-                    if (ttsEnabledRef.current) speakVoiceText(getVoiceResponse(match.isRefined ? 'MATCHED' : 'SEARCHING', language, match.refinedText), language);
+                    setFuzzyMatchInfo(match);
+                    setFinalText(match.refinedText);
                     setInterimTranscript('');
+                    // Close the assistant as soon as speech has produced a usable result.
+                    // Ambiguous catalogue matches require an explicit customer selection.
+                    setIsOpen(false);
+                    if (match.isConfident) {
+                        callbacksRef.current.onTranscript?.(match.refinedText);
+                        if (ttsEnabledRef.current) speakVoiceText(getVoiceResponse(match.isRefined ? 'MATCHED' : 'SEARCHING', language, match.refinedText), language);
+                    } else if (!match.alternatives?.length) {
+                        callbacksRef.current.onTranscript?.(match.originalText);
+                        if (ttsEnabledRef.current) speakVoiceText(getVoiceResponse('SEARCHING', language, match.originalText), language);
+                    }
                 }
             };
             recognition.onerror = (event) => {
@@ -129,9 +139,13 @@ export default function VoiceSearchButton({ onTranscript, onError, onListeningCh
         const queryToUse = matchResult.refinedText || medName;
 
         setFinalText(queryToUse);
+        setIsOpen(false);
+        setFuzzyMatchInfo(null);
+        setErrorState(null);
+        stopListening();
+        // SearchFilter connects this callback to the shared product search query.
         callbacksRef.current.onTranscript?.(queryToUse);
         if (ttsEnabledRef.current) speakVoiceText(getVoiceResponse('SEARCHING', language, queryToUse), language);
-        setErrorState(null);
     };
 
     const startListening = () => {
@@ -203,7 +217,7 @@ export default function VoiceSearchButton({ onTranscript, onError, onListeningCh
                 }`}
             >
                 <span className="text-sm sm:text-base select-none">
-                    {isListening ? '🎙️' : '🎤'}
+                    {<svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3" /><path d="M5 10a7 7 0 0 0 14 0M12 17v5m-4 0h8" /></svg>}
                 </span>
                 {isListening && (
                     <span className="absolute -inset-1 rounded-xl bg-rose-500/30 animate-ping pointer-events-none" />
@@ -239,7 +253,7 @@ export default function VoiceSearchButton({ onTranscript, onError, onListeningCh
                                     ttsEnabled ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-white text-slate-500'
                                 }`}
                             >
-                                {ttsEnabled ? '🔊 Audio ON' : '🔇 Audio OFF'}
+                                {ttsEnabled ? 'Audio on' : 'Audio off'}
                             </button>
                             <button
                                 type="button"
@@ -247,7 +261,7 @@ export default function VoiceSearchButton({ onTranscript, onError, onListeningCh
                                 className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-800"
                                 aria-label="Close voice panel"
                             >
-                                ✕
+                                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="m6 6 12 12M18 6 6 18" /></svg>
                             </button>
                         </div>
                     </div>
@@ -285,7 +299,7 @@ export default function VoiceSearchButton({ onTranscript, onError, onListeningCh
                     {fuzzyMatchInfo && (
                         <div className="mx-3.5 mt-2 rounded-xl border border-indigo-100 bg-indigo-50/60 p-3 space-y-1.5 text-xs text-left">
                             <div className="flex items-center justify-between text-[10px] font-bold text-slate-500">
-                                <span className="truncate max-w-[65%]">🎙️ Spoken: "{fuzzyMatchInfo.originalText}"</span>
+                                <span className="truncate max-w-[65%]">Spoken: "{fuzzyMatchInfo.originalText}"</span>
                                 <span className="text-emerald-700 font-mono shrink-0">{fuzzyMatchInfo.confidence}% Match</span>
                             </div>
                             {fuzzyMatchInfo.isRefined && (
@@ -322,7 +336,7 @@ export default function VoiceSearchButton({ onTranscript, onError, onListeningCh
                     {errorState && (
                         <div role="alert" className="mx-3.5 mt-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-[11px] text-rose-700 space-y-1">
                             <div className="flex items-center justify-between font-bold">
-                                <span>🎙️ {errorState.title}</span>
+                                <span>{errorState.title}</span>
                                 <span className="text-[9px] font-mono text-rose-600">{errorState.code}</span>
                             </div>
                             <p className="text-[10px] text-rose-700 leading-snug">{errorState.message}</p>
@@ -337,7 +351,7 @@ export default function VoiceSearchButton({ onTranscript, onError, onListeningCh
                                 onClick={stopListening}
                                 className="w-full rounded-xl bg-rose-600 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-rose-700 cursor-pointer"
                             >
-                                ⏹️ Stop Listening
+                                Stop listening
                             </button>
                         ) : (
                             <button
@@ -345,7 +359,7 @@ export default function VoiceSearchButton({ onTranscript, onError, onListeningCh
                                 onClick={startListening}
                                 className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-700 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-blue-800 cursor-pointer"
                             >
-                                🎙️ Tap to Speak
+                                <><svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="9" y="2" width="6" height="12" rx="3" /><path d="M5 10a7 7 0 0 0 14 0M12 17v5m-4 0h8" /></svg> Tap to speak</>
                             </button>
                         )}
                     </div>
@@ -389,6 +403,36 @@ export default function VoiceSearchButton({ onTranscript, onError, onListeningCh
                         </div>
                     )}
                 </div>
+            )}
+            {/* Confirmation is kept outside the dialog so the assistant can close immediately. */}
+            {!isOpen && fuzzyMatchInfo && !fuzzyMatchInfo.isConfident && fuzzyMatchInfo.alternatives?.length > 0 && (
+                <section className="absolute right-0 top-full z-[1201] mt-2 w-[min(22rem,calc(100vw-2rem))] rounded-2xl border border-indigo-200 bg-white p-3.5 text-slate-900 shadow-xl shadow-slate-900/15" aria-label="Medicine name suggestions" aria-live="polite">
+                    <div className="flex items-start gap-2.5">
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-700" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v18M3 12h18" /><circle cx="12" cy="12" r="9" /></svg>
+                        </span>
+                        <div className="min-w-0 flex-1">
+                            <p className="text-xs font-extrabold text-slate-900">Did you mean one of these spoken medicine names?</p>
+                            <p className="mt-1 text-[10px] leading-relaxed text-slate-500">Heard: “{fuzzyMatchInfo.originalText}”. Choose the exact medicine to search products.</p>
+                        </div>
+                        <button type="button" onClick={() => setFuzzyMatchInfo(null)} aria-label="Dismiss medicine suggestions" className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
+                            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="m6 6 12 12M18 6 6 18" /></svg>
+                        </button>
+                    </div>
+                    <div className="mt-3 space-y-1.5">
+                        {fuzzyMatchInfo.alternatives.map((alt) => (
+                            <button key={alt.name} type="button" onClick={() => handleSelectMedicine(alt.name)} className="flex w-full items-center gap-3 rounded-xl border border-slate-200 px-3 py-2.5 text-left transition hover:border-indigo-300 hover:bg-indigo-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
+                                <span className="min-w-0 flex-1">
+                                    <span className="block truncate text-xs font-bold text-slate-800">{alt.name}</span>
+                                    {(alt.strength || alt.dosageForm) && <span className="mt-0.5 block text-[10px] text-slate-500">{[alt.strength, alt.dosageForm].filter(Boolean).join(' · ')}</span>}
+                                </span>
+                                <span className="shrink-0 rounded-lg bg-indigo-50 px-2 py-1 text-[10px] font-bold text-indigo-700">{alt.score}% match</span>
+                                <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-indigo-600" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg>
+                            </button>
+                        ))}
+                    </div>
+                    <p className="mt-2 text-[10px] text-slate-400">No medicine is selected automatically.</p>
+                </section>
             )}
         </div>
     );

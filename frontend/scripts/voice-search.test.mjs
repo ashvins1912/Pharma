@@ -44,3 +44,16 @@ test('does not refine to a medicine with a conflicting dosage form', () => {
   assert.equal(result.isConfident, false);
   assert.equal(result.best, null);
 });
+
+test('ambiguous spoken medicine names are offered for confirmation before product search', () => {
+  const result = rankVoiceMedicineMatches('Dolo', catalogue);
+  assert.equal(result.isConfident, false);
+  assert.ok(result.alternatives.length > 0);
+  assert.equal(result.alternatives.some(item => item.name === 'Dolo 650 Tablet'), true);
+});
+
+test('an explicitly selected catalogue suggestion can be searched without retaining the voice dialog', () => {
+  const result = rankVoiceMedicineMatches('Dolo 650 Tablet', catalogue);
+  assert.equal(result.isConfident, true);
+  assert.equal(result.best.name, 'Dolo 650 Tablet');
+});

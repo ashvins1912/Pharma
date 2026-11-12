@@ -214,6 +214,9 @@ const PUBLIC_PATHS = [
   // Nearby pharmacy discovery is a read-only storefront feature; do not require staff RBAC.
   ['GET', /^\/api\/tenants\/nearby$/],
   ['GET', /^\/api\/medicines\/discovery$/],
+  // Public query-only medical grounding used by the storefront search card.
+  // Keep this exact endpoint public; sibling routes and methods remain protected.
+  ['POST', /^\/api\/med-search-grounding$/],
   ['GET', /^\/api\/public\//], ['POST', /^\/api\/public\//],
   ['GET', /^\/api\/vendors\//], ['POST', /^\/api\/vendors\//],
   // Token-based vendor onboarding is a public invitation flow. Only the
