@@ -39,7 +39,12 @@ function stopAll(exitCode = 0) {
   stopping = true;
   console.info('\\nStopping all Pharma development processes...');
   for (const child of children.values()) {
-    if (child.exitCode === null && child.signalCode === null) child.kill('SIGTERM');
+    if (child.exitCode !== null || child.signalCode !== null) continue;
+    if (isWindows) {
+      spawn('taskkill', ['/pid', String(child.pid), '/t', '/f'], { stdio: 'ignore' });
+    } else {
+      try { process.kill(-child.pid, 'SIGTERM'); } catch { child.kill('SIGTERM'); }
+    }
   }
   process.exitCode = exitCode;
 }
@@ -49,7 +54,8 @@ for (const spec of specs) {
     cwd: spec.cwd || root,
     env: { ...process.env, ...spec.env },
     stdio: 'inherit',
-    shell: isWindows
+    shell: isWindows,
+    detached: !isWindows
   });
   children.set(spec.name, child);
   child.on('error', error => {
