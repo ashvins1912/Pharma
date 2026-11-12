@@ -43,6 +43,44 @@ async def _authorized_prescription(prescription_id: str, context: ServiceUserCon
         raise HTTPException(status_code=404, detail="Prescription not found")
     return record
 
+
+@router.post("/scan-product-label")
+async def scan_product_label(
+    file: UploadFile = File(...),
+    context: ServiceUserContext = Depends(get_current_service_context),
+):
+    """Run printed-label OCR without creating or persisting a prescription record."""
+    allowed_types = {"image/jpeg", "image/png", "image/webp"}
+    if file.content_type not in allowed_types:
+        raise HTTPException(status_code=415, detail="Product label scan accepts JPEG, PNG, or WebP images.")
+    file_bytes = await file.read()
+    if not file_bytes or len(file_bytes) > 8 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Product label image must be between 1 byte and 8 MB.")
+    signatures = {
+        "image/jpeg": file_bytes.startswith(b"\xff\xd8"),
+        "image/png": file_bytes.startswith(b"\x89PNG\r\n\x1a\n"),
+        "image/webp": len(file_bytes) >= 12 and file_bytes[:4] == b"RIFF" and file_bytes[8:12] == b"WEBP",
+    }
+    if not signatures.get(file.content_type, False):
+        raise HTTPException(status_code=415, detail="Image signature does not match its declared file type.")
+    try:
+        from ..services.pipeline import _run_ocr
+        raw_text, model_version, confidence = _run_ocr(file_bytes, file.content_type)
+    except Exception as exc:
+        code = getattr(exc, "code", "PRODUCT_OCR_FAILED")
+        message = getattr(exc, "message", "Could not read the product label. Try a clearer photo.")
+        raise HTTPException(status_code=422, detail={"code": code, "message": message})
+    return {
+        "success": True,
+        "data": {
+            "text": raw_text[:5000],
+            "confidence": confidence,
+            "modelVersion": model_version,
+            "requiresReview": confidence < 0.82,
+        },
+        "message": "Product label text extracted. Verify the product details before requesting."
+    }
+
 @router.post("/upload", response_model=ApiResponse[PrescriptionUploadData], status_code=status.HTTP_201_CREATED)
 async def upload_prescription(
     file: Optional[UploadFile] = File(None),
