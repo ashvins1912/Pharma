@@ -82,7 +82,9 @@ const verifyBinarySignature = async (file) => {
 
 const createRequestedItem = (values = {}) => ({
   requestedName: values.name || values.requestedName || '',
-  medicineId: values.medicineId || null,
+  medicineId: values.productId || values.medicineId || null,
+  productId: values.productId || values.medicineId || null,
+  composition: values.composition || '',
   strength: values.strength || '',
   dosageForm: values.dosageForm || 'Tablet',
   manufacturer: values.brand || values.manufacturer || '',
@@ -91,6 +93,8 @@ const createRequestedItem = (values = {}) => ({
   dose: values.dose || '',
   frequency: values.frequency || '',
   duration: values.duration || '',
+  course: values.course || null,
+  prescriptionMedicineIndex: Number.isInteger(values.prescriptionMedicineIndex) ? values.prescriptionMedicineIndex : null,
   instructions: values.instructions || '',
   source: values.source || 'MANUAL',
   validationStatus: values.validationStatus || 'MANUAL',
@@ -300,7 +304,7 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
       setPrescriptionId(result.prescriptionId);
       const medicines = Array.isArray(result.medicines) ? result.medicines : [];
       if (medicines.length) {
-        const extractedItems = medicines.map(medicine => {
+        const extractedItems = medicines.map((medicine, medicineIndex) => {
           const strength = medicine.strength && typeof medicine.strength === 'object'
             ? [medicine.strength.value, medicine.strength.unit].filter(Boolean).join(' ')
             : medicine.strength || '';
@@ -321,6 +325,8 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
             dose,
             frequency: medicine.frequency?.raw || medicine.frequency?.normalized || '',
             duration,
+            course: medicine.course || null,
+            prescriptionMedicineIndex: medicineIndex,
             instructions: String(instructions || ''),
             source: 'PRESCRIPTION_EXTRACTED',
             validationStatus: 'REVIEW_REQUIRED',
@@ -420,7 +426,9 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
     if (!product) return;
     const item = createRequestedItem({
       name: product.name || product.productName || product.brandName || product.genericName || '',
-      medicineId: product._id || product.productId || product.medicineId || null,
+      medicineId: product.productId || product._id || product.medicineId || null,
+      productId: product.productId || product._id || product.medicineId || null,
+      composition: product.composition || product.genericName || '',
       strength: product.strength || '',
       dosageForm: product.dosageForm || product.form || 'Other',
       brand: product.brandName || product.brand || product.manufacturer || '',
