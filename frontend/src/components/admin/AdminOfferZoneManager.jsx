@@ -69,7 +69,7 @@ export default function AdminOfferZoneManager() {
       setEditingCampaign(null);
       addToast('Campaign updated successfully.', 'success');
     } catch (error) {
-      addToast(error?.response?.data?.message || 'Campaign could not be updated.', 'error');
+      addToast(getReadableErrorMessage(error, 'Campaign could not be updated.'), 'error');
     } finally {
       setCampaignSaving(false);
     }
