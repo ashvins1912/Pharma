@@ -67,3 +67,16 @@ test('uses fuzzy OCR correction while retaining strength and form constraints', 
   assert.equal(result.status, 'MATCHED');
   assert.equal(result.best._id, 'dolo');
 });
+
+
+test('does not auto-match when the catalogue omits required strength or dosage form', () => {
+  const extracted = extractMedicineLabelDetails('Dolo 650\n650 mg Tablet');
+  const noStrength = rankScannedMedicineCandidates(extracted, [
+    { _id: 'unknown-strength', name: 'Dolo 650', dosageForm: 'Tablet' }
+  ]);
+  const noForm = rankScannedMedicineCandidates(extracted, [
+    { _id: 'unknown-form', name: 'Dolo 650', strength: '650 mg' }
+  ]);
+  assert.equal(noStrength.status, 'NO_MATCH');
+  assert.equal(noForm.status, 'NO_MATCH');
+});
