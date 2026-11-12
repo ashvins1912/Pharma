@@ -52,26 +52,34 @@ async function reconcileCatalogueRecordsAgainstMaster(records) {
   const ids = [...new Set(records.flatMap(item => [item.medicineId, item.reconciliationMatch?.targetMedicineId].filter(Boolean)))];
   const canonicalKeys = [...new Set(records.map(item => item.canonicalKey).filter(Boolean))];
   const names = [...new Set(records.filter(item => item.safeNameMatch).map(item => item.brandName).filter(Boolean))];
-  const searchTerms = [...new Set(records.flatMap(item => CharacterNgramCandidateIndex.searchTerms(item.brandName)))];
-  // Search terms are normalized alphanumeric n-grams, so they are safe literal regex fragments.
+  const searchTerms = [...new Set(records.flatMap(item => CharacterNgramCandidateIndex.searchTerms(item.brandName, { limit: 1000 })))];
   const candidateTerms = searchTerms.slice(0, 600);
   const candidateTermScanTruncated = searchTerms.length > candidateTerms.length;
+  const indexState = await MedicineNameNgramIndexState.findById('brandName-v1').lean();
+  const usePersistedIndex = process.env.MEDICINE_NGRAM_INDEX_ENABLED === 'true' && indexState?.status === 'READY';
+  const [indexedRows, archivedIdentityRows] = await Promise.all([
+    usePersistedIndex && candidateTerms.length
+      ? MedicineNameNgramIndex.find({ grams: { $in: candidateTerms }, isArchived: { $ne: true } }, { medicineId: 1 }).limit(5001).lean()
+      : [],
+    ids.length ? MedicineMaster.find({ medicineId: { $in: ids }, isArchived: true }, { medicineId: 1 }).lean() : []
+  ]);
+  const indexedCandidateIds = [...new Set(indexedRows.map(row => row.medicineId))];
+  const indexCandidateLimitTruncated = indexedRows.length > 5000;
   const clauses = [
     ...(ids.length ? [{ medicineId: { $in: ids } }] : []),
     ...(canonicalKeys.length ? [{ canonicalKey: { $in: canonicalKeys } }] : []),
     ...(names.length ? [{ brandName: { $in: names } }] : []),
-    ...candidateTerms.map(term => ({ brandName: { $regex: term, $options: 'i' } }))
+    ...(usePersistedIndex
+      ? (indexedCandidateIds.length ? [{ medicineId: { $in: indexedCandidateIds } }] : [])
+      : candidateTerms.map(term => ({ brandName: { $regex: term, $options: 'i' } }))
   ];
-  const [candidates, archivedIdentityRows] = await Promise.all([
-    clauses.length ? MedicineMaster.find({ $or: clauses, isArchived: { $ne: true } }, {
-      _id: 1, medicineId: 1, canonicalKey: 1, brandName: 1, genericName: 1, composition: 1,
-      ingredients: 1, strength: 1, dosageForm: 1, manufacturer: 1
-    }).limit(5001).lean() : [],
-    ids.length ? MedicineMaster.find({ medicineId: { $in: ids }, isArchived: true }, { medicineId: 1 }).lean() : []
-  ]);
+  const candidates = clauses.length ? await MedicineMaster.find({ $or: clauses, isArchived: { $ne: true } }, {
+    _id: 1, medicineId: 1, canonicalKey: 1, brandName: 1, genericName: 1, composition: 1,
+    ingredients: 1, strength: 1, dosageForm: 1, manufacturer: 1
+  }).limit(5001).lean() : [];
   const archivedIds = new Set(archivedIdentityRows.map(item => item.medicineId));
   const candidateLimitTruncated = candidates.length > 5000;
-  const scanTruncated = candidateLimitTruncated || candidateTermScanTruncated;
+  const scanTruncated = candidateLimitTruncated || candidateTermScanTruncated || indexCandidateLimitTruncated;
   const activeCandidates = candidates.slice(0, 5000);
   const byId = new Map(activeCandidates.map(item => [item.medicineId, item]));
   const keyGroups = new Map(), nameGroups = new Map();
@@ -363,6 +371,39 @@ export function stopMedicineCatalogueImportWorker() {
 }
 
 const MedicineMaster = mongoose.models.MedicineMaster || mongoose.model('MedicineMaster', medicineMasterSchema);
+const medicineNameNgramIndexSchema = new mongoose.Schema({
+  medicineId: { type: String, required: true, unique: true },
+  grams: { type: [String], default: [] },
+  isArchived: { type: Boolean, default: false }
+}, { timestamps: true, collection: 'medicine_name_ngram_index' });
+medicineNameNgramIndexSchema.index({ grams: 1, isArchived: 1 });
+const MedicineNameNgramIndex = mongoose.models.MedicineNameNgramIndex
+  || mongoose.model('MedicineNameNgramIndex', medicineNameNgramIndexSchema);
+const medicineNameNgramIndexStateSchema = new mongoose.Schema({
+  _id: { type: String, required: true },
+  status: { type: String, enum: ['BUILDING', 'READY', 'FAILED', 'SYNCING'], default: 'BUILDING' },
+  indexedCount: { type: Number, default: 0 },
+  version: { type: Number, default: 1 },
+  updatedAt: { type: Date, default: Date.now }
+}, { collection: 'medicine_name_ngram_index_state', versionKey: false });
+const MedicineNameNgramIndexState = mongoose.models.MedicineNameNgramIndexState
+  || mongoose.model('MedicineNameNgramIndexState', medicineNameNgramIndexStateSchema);
+async function syncMedicineNameNgramIndex(medicineIds) {
+  const ids = [...new Set(medicineIds.filter(Boolean))];
+  if (!ids.length) return;
+  const masters = await MedicineMaster.find({ medicineId: { $in: ids } }, { medicineId: 1, brandName: 1, isArchived: 1 }).lean();
+  if (!masters.length) return;
+  await MedicineNameNgramIndex.bulkWrite(masters.map(master => ({
+    updateOne: {
+      filter: { medicineId: master.medicineId },
+      update: { $set: {
+        grams: CharacterNgramCandidateIndex.searchTerms(master.brandName, { limit: 1000 }),
+        isArchived: Boolean(master.isArchived)
+      } },
+      upsert: true
+    }
+  })), { ordered: false });
+}
 const CatalogueImport = mongoose.models.MedicineCatalogueImport || mongoose.model('MedicineCatalogueImport', catalogueImportSchema);
 const catalogueImportChunkSchema = new mongoose.Schema({
   batchId: { type: String, required: true, index: true },
@@ -1294,7 +1335,23 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
           }
         };
       });
+      const persistedIndexEnabled = process.env.MEDICINE_NGRAM_INDEX_ENABLED === 'true';
+      if (persistedIndexEnabled) {
+        await MedicineNameNgramIndexState.updateOne(
+          { _id: 'brandName-v1' },
+          { $set: { status: 'SYNCING', updatedAt: new Date() } },
+          { upsert: true }
+        );
+      }
       await MedicineMaster.bulkWrite(operations, { ordered: false });
+      if (persistedIndexEnabled) {
+        await syncMedicineNameNgramIndex(ids);
+        await MedicineNameNgramIndexState.updateOne(
+          { _id: 'brandName-v1' },
+          { $set: { status: 'READY', updatedAt: new Date() } },
+          { upsert: true }
+        );
+      }
       // A master write invalidates every cached link immediately, including partial publishes.
       invalidateMedicineMasterVersionCache();
       publishedCount += chunk.length;
@@ -1314,7 +1371,7 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
 }));
 
 export async function initializeMedicineCatalogueModels() {
-  await Promise.all([MedicineMaster.init(), CatalogueImport.init(), CatalogueImportChunk.init(), CatalogueImportJob.init()]);
+  await Promise.all([MedicineMaster.init(), MedicineNameNgramIndex.init(), MedicineNameNgramIndexState.init(), CatalogueImport.init(), CatalogueImportChunk.init(), CatalogueImportJob.init()]);
   startMedicineCatalogueImportWorker();
 }
 export default router;
