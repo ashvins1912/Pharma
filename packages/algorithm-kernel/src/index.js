@@ -7,3 +7,5 @@ export {
   characterNgrams, buildNameNgramIdf, tfIdfNgramCosine, charNgramDice,
   fieldSimilarity, normalizeStrength, normalizeDosageForm
 } from './catalogue/similarity.js';
+
+export { CharacterNgramCandidateIndex } from './catalogue/candidate-index.js';
