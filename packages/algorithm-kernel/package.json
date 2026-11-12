@@ -1,0 +1,19 @@
+{
+  "name": "@pharma/algorithm-kernel",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.js",
+    "./text": "./src/text/index.js",
+    "./registry": "./src/registry/AlgorithmRegistry.js",
+    "./chain": "./src/pipeline/AlgorithmChain.js",
+    "./builder": "./src/pipeline/AlgorithmPipelineBuilder.js"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20.19.0"
+  }
+}
