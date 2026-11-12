@@ -200,6 +200,10 @@ export default function GlobalVoiceAssistant({
         return () => { if (recognition) { try { recognition.abort(); } catch {} if (recognitionRef.current === recognition) recognitionRef.current = null; } };
     }, [language]);
 
+    useEffect(() => () => {
+        if (minimizeTimeoutRef.current) window.clearTimeout(minimizeTimeoutRef.current);
+    }, []);
+
     const executeVoiceCommand = (transcript) => {
         const parsed = parseVoiceCommand(transcript, medicinesRef.current, language);
         setRecognitionError(null);
@@ -301,11 +305,15 @@ export default function GlobalVoiceAssistant({
 
     const minimizeAssistant = () => {
         // A minimized assistant must never keep the microphone active.
+        if (minimizeTimeoutRef.current) window.clearTimeout(minimizeTimeoutRef.current);
+        minimizeTimeoutRef.current = null;
         stopListening();
         setIsMinimized(true);
     };
 
     const closeAssistant = () => {
+        if (minimizeTimeoutRef.current) window.clearTimeout(minimizeTimeoutRef.current);
+        minimizeTimeoutRef.current = null;
         stopListening();
         setIsOpen(false);
         setIsMinimized(false);
