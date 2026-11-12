@@ -5,6 +5,7 @@ import apiClient from '../../api/apiClient';
 import { useActionLoading, LOADING_ACTIONS } from '../../context/LoadingContext';
 import { useToast } from '../../context/ToastContext';
 import { normalizePrescriptionBlob } from '../../utils/prescriptionFile';
+import { getReadableErrorMessage } from '../../utils/errorMessage';
 import Pagination from '../common/Pagination';
 import FulfillmentTabs from './FulfillmentTabs';
 
@@ -200,7 +201,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh, dateRange = 
     }).catch(error => {
       if (isCurrentRequest) {
         setDeliveredOrders([]);
-        setDeliveredError(error.response?.data?.message || error.message || 'Unable to load delivered orders. Please try again.');
+        setDeliveredError(getReadableErrorMessage(error, 'Unable to load delivered orders. Please try again.'));
       }
     }).finally(() => {
       if (isCurrentRequest) setDeliveredLoading(false);
@@ -221,7 +222,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh, dateRange = 
       }).catch(error => {
         if (isCurrentRequest) {
           setCancelledOrders([]);
-          setCancelledError(error.response?.data?.message || error.message || 'Unable to load cancelled order history.');
+          setCancelledError(getReadableErrorMessage(error, 'Unable to load cancelled order history.'));
         }
       }).finally(() => { if (isCurrentRequest) setCancelledLoading(false); });
     return () => { isCurrentRequest = false; };
@@ -242,7 +243,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh, dateRange = 
     }).catch(error => {
       if (isCurrentRequest) {
         setSearchOrders([]);
-        setSearchError(error.message || 'Unable to search orders. Please try again.');
+        setSearchError(getReadableErrorMessage(error, 'Unable to search orders. Please try again.'));
       }
     }).finally(() => {
       if (isCurrentRequest) setSearchLoading(false);
@@ -313,7 +314,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh, dateRange = 
       })
       .catch((err) => {
         if (isCurrentRequest) {
-          setAvailableRidersError(err.response?.data?.message || err.message || t('couldNotLoadRiders'));
+          setAvailableRidersError(getReadableErrorMessage(err, t('couldNotLoadRiders')));
         }
       })
       .finally(() => {
