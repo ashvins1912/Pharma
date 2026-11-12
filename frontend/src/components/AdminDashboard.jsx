@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import apiClient from '../api/apiClient';
 import AdminLogistics from './AdminLogistics';
 import AdminBulkImportModal from './admin/AdminBulkImportModal';
+import ProductCatalogBuilderStudio from './admin/ProductCatalogBuilderStudio';
 
 export default function AdminDashboard() {
     const [orders, setOrders] = useState([]);
@@ -51,6 +52,7 @@ export default function AdminDashboard() {
 
     return (
         <div className="space-y-4">
+            <ProductCatalogBuilderStudio />
             <AdminLogistics refresh={loadOrders} />
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-white border border-slate-200 p-4 rounded-2xl shadow-sm">

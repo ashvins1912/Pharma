@@ -19,6 +19,7 @@ import assignmentRoutes from './modules/delivery/routes/assignmentRoutes.js';
 import paymentActionRoutes from './routes/paymentActionRoutes.js';
 import adminPaymentReminderRoutes from './routes/adminPaymentReminderRoutes.js';
 import medicineRequestRoutes from './routes/medicineRequestRoutes.js';
+import catalogRoutes from './routes/catalogRoutes.js';
 import gatewayRouter from './gateway/gatewayRouter.js';
 import vendorRouter from './gateway/routes/vendorRoutes.js';
 import tenantProfileManagementRoutes from './gateway/routes/tenantProfileManagementRoutes.js';
@@ -164,6 +165,7 @@ app.use('/api/admin/payments', adminPaymentReminderRoutes);
 app.use('/api/public/payments', paymentActionRoutes);
 app.use('/api/medicine-requests', medicineRequestRoutes);
 app.use('/api/admin/medicine-requests', medicineRequestRoutes);
+app.use('/api/catalog', catalogRoutes);
 
 // Direct and Gateway Auth/Vendor Routes
 app.use('/vendors', vendorRouter);
