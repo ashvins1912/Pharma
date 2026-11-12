@@ -4,6 +4,9 @@ import { useApp } from '../../context/AppContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { getVoiceLocale, getVoiceResponse, speakVoiceText, stripVoiceSearchPrefix } from './voiceLanguage';
 
+// Search examples only; each tap still runs through catalogue-aware matching.
+const POPULAR_VOICE_MEDICINES = ['Paracetamol', 'Dolo 650', 'Cetirizine', 'Azithromycin'];
+
 /**
  * Clean up common spoken prefixes in voice search
  * e.g. "search for Dolo 650" -> "Dolo 650"
@@ -218,12 +221,12 @@ export default function VoiceSearchButton({ onTranscript, onError, onListeningCh
 
             {/* Floating Voice Search & Audio Assistant Panel */}
             {isOpen && (
-                <div className="absolute top-full right-0 mt-2 z-[1200] w-72 sm:w-80 bg-slate-900 text-white p-4 rounded-2xl shadow-2xl border border-slate-700 space-y-3 animate-fade-in">
+                <div role="dialog" aria-label="Voice medicine search" className="absolute top-full right-0 mt-2 z-[1200] w-[min(20rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-xl shadow-slate-900/15 animate-fade-in">
                     {/* Header Controls */}
-                    <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
+                    <div className="flex items-center justify-between gap-2 border-b border-slate-100 bg-slate-50 px-3.5 py-3">
                         <div className="flex items-center gap-2">
-                            <span className={`w-2.5 h-2.5 rounded-full ${isListening ? 'bg-rose-500 animate-ping' : 'bg-emerald-400'}`} />
-                            <span className="font-extrabold text-xs text-white">
+                            <span className={`h-2.5 w-2.5 rounded-full ${isListening ? 'bg-rose-500 animate-pulse' : 'bg-emerald-500'}`} />
+                            <span className="font-bold text-sm text-slate-800">
                                 {isListening ? 'Listening... Speak Now' : 'Voice Assistant Ready'}
                             </span>
                         </div>
@@ -232,8 +235,8 @@ export default function VoiceSearchButton({ onTranscript, onError, onListeningCh
                                 type="button"
                                 onClick={() => setTtsEnabled(!ttsEnabled)}
                                 title={ttsEnabled ? "Voice Feedback Enabled (Click to Mute)" : "Voice Feedback Muted (Click to Enable)"}
-                                className={`px-2 py-1 text-[10px] font-bold rounded-lg border transition ${
-                                    ttsEnabled ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' : 'bg-slate-800 text-slate-400 border-slate-700'
+                                className={`rounded-lg border px-2.5 py-1.5 text-[10px] font-semibold transition ${
+                                    ttsEnabled ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-white text-slate-500'
                                 }`}
                             >
                                 {ttsEnabled ? '🔊 Audio ON' : '🔇 Audio OFF'}
@@ -241,7 +244,7 @@ export default function VoiceSearchButton({ onTranscript, onError, onListeningCh
                             <button
                                 type="button"
                                 onClick={() => { stopListening(); setIsOpen(false); }}
-                                className="text-slate-400 hover:text-white text-xs p-1 rounded-lg"
+                                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-800"
                                 aria-label="Close voice panel"
                             >
                                 ✕
@@ -261,18 +264,18 @@ export default function VoiceSearchButton({ onTranscript, onError, onListeningCh
                     )}
 
                     {/* Live Transcript / Result Display */}
-                    <div className="bg-slate-800/90 border border-slate-700 p-3 rounded-xl min-h-[50px] flex items-center justify-center text-center">
+                    <div className={`mx-3.5 mt-3 rounded-xl border p-3 text-center min-h-[58px] flex items-center justify-center ${isListening ? 'border-rose-200 bg-rose-50' : 'border-blue-100 bg-blue-50/60'}`}>
                         {interimTranscript ? (
-                            <p className="text-xs font-mono text-emerald-300 italic animate-pulse">
+                            <p className="text-xs font-medium text-rose-700">
                                 "{interimTranscript}"
                             </p>
                         ) : finalText ? (
                             <div className="space-y-0.5 w-full">
-                                <span className="text-[9px] uppercase tracking-wider font-bold text-slate-400">Active Query</span>
-                                <p className="text-xs font-black text-emerald-400">"{finalText}"</p>
+                                <span className="text-[9px] uppercase tracking-wider font-bold text-slate-500">Active Query</span>
+                                <p className="text-xs font-bold text-blue-800">"{finalText}"</p>
                             </div>
                         ) : (
-                            <p className="text-[11px] text-slate-400">
+                            <p className="text-[11px] text-slate-500">
                                 {isListening ? 'Speak medicine name clearly (e.g., "Dolo 650", "Paracetamol")' : 'Tap mic to speak or select a quick voice shortcut below'}
                             </p>
                         )}
@@ -280,10 +283,10 @@ export default function VoiceSearchButton({ onTranscript, onError, onListeningCh
 
                     {/* Fuzzy Match Refinement Indicator */}
                     {fuzzyMatchInfo && (
-                        <div className="bg-slate-800/90 border border-indigo-500/40 p-2.5 rounded-xl space-y-1.5 text-xs text-left">
-                            <div className="flex items-center justify-between text-[10px] font-bold text-slate-400">
+                        <div className="mx-3.5 mt-2 rounded-xl border border-indigo-100 bg-indigo-50/60 p-3 space-y-1.5 text-xs text-left">
+                            <div className="flex items-center justify-between text-[10px] font-bold text-slate-500">
                                 <span className="truncate max-w-[65%]">🎙️ Spoken: "{fuzzyMatchInfo.originalText}"</span>
-                                <span className="text-emerald-400 font-mono shrink-0">{fuzzyMatchInfo.confidence}% Match</span>
+                                <span className="text-emerald-700 font-mono shrink-0">{fuzzyMatchInfo.confidence}% Match</span>
                             </div>
                             {fuzzyMatchInfo.isRefined && (
                                 <div className="flex items-center gap-1.5 text-[11px] font-black text-emerald-300">
@@ -294,17 +297,17 @@ export default function VoiceSearchButton({ onTranscript, onError, onListeningCh
                                 </div>
                             )}
                             {fuzzyMatchInfo.alternatives?.length > 0 && (
-                                <div className="pt-1 border-t border-slate-700/60 space-y-1">
-                                    <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block">
+                                <div className="pt-2 border-t border-indigo-100 space-y-1">
+                                    <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500 block">
                                         Similar Catalog Matches:
                                     </span>
-                                    <div className="flex flex-wrap gap-1">
+                                    <div className="flex flex-wrap gap-1.5">
                                         {fuzzyMatchInfo.alternatives.map((alt) => (
                                             <button
                                                 key={alt.name}
                                                 type="button"
                                                 onClick={() => handleSelectMedicine(alt.name)}
-                                                className="px-2 py-0.5 bg-slate-700 hover:bg-indigo-600 text-indigo-200 hover:text-white rounded-md text-[10px] font-bold transition cursor-pointer"
+                                                className="rounded-full border border-indigo-200 bg-white px-2.5 py-1 text-[10px] font-semibold text-indigo-700 transition hover:bg-indigo-600 hover:text-white cursor-pointer"
                                             >
                                                 {alt.name} ({alt.score}%)
                                             </button>
@@ -317,22 +320,22 @@ export default function VoiceSearchButton({ onTranscript, onError, onListeningCh
 
                     {/* Status / Error Message Banner */}
                     {errorState && (
-                        <div className="bg-rose-950/60 border border-rose-800 p-2.5 rounded-xl text-[11px] text-rose-200 space-y-1">
+                        <div role="alert" className="mx-3.5 mt-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-[11px] text-rose-700 space-y-1">
                             <div className="flex items-center justify-between font-bold">
                                 <span>🎙️ {errorState.title}</span>
-                                <span className="text-[9px] font-mono text-rose-400">{errorState.code}</span>
+                                <span className="text-[9px] font-mono text-rose-600">{errorState.code}</span>
                             </div>
-                            <p className="text-[10px] text-rose-300 leading-snug">{errorState.message}</p>
+                            <p className="text-[10px] text-rose-700 leading-snug">{errorState.message}</p>
                         </div>
                     )}
 
                     {/* Action Controls */}
-                    <div className="flex items-center justify-between gap-2">
+                    <div className="px-3.5 pt-3">
                         {isListening ? (
                             <button
                                 type="button"
                                 onClick={stopListening}
-                                className="w-full py-2 bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs rounded-xl transition shadow-sm cursor-pointer"
+                                className="w-full rounded-xl bg-rose-600 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-rose-700 cursor-pointer"
                             >
                                 ⏹️ Stop Listening
                             </button>
@@ -340,7 +343,7 @@ export default function VoiceSearchButton({ onTranscript, onError, onListeningCh
                             <button
                                 type="button"
                                 onClick={startListening}
-                                className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs rounded-xl transition shadow-sm cursor-pointer flex items-center justify-center gap-1.5"
+                                className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-700 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-blue-800 cursor-pointer"
                             >
                                 🎙️ Tap to Speak
                             </button>
@@ -348,15 +351,15 @@ export default function VoiceSearchButton({ onTranscript, onError, onListeningCh
                     </div>
 
                     {/* Popular Voice Medicine Shortcuts */}
-                    <div className="pt-2 border-t border-slate-800 space-y-1.5">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Quick Voice Shortcuts:</span>
+                    <div className="px-3.5 pb-3.5 pt-3 space-y-2">
+                        <div className="flex items-center justify-between gap-2"><span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Try a medicine search</span><span className="text-[9px] text-slate-400">Examples</span></div>
                         <div className="flex flex-wrap gap-1">
                             {POPULAR_VOICE_MEDICINES.map((med) => (
                                 <button
                                     key={med}
                                     type="button"
                                     onClick={() => handleSelectMedicine(med)}
-                                    className="px-2 py-1 bg-slate-800 hover:bg-blue-600/40 text-blue-300 hover:text-white border border-slate-700 hover:border-blue-500 font-extrabold text-[10px] rounded-lg transition cursor-pointer"
+                                    className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[10px] font-semibold text-slate-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 cursor-pointer"
                                 >
                                     + {med}
                                 </button>
@@ -365,22 +368,22 @@ export default function VoiceSearchButton({ onTranscript, onError, onListeningCh
                     </div>
 
                     {/* Unblock Mic Instructions Toggle */}
-                    <div className="pt-1 text-center">
+                    <div className="border-t border-slate-100 px-3.5 py-2 text-center">
                         <button
                             type="button"
                             onClick={() => setShowHelpGuide(!showHelpGuide)}
-                            className="text-[10px] font-bold text-blue-400 hover:text-blue-300 underline cursor-pointer"
+                            className="text-[10px] font-semibold text-blue-700 hover:text-blue-900 underline cursor-pointer"
                         >
                             {showHelpGuide ? 'Hide Permission Help' : 'How to allow mic access in browser?'}
                         </button>
                     </div>
 
                     {showHelpGuide && (
-                        <div className="p-2.5 bg-slate-800 border border-slate-700 rounded-xl space-y-1 text-[10px] text-slate-300 font-medium">
-                            <p className="font-bold text-white">Browser Microphone Access:</p>
-                            <ol className="list-decimal list-inside space-y-0.5 text-[10px] text-slate-300">
+                        <div className="mx-3.5 mb-3 rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-1 text-[10px] text-slate-600 font-medium">
+                            <p className="font-bold text-slate-800">Browser Microphone Access:</p>
+                            <ol className="list-decimal list-inside space-y-0.5 text-[10px] text-slate-600">
                                 <li>Click the 🔒 icon beside the browser URL bar.</li>
-                                <li>Set <strong className="text-white">Microphone</strong> permission to <strong className="text-emerald-400">Allow</strong>.</li>
+                                <li>Set <strong className="text-slate-800">Microphone</strong> permission to <strong className="text-emerald-700">Allow</strong>.</li>
                                 <li>Tap "Tap to Speak" above.</li>
                             </ol>
                         </div>
