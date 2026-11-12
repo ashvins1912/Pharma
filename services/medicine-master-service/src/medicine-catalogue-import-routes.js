@@ -1345,7 +1345,10 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
       }
       await MedicineMaster.bulkWrite(operations, { ordered: false });
       if (persistedIndexEnabled) {
-        await syncMedicineNameNgramIndex(ids);
+        const indexMedicineIds = chunk.map((item, itemIndex) =>
+          chunkPlans[itemIndex].targetMedicineId || item.medicineId
+        );
+        await syncMedicineNameNgramIndex(indexMedicineIds);
         await MedicineNameNgramIndexState.updateOne(
           { _id: 'brandName-v1' },
           { $set: { status: 'READY', updatedAt: new Date() } },
