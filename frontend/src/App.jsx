@@ -441,9 +441,9 @@ function MainApp() {
             {/* Contextual Help Guidance Banner */}
             <ContextualHelpBanner topic="storefront" />
 
-            {/* Friendly Hero Banner */}
-            <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-2xl sm:rounded-3xl p-4 sm:p-8 text-white shadow-lg shadow-blue-600/15 relative overflow-hidden">
-              <div className="relative z-10 max-w-xl space-y-2 sm:space-y-3">
+            {/* Executive Customer Dashboard & Storefront Hero Banner */}
+            <div className="bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 rounded-2xl sm:rounded-3xl p-5 sm:p-7 text-white shadow-xl border border-slate-800 relative overflow-hidden space-y-5">
+              <div className="relative z-10 space-y-4">
                 {(() => {
                   const istDate = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
                   const istHours = istDate.getHours();
@@ -454,51 +454,114 @@ function MainApp() {
                     minute: '2-digit',
                     hour12: true
                   });
+                  const activeOrderCount = (orders || []).filter(o => !['delivered', 'cancelled', 'rejected'].includes(String(o.orderStatus || '').toLowerCase())).length;
+                  const activeReqCount = (medicineRequests || []).length;
+                  const addressCount = (addresses || []).length;
+
                   return (
-                    <>
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="inline-block bg-white/20 backdrop-blur-md text-white text-[10px] sm:text-[11px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-                            {t('expressDelivery')}
+                    <div className="space-y-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-slate-800/80 pb-3">
+                        <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-300">
+                          <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] sm:text-[11px] font-extrabold px-2.5 py-0.5 rounded-md uppercase tracking-wider">
+                            {user ? 'Verified Customer Account' : t('expressDelivery')}
                           </span>
-                          <span className="inline-flex items-center gap-1 bg-emerald-500/30 border border-emerald-400/40 backdrop-blur-md text-emerald-50 text-[10px] sm:text-[11px] font-black px-2.5 py-0.5 rounded-full">
+                          <span aria-hidden="true">·</span>
+                          <span className="text-slate-300 flex items-center gap-1 text-[11px]">
                             <span>🏥</span>
                             <span>{activeTenant ? (activeTenant.shopName || activeTenant.name || t('selectedPharmacy')) : 'Select a dispensary to check availability'}</span>
                           </span>
                         </div>
-                        <span className="inline-flex items-center gap-1 bg-black/20 backdrop-blur-md text-white text-[10px] sm:text-[11px] font-black px-2.5 py-0.5 rounded-full">
+                        <span className="inline-flex items-center gap-1.5 bg-slate-900/90 border border-slate-700/60 text-slate-300 text-[10px] sm:text-[11px] font-bold px-2.5 py-1 rounded-lg">
                           <span>🇮🇳</span>
-                          <span>IST: {istTimeStr}</span>
+                          <span className="font-mono">IST: {istTimeStr}</span>
                         </span>
                       </div>
-                      <h1 className="text-lg sm:text-3xl font-black tracking-tight leading-tight m-0 text-white">
-                        {istGreeting}, {displayName}!
-                      </h1>
-                    </>
+
+                      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+                        <div className="space-y-1">
+                          <h1 className="text-xl sm:text-3xl font-black tracking-tight leading-tight m-0 text-white">
+                            {istGreeting}, {displayName}!
+                          </h1>
+                          <p className="text-xs sm:text-sm text-slate-300 font-medium leading-relaxed max-w-2xl">
+                            {t('welcomeTo')} <strong className="text-white">{activeTenant?.shopName || activeTenant?.name || 'QuickMeds Rx'}</strong>. {t('welcomeBannerDesc')}
+                          </p>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setTenantSelectorOpen(true)}
+                            className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-xs shrink-0"
+                          >
+                            <span>📍 {activeTenant ? 'Change Pharmacy' : 'Select Pharmacy'}</span>
+                          </button>
+                          {user && (
+                            <button
+                              type="button"
+                              onClick={() => setProfileOpen(true)}
+                              className="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-extrabold rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-xs shrink-0"
+                            >
+                              <span>👤 Account & Security</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Logged-In User Quick Telemetry Cards */}
+                      {user && (
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+                          <button
+                            type="button"
+                            onClick={() => setActiveTab('orders')}
+                            className="bg-slate-900/90 hover:bg-slate-800/90 border border-slate-800 text-left p-3 rounded-xl transition cursor-pointer space-y-0.5"
+                          >
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Active Orders</span>
+                            <div className="flex items-baseline justify-between">
+                              <span className="text-xl font-black text-emerald-400 font-mono tabular-nums">{activeOrderCount}</span>
+                              <span className="text-[10px] font-bold text-slate-400">View →</span>
+                            </div>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setActiveTab('requests')}
+                            className="bg-slate-900/90 hover:bg-slate-800/90 border border-slate-800 text-left p-3 rounded-xl transition cursor-pointer space-y-0.5"
+                          >
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Medicine Requests</span>
+                            <div className="flex items-baseline justify-between">
+                              <span className="text-xl font-black text-amber-400 font-mono tabular-nums">{activeReqCount}</span>
+                              <span className="text-[10px] font-bold text-slate-400">Proposals →</span>
+                            </div>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setActiveTab('addresses')}
+                            className="bg-slate-900/90 hover:bg-slate-800/90 border border-slate-800 text-left p-3 rounded-xl transition cursor-pointer space-y-0.5"
+                          >
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Saved Addresses</span>
+                            <div className="flex items-baseline justify-between">
+                              <span className="text-xl font-black text-blue-400 font-mono tabular-nums">{addressCount || 1}</span>
+                              <span className="text-[10px] font-bold text-slate-400">Manage →</span>
+                            </div>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setProfileOpen(true)}
+                            className="bg-slate-900/90 hover:bg-slate-800/90 border border-slate-800 text-left p-3 rounded-xl transition cursor-pointer space-y-0.5"
+                          >
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Health Account</span>
+                            <div className="flex items-baseline justify-between">
+                              <span className="text-xs font-black text-purple-300 truncate max-w-[100px]">{user.role || 'Active'}</span>
+                              <span className="text-[10px] font-bold text-slate-400">Settings →</span>
+                            </div>
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   );
                 })()}
-                <p className="text-xs sm:text-sm text-blue-100 font-medium leading-relaxed">
-                  {t('welcomeTo')} <strong className="text-white">{activeTenant?.shopName || activeTenant?.name || 'QuickMeds Rx'}</strong>. {t('welcomeBannerDesc')}
-                </p>
-                <div className="pt-2 flex flex-wrap items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setTenantSelectorOpen(true)}
-                    className="px-4 py-2 bg-white/20 hover:bg-white/30 text-white text-xs font-bold rounded-xl backdrop-blur-md transition flex items-center gap-2 cursor-pointer shadow-sm"
-                  >
-                    <span>📍 {activeTenant ? 'Change Pharmacy / Dispensary' : 'Select Pharmacy / Dispensary'}</span>
-                  </button>
-                  {activeTenant?.address && (
-                    <span className="text-[11px] text-blue-200">
-                      📍 {activeTenant.address.street || activeTenant.address.city || ''}
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* Decorative Pill/Capsule Graphic on larger screens */}
-              <div className="hidden sm:block absolute right-4 -bottom-6 text-7xl sm:text-9xl opacity-20 pointer-events-none select-none">
-                💊
               </div>
             </div>
 
@@ -515,6 +578,7 @@ function MainApp() {
             <ProductGrid />
           </div>
         )}
+
 
         {/* TAB 2: ORDER HISTORY & TRACKING (Guarded - Sign in required) */}
         {activeTab === 'orders' && (

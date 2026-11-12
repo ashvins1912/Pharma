@@ -61,14 +61,14 @@ export default function SpendingAnalyticsWidget() {
       <div className="flex items-center gap-4 bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 px-4 py-3 rounded-2xl w-fit">
         <div>
           <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">Expenditure ({timeRange})</div>
-          <div className="text-sm sm:text-base font-black text-blue-600 dark:text-blue-400">
+          <div className="text-sm sm:text-base font-black text-blue-600 dark:text-blue-400 font-mono tabular-nums">
             ₹{filteredSpent.toLocaleString()}
           </div>
         </div>
         <div className="h-8 w-px bg-slate-200 dark:bg-slate-700" />
         <div>
           <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">Refills ({timeRange})</div>
-          <div className="text-sm sm:text-base font-black text-slate-900 dark:text-white">
+          <div className="text-sm sm:text-base font-black text-slate-900 dark:text-white font-mono tabular-nums">
             {filteredOrders} Orders
           </div>
         </div>
