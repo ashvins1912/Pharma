@@ -2,32 +2,24 @@ import React, { useState, useEffect, useRef } from 'react';
 import { rankVoiceMedicineMatches } from '../../utils/similarity';
 import { useApp } from '../../context/AppContext';
 import { useToast } from '../../context/ToastContext';
-
-/**
- * Text-To-Speech (TTS) Voice Synthesis Helper
- */
-function speakText(text) {
-    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-        try {
-            window.speechSynthesis.cancel();
-            const utterance = new SpeechSynthesisUtterance(text);
-            utterance.rate = 1.0;
-            utterance.pitch = 1.0;
-            utterance.volume = 1.0;
-            utterance.lang = 'en-US';
-            window.speechSynthesis.speak(utterance);
-        } catch (e) {
-            console.warn('[GlobalVoiceAssistant] Speech synthesis failed:', e);
-        }
-    }
-}
+import { useLanguage } from '../../context/LanguageContext';
+import { detectVoiceCommand, getVoiceLocale, getVoiceResponse, speakVoiceText, stripVoiceSearchPrefix } from './voiceLanguage';
 
 /**
  * Voice Command Parser & Intent Classifier
  */
-export function parseVoiceCommand(transcript, catalog = []) {
+export function parseVoiceCommand(transcript, catalog = [], language = 'en') {
     const text = String(transcript || '').toLowerCase().trim();
     if (!text) return { intent: 'UNKNOWN', label: 'No input', spokenResponse: '' };
+    const localizedCommand = detectVoiceCommand(text, language);
+    if (localizedCommand && localizedCommand.intent !== 'SEARCH') {
+        const labels = { OPEN_ORDERS: '📦 Open Orders & Tracking', OPEN_REQUESTS: '📋 Open Medicine Requests',
+            NEW_REQUEST: '📋 Create New Request', OPEN_ADDRESSES: '🏠 Open Saved Addresses',
+            OPEN_CART: '🛒 Open Shopping Cart', OPEN_PROFILE: '👤 Open User Profile',
+            OPEN_STORE: '💊 Open Medicine Store', CLEAR_SEARCH: '✕ Clear Filters' };
+        return { intent: localizedCommand.intent, label: labels[localizedCommand.intent] || 'Voice command',
+            spokenResponse: getVoiceResponse(localizedCommand.intent, language) };
+    }
 
     // 1. ORDERS / HISTORY / TRACKING
     if (/\b(orders|history|tracking|track|receipt|status)\b/i.test(text) || /\bmy order\b/i.test(text)) {
@@ -100,9 +92,7 @@ export function parseVoiceCommand(transcript, catalog = []) {
     }
 
     // 8. MEDICINE SEARCH WITH HIGH-ACCURACY ENSEMBLE FUZZY REFINEMENT
-    const cleanSearch = text
-        .replace(/^(search for|search|find me|look up|get me|where is|buy|order|show me|find|open)\s+/i, '')
-        .trim();
+    const cleanSearch = stripVoiceSearchPrefix(localizedCommand?.query || text, language);
 
     if (cleanSearch) {
         // Refine only against real pharmacy-catalogue entries. If the match is
@@ -121,7 +111,7 @@ export function parseVoiceCommand(transcript, catalog = []) {
             originalText: cleanSearch,
             confidence: ranked.confidence,
             matchReason: ranked.reason,
-            spokenResponse: isRefined ? `Matched ${refinedText}` : `Searching for ${refinedText}`
+            spokenResponse: getVoiceResponse(isRefined ? 'MATCHED' : 'SEARCHING', language, refinedText)
         };
     }
 
@@ -140,6 +130,7 @@ export default function GlobalVoiceAssistant({
     onOpenRequestModal
 }) {
     const { addToast } = useToast();
+    const { language = 'en' } = useLanguage();
     let medicines = [];
     let setSearchQuery = () => {};
     try {
@@ -163,50 +154,26 @@ export default function GlobalVoiceAssistant({
     const [recognitionError, setRecognitionError] = useState(null);
     medicinesRef.current = medicines;
 
+
     useEffect(() => {
-        const SpeechRecognition = typeof window !== 'undefined'
-            ? (window.SpeechRecognition || window.webkitSpeechRecognition)
-            : null;
-
-        if (!SpeechRecognition) {
-            setIsSupported(false);
-            return;
-        }
-
+        const SpeechRecognition = typeof window !== 'undefined' ? (window.SpeechRecognition || window.webkitSpeechRecognition) : null;
+        if (!SpeechRecognition) { setIsSupported(false); return undefined; }
+        let recognition = null;
         try {
-            const recognition = new SpeechRecognition();
-            // One command per explicit microphone activation prevents TTS feedback loops.
+            recognition = new SpeechRecognition();
             recognition.continuous = false;
             recognition.interimResults = true;
-            recognition.lang = typeof navigator !== 'undefined' && navigator.language ? navigator.language : 'en-US';
-
-            recognition.onstart = () => {
-                setIsListening(true);
-                setInterimTranscript('');
-            };
-
+            recognition.lang = getVoiceLocale(language);
+            recognition.onstart = () => { setIsListening(true); setInterimTranscript(''); };
             recognition.onresult = (event) => {
-                let currentInterim = '';
-                let latestFinal = '';
-
+                let interim = '', finalText = '';
                 for (let i = event.resultIndex; i < event.results.length; i++) {
-                    const transcriptText = event.results[i][0].transcript;
-                    if (event.results[i].isFinal) {
-                        latestFinal += transcriptText;
-                    } else {
-                        currentInterim += transcriptText;
-                    }
+                    const value = event.results[i][0].transcript;
+                    if (event.results[i].isFinal) finalText += value; else interim += value;
                 }
-
-                if (currentInterim) setInterimTranscript(currentInterim);
-
-                if (latestFinal) {
-                    try { recognition.stop(); } catch {}
-                    executeVoiceCommandRef.current?.(latestFinal);
-                    setInterimTranscript('');
-                }
+                if (interim) setInterimTranscript(interim);
+                if (finalText.trim()) { try { recognition.stop(); } catch {} executeVoiceCommandRef.current?.(finalText); setInterimTranscript(''); }
             };
-
             recognition.onerror = (event) => {
                 console.warn('[GlobalVoiceAssistant] Speech error:', event.error);
                 setIsListening(false);
@@ -216,36 +183,28 @@ export default function GlobalVoiceAssistant({
                     'audio-capture': 'No microphone was found. Check your device microphone.',
                     network: 'Voice recognition could not connect. Check your internet connection and try again.',
                     'no-speech': 'No speech was detected. Tap the microphone and speak clearly.',
-                    'language-not-supported': 'The browser does not support voice recognition for the selected language.'
+                    'language-not-supported': 'The browser does not support speech recognition for this language.'
                 };
-                if (event.error !== 'aborted') {
-                    setRecognitionError(messages[event.error] || 'Voice recognition stopped. Please try again.');
-                }
+                if (event.error !== 'aborted') setRecognitionError(messages[event.error] || 'Voice recognition stopped. Please try again.');
             };
-
-            recognition.onend = () => {
-                setIsListening(false);
-            };
-
+            recognition.onend = () => setIsListening(false);
             recognitionRef.current = recognition;
-        } catch (err) {
-            console.warn('[GlobalVoiceAssistant] Failed to initialize SpeechRecognition:', err);
+            setIsSupported(true);
+        } catch (error) {
+            console.warn('[GlobalVoiceAssistant] Recognition initialization failed:', error);
             setIsSupported(false);
+            setRecognitionError('Voice recognition could not be initialized in this browser.');
         }
-
-        return () => {
-            try { recognition.abort(); } catch {}
-            if (recognitionRef.current === recognition) recognitionRef.current = null;
-        };
-    }, []);
+        return () => { if (recognition) { try { recognition.abort(); } catch {} if (recognitionRef.current === recognition) recognitionRef.current = null; } };
+    }, [language]);
 
     const executeVoiceCommand = (transcript) => {
-        const parsed = parseVoiceCommand(transcript, medicinesRef.current);
+        const parsed = parseVoiceCommand(transcript, medicinesRef.current, language);
         setRecognitionError(null);
         setLastExecutedCommand(parsed);
 
         if (ttsEnabled && parsed.spokenResponse) {
-            speakText(parsed.spokenResponse);
+            speakVoiceText(parsed.spokenResponse, language);
         }
 
         switch (parsed.intent) {
@@ -303,7 +262,7 @@ export default function GlobalVoiceAssistant({
         setRecognitionError(null);
         if (!isSupported || !recognitionRef.current) {
             setRecognitionError('Voice recognition is not supported in this browser. Use a quick command below.');
-            if (ttsEnabled) speakText('Voice assistant ready. Select a command shortcut below.');
+            if (ttsEnabled) speakVoiceText(getVoiceResponse('READY', language), language);
             return;
         }
         try {
