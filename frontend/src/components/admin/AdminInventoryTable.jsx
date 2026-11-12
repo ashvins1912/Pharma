@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { getReadableErrorMessage } from '../../utils/errorMessage';
 import { createPortal } from 'react-dom';
 import { useApp } from '../../context/AppContext';
 import { useToast } from '../../context/ToastContext';
@@ -157,7 +158,7 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
     } catch (err) {
       if (requestVersion !== inventoryRequestRef.current) return;
       console.error('Admin inventory load error:', err);
-      setLoadError(err.response?.data?.message || err.message || 'Could not load inventory. Please retry.');
+      setLoadError(getReadableErrorMessage(err, 'Could not load inventory. Please retry.'));
     } finally {
       if (requestVersion === inventoryRequestRef.current) setLoading(false);
     }
