@@ -37,3 +37,10 @@ test('does not invent a medicine that is absent from the selected pharmacy catal
   assert.equal(result.isConfident, false);
   assert.equal(result.best, null);
 });
+
+test('does not refine to a medicine with a conflicting dosage form', () => {
+  const tabletOnly = [{ medicineId: 'dolo-tablet', name: 'Dolo 650 Tablet', strength: '650 mg', dosageForm: 'Tablet' }];
+  const result = rankVoiceMedicineMatches('Dolo 650 capsule', tabletOnly);
+  assert.equal(result.isConfident, false);
+  assert.equal(result.best, null);
+});
