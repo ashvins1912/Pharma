@@ -6,7 +6,7 @@ import { invalidateMedicineMasterVersionCache, MedicineMatchReference, mapMedici
 import { requireServiceScope } from './service-auth.js';
 import { config } from './config.js';
 import { scoreMedicineMatch } from './medicine-match-scoring.js';
-import { buildNameNgramIdf, tokenSortRatio, charNgramDice, tfIdfNgramCosine, fieldSimilarity, normalizeStrength, normalizeDosageForm } from '@pharma/algorithm-kernel';
+import { buildNameNgramIdf } from '@pharma/algorithm-kernel';
 export { scoreMedicineMatch };
 
 const router = express.Router();
