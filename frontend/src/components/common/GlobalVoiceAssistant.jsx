@@ -175,6 +175,10 @@ export default function GlobalVoiceAssistant({
     const [isSupported, setIsSupported] = useState(true);
 
     const recognitionRef = useRef(null);
+    const medicinesRef = useRef(medicines);
+    const executeVoiceCommandRef = useRef(null);
+    const [recognitionError, setRecognitionError] = useState(null);
+    medicinesRef.current = medicines;
 
     useEffect(() => {
         const SpeechRecognition = typeof window !== 'undefined'
@@ -188,7 +192,8 @@ export default function GlobalVoiceAssistant({
 
         try {
             const recognition = new SpeechRecognition();
-            recognition.continuous = true;
+            // One command per explicit microphone activation prevents TTS feedback loops.
+            recognition.continuous = false;
             recognition.interimResults = true;
             recognition.lang = typeof navigator !== 'undefined' && navigator.language ? navigator.language : 'en-US';
 
@@ -213,7 +218,8 @@ export default function GlobalVoiceAssistant({
                 if (currentInterim) setInterimTranscript(currentInterim);
 
                 if (latestFinal) {
-                    executeVoiceCommand(latestFinal);
+                    try { recognition.stop(); } catch {}
+                    executeVoiceCommandRef.current?.(latestFinal);
                     setInterimTranscript('');
                 }
             };
@@ -221,6 +227,17 @@ export default function GlobalVoiceAssistant({
             recognition.onerror = (event) => {
                 console.warn('[GlobalVoiceAssistant] Speech error:', event.error);
                 setIsListening(false);
+                const messages = {
+                    'not-allowed': 'Microphone access is blocked. Allow microphone access in your browser site settings.',
+                    'service-not-allowed': 'The browser speech service is unavailable for this site.',
+                    'audio-capture': 'No microphone was found. Check your device microphone.',
+                    network: 'Voice recognition could not connect. Check your internet connection and try again.',
+                    'no-speech': 'No speech was detected. Tap the microphone and speak clearly.',
+                    'language-not-supported': 'The browser does not support voice recognition for the selected language.'
+                };
+                if (event.error !== 'aborted') {
+                    setRecognitionError(messages[event.error] || 'Voice recognition stopped. Please try again.');
+                }
             };
 
             recognition.onend = () => {
@@ -234,14 +251,14 @@ export default function GlobalVoiceAssistant({
         }
 
         return () => {
-            if (recognitionRef.current) {
-                try { recognitionRef.current.abort(); } catch {}
-            }
+            try { recognition.abort(); } catch {}
+            if (recognitionRef.current === recognition) recognitionRef.current = null;
         };
-    }, [medicines]);
+    }, []);
 
     const executeVoiceCommand = (transcript) => {
-        const parsed = parseVoiceCommand(transcript, medicines);
+        const parsed = parseVoiceCommand(transcript, medicinesRef.current);
+        setRecognitionError(null);
         setLastExecutedCommand(parsed);
 
         if (ttsEnabled && parsed.spokenResponse) {
@@ -295,19 +312,23 @@ export default function GlobalVoiceAssistant({
                 break;
         }
     };
+    executeVoiceCommandRef.current = executeVoiceCommand;
 
     const startListening = () => {
         setIsOpen(true);
         setInterimTranscript('');
+        setRecognitionError(null);
         if (!isSupported || !recognitionRef.current) {
+            setRecognitionError('Voice recognition is not supported in this browser. Use a quick command below.');
             if (ttsEnabled) speakText('Voice assistant ready. Select a command shortcut below.');
             return;
         }
         try {
+            // Do not speak while the microphone is active; recognition can capture the assistant's prompt.
             recognitionRef.current.start();
-            if (ttsEnabled) speakText('Voice assistant listening for command');
         } catch (err) {
             console.warn('[GlobalVoiceAssistant] Start error:', err);
+            setRecognitionError('Could not start the microphone. Check browser permission and try again.');
         }
     };
 
@@ -418,6 +439,12 @@ export default function GlobalVoiceAssistant({
                             </p>
                         )}
                     </div>
+
+                    {recognitionError && (
+                        <div role="alert" className="rounded-xl border border-rose-800 bg-rose-950/60 px-3 py-2 text-[11px] text-rose-200">
+                            {recognitionError}
+                        </div>
+                    )}
 
                     {/* Mic Toggle Button */}
                     <div className="flex items-center gap-2">
