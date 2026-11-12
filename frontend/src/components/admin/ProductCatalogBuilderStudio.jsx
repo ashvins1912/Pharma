@@ -4,7 +4,7 @@ import VoiceSearchButton from '../common/VoiceSearchButton';
 import { getPharmaPlaceholderImage, PHARMA_PLACEHOLDER_IMAGES } from '../../utils/pharmaImagePlaceholders';
 
 export default function ProductCatalogBuilderStudio() {
-    const [activeTab, setActiveTab] = useState('explorer'); // 'explorer' | 'add_product' | 'bulk_import' | 'categories'
+    const [activeTab, setActiveTab] = useState('explorer'); // 'explorer' | 'master_catalog' | 'add_product' | 'bulk_import' | 'categories'
     const [loading, setLoading] = useState(false);
     const [statusMsg, setStatusMsg] = useState(null);
 
@@ -15,6 +15,16 @@ export default function ProductCatalogBuilderStudio() {
     const [selectedCategory, setSelectedCategory] = useState('All');
     const [categories, setCategories] = useState([]);
     const [page, setPage] = useState(1);
+
+    // Master Catalog Quick-Link State
+    const [masterProducts, setMasterProducts] = useState([]);
+    const [masterSearch, setMasterSearch] = useState('');
+    const [selectedMasterItem, setSelectedMasterItem] = useState(null);
+    const [linkForm, setLinkForm] = useState({ sellingPrice: 100, mrp: 120, stockQuantity: 50, aisleLocation: 'Aisle-1' });
+
+    // Inline Quick Update State
+    const [editingItem, setEditingItem] = useState(null);
+    const [editForm, setEditForm] = useState({ sellingPrice: 0, mrp: 0, stockQuantity: 0 });
 
     // Add Product Form State
     const [form, setForm] = useState({
@@ -33,7 +43,7 @@ export default function ProductCatalogBuilderStudio() {
         prescriptionRequired: false,
         storageCondition: 'Room Temperature',
         description: '',
-        imageUrl: 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=500&q=80',
+        imageUrl: PHARMA_PLACEHOLDER_IMAGES.tablet,
         packSizes: ['Strip of 10 Tablets', 'Pack of 30 Tablets']
     });
 
@@ -63,6 +73,18 @@ export default function ProductCatalogBuilderStudio() {
         }
     };
 
+    // Load Master Catalog Data
+    const loadMasterCatalog = async () => {
+        try {
+            const res = await apiClient.get('/api/catalog/master-products', {
+                params: { search: masterSearch, category: selectedCategory }
+            });
+            setMasterProducts(res.data.masterProducts || []);
+        } catch (err) {
+            console.error('[CatalogBuilder] Master load error:', err);
+        }
+    };
+
     // Load Categories
     const loadCategories = async () => {
         try {
@@ -77,6 +99,12 @@ export default function ProductCatalogBuilderStudio() {
         loadCatalog();
         loadCategories();
     }, [searchQuery, selectedCategory, page]);
+
+    useEffect(() => {
+        if (activeTab === 'master_catalog') {
+            loadMasterCatalog();
+        }
+    }, [activeTab, masterSearch, selectedCategory]);
 
     // Algorithmic Similarity Check on Product Name Change
     useEffect(() => {
@@ -103,6 +131,14 @@ export default function ProductCatalogBuilderStudio() {
 
         return () => clearTimeout(timer);
     }, [form.name, form.brand, form.strength]);
+
+    // Automatically assign image when dosageForm or category changes
+    useEffect(() => {
+        const autoImg = getPharmaPlaceholderImage(form.dosageForm, form.category);
+        if (autoImg) {
+            setForm(prev => ({ ...prev, imageUrl: autoImg }));
+        }
+    }, [form.dosageForm, form.category]);
 
     // Algorithm Variant Matrix Generation
     const handleGenerateVariants = async () => {
@@ -139,7 +175,7 @@ export default function ProductCatalogBuilderStudio() {
                 subCategory: 'Analgesics', composition: '', strength: '500 mg', dosageForm: 'Tablet',
                 basePrice: 120, mrp: 140, costPrice: 80, stockQuantity: 50, prescriptionRequired: false,
                 storageCondition: 'Room Temperature', description: '',
-                imageUrl: 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=500&q=80',
+                imageUrl: PHARMA_PLACEHOLDER_IMAGES.tablet,
                 packSizes: ['Strip of 10 Tablets', 'Pack of 30 Tablets']
             });
             setDupResult(null);
@@ -156,6 +192,38 @@ export default function ProductCatalogBuilderStudio() {
             } else {
                 setStatusMsg({ type: 'error', text: err.response?.data?.message || 'Failed to save product.' });
             }
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // 1-Click Link Master Product Handler
+    const handleLinkMasterProduct = async () => {
+        if (!selectedMasterItem) return;
+        setLoading(true);
+        try {
+            await apiClient.post(`/api/catalog/products/${selectedMasterItem._id}/link-tenant`, linkForm);
+            setStatusMsg({ type: 'success', text: `⚡ "${selectedMasterItem.name}" linked to your store catalog!` });
+            setSelectedMasterItem(null);
+            loadCatalog();
+        } catch (err) {
+            setStatusMsg({ type: 'error', text: err.response?.data?.message || 'Failed to link master product.' });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Quick Inline Update Handler
+    const handleQuickUpdateSubmit = async () => {
+        if (!editingItem) return;
+        setLoading(true);
+        try {
+            await apiClient.patch(`/api/catalog/products/${editingItem._id}/quick-update`, editForm);
+            setStatusMsg({ type: 'success', text: `Updated stock and price for "${editingItem.name}"!` });
+            setEditingItem(null);
+            loadCatalog();
+        } catch (err) {
+            setStatusMsg({ type: 'error', text: err.response?.data?.message || 'Failed to update item.' });
         } finally {
             setLoading(false);
         }
@@ -225,41 +293,41 @@ Pan-40,Alkem,Digestion & Acidity,Pantoprazole Sodium 40mg,40mg,Tablet,98,115,80,
                         <span className="p-2 bg-indigo-50 border border-indigo-100 rounded-xl text-xl">🧪</span>
                         <div>
                             <h2 className="text-lg font-black text-slate-900 tracking-tight">Product Catalog Builder Studio</h2>
-                            <p className="text-xs text-slate-500 font-medium">Enterprise Tenant-Isolated Catalog & Algorithmic Deduplication Engine</p>
+                            <p className="text-xs text-slate-500 font-medium">Enterprise Multi-Tenant Catalog Architecture & Master Repository Linking</p>
                         </div>
                     </div>
                 </div>
 
-                {/* Tabs */}
+                {/* Navigation Tabs */}
                 <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-2xl overflow-x-auto shrink-0">
                     <button
                         onClick={() => setActiveTab('explorer')}
-                        className={`px-3 py-1.5 text-xs font-bold rounded-xl transition ${activeTab === 'explorer' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
+                        className={`px-3 py-1.5 text-xs font-bold rounded-xl transition cursor-pointer ${activeTab === 'explorer' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
                     >
-                        📦 Catalog ({totalProducts})
+                        📦 Store Catalog ({totalProducts})
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('master_catalog')}
+                        className={`px-3 py-1.5 text-xs font-bold rounded-xl transition cursor-pointer ${activeTab === 'master_catalog' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
+                    >
+                        ⚡ Master Catalog Quick-Link
                     </button>
                     <button
                         onClick={() => setActiveTab('add_product')}
-                        className={`px-3 py-1.5 text-xs font-bold rounded-xl transition ${activeTab === 'add_product' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
+                        className={`px-3 py-1.5 text-xs font-bold rounded-xl transition cursor-pointer ${activeTab === 'add_product' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
                     >
-                        ➕ Add Product
+                        ➕ Add Custom Item
                     </button>
                     <button
                         onClick={() => setActiveTab('bulk_import')}
-                        className={`px-3 py-1.5 text-xs font-bold rounded-xl transition ${activeTab === 'bulk_import' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
+                        className={`px-3 py-1.5 text-xs font-bold rounded-xl transition cursor-pointer ${activeTab === 'bulk_import' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
                     >
-                        📁 Bulk Import
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('categories')}
-                        className={`px-3 py-1.5 text-xs font-bold rounded-xl transition ${activeTab === 'categories' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
-                    >
-                        🌳 Categories
+                        📁 CSV Import
                     </button>
                 </div>
             </div>
 
-            {/* Status Messages */}
+            {/* Status Notification Messages */}
             {statusMsg && (
                 <div className={`p-3 rounded-2xl text-xs font-bold flex items-center justify-between ${
                     statusMsg.type === 'success' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' :
@@ -267,11 +335,11 @@ Pan-40,Alkem,Digestion & Acidity,Pantoprazole Sodium 40mg,40mg,Tablet,98,115,80,
                     'bg-rose-50 text-rose-800 border border-rose-200'
                 }`}>
                     <span>{statusMsg.text}</span>
-                    <button onClick={() => setStatusMsg(null)} className="text-slate-400 hover:text-slate-700">✕</button>
+                    <button onClick={() => setStatusMsg(null)} className="text-slate-400 hover:text-slate-700 font-bold">✕</button>
                 </div>
             )}
 
-            {/* TAB 1: CATALOG EXPLORER */}
+            {/* TAB 1: STORE CATALOG EXPLORER */}
             {activeTab === 'explorer' && (
                 <div className="space-y-4">
                     {/* Filters */}
@@ -307,18 +375,26 @@ Pan-40,Alkem,Digestion & Acidity,Pantoprazole Sodium 40mg,40mg,Tablet,98,115,80,
                     {/* Products Grid / Table */}
                     {loading ? (
                         <div className="text-center py-12 text-slate-400 text-xs font-medium animate-pulse">
-                            Loading catalog products from tenant database...
+                            Loading catalog products from pharmacy tenant database...
                         </div>
                     ) : products.length === 0 ? (
-                        <div className="text-center py-12 border border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
-                            <p className="text-sm font-bold text-slate-700">No products found in catalog</p>
-                            <p className="text-xs text-slate-400 mt-1">Add custom products or run bulk catalog import builder</p>
-                            <button
-                                onClick={() => setActiveTab('add_product')}
-                                className="mt-3 px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition"
-                            >
-                                + Create Product Now
-                            </button>
+                        <div className="text-center py-12 border border-dashed border-slate-200 rounded-2xl bg-slate-50/50 space-y-3">
+                            <p className="text-sm font-bold text-slate-700">No products in this pharmacy's store catalog</p>
+                            <p className="text-xs text-slate-400">Add products via Master Catalog Quick-Link or Create Custom Items</p>
+                            <div className="flex items-center justify-center gap-2">
+                                <button
+                                    onClick={() => setActiveTab('master_catalog')}
+                                    className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition cursor-pointer"
+                                >
+                                    ⚡ Browse Master Catalog
+                                </button>
+                                <button
+                                    onClick={() => setActiveTab('add_product')}
+                                    className="px-4 py-2 bg-slate-800 text-white rounded-xl text-xs font-bold hover:bg-slate-900 transition cursor-pointer"
+                                >
+                                    + Add Custom Product
+                                </button>
+                            </div>
                         </div>
                     ) : (
                         <div className="overflow-x-auto border border-slate-200 rounded-2xl">
@@ -329,7 +405,7 @@ Pan-40,Alkem,Digestion & Acidity,Pantoprazole Sodium 40mg,40mg,Tablet,98,115,80,
                                         <th className="p-3">Category</th>
                                         <th className="p-3">Composition</th>
                                         <th className="p-3">Price (MRP / Base)</th>
-                                        <th className="p-3">Stock & Location</th>
+                                        <th className="p-3">Stock & Aisle</th>
                                         <th className="p-3">Status</th>
                                         <th className="p-3 text-right">Actions</th>
                                     </tr>
@@ -339,7 +415,7 @@ Pan-40,Alkem,Digestion & Acidity,Pantoprazole Sodium 40mg,40mg,Tablet,98,115,80,
                                         <tr key={p._id} className="hover:bg-slate-50/70 transition">
                                             <td className="p-3">
                                                 <div className="flex items-center gap-2.5">
-                                                    <img src={p.imageUrl} alt={p.name} className="w-8 h-8 rounded-lg object-cover border border-slate-200 shrink-0" />
+                                                    <img src={p.imageUrl} alt={p.name} className="w-9 h-9 rounded-xl object-cover border border-slate-200 shrink-0" />
                                                     <div>
                                                         <div className="font-bold text-slate-900 flex items-center gap-1.5">
                                                             {p.name}
@@ -376,10 +452,17 @@ Pan-40,Alkem,Digestion & Acidity,Pantoprazole Sodium 40mg,40mg,Tablet,98,115,80,
                                             </td>
                                             <td className="p-3 text-right">
                                                 <button
-                                                    onClick={() => alert(`Editing product: ${p.name}`)}
-                                                    className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold rounded-lg transition"
+                                                    onClick={() => {
+                                                        setEditingItem(p);
+                                                        setEditForm({
+                                                            sellingPrice: p.effectivePrice ?? p.basePrice,
+                                                            mrp: p.effectiveMrp ?? p.mrp,
+                                                            stockQuantity: p.stockQuantity || 50
+                                                        });
+                                                    }}
+                                                    className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-[10px] font-extrabold rounded-lg transition cursor-pointer"
                                                 >
-                                                    Edit
+                                                    ⚡ Quick Edit
                                                 </button>
                                             </td>
                                         </tr>
@@ -391,7 +474,65 @@ Pan-40,Alkem,Digestion & Acidity,Pantoprazole Sodium 40mg,40mg,Tablet,98,115,80,
                 </div>
             )}
 
-            {/* TAB 2: ADD PRODUCT STUDIO (WITH REAL-TIME SIMILARITY ALGORITHM) */}
+            {/* TAB 2: MASTER CATALOG QUICK-LINK TAB */}
+            {activeTab === 'master_catalog' && (
+                <div className="space-y-4">
+                    <div className="p-3.5 bg-indigo-50/70 border border-indigo-100 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                        <div>
+                            <h4 className="text-xs font-black text-indigo-950 uppercase tracking-wider">⚡ Master Pharmaceutical Catalog Repository</h4>
+                            <p className="text-[11px] text-indigo-800 mt-0.5">
+                                Select pre-verified master medicines to instantly link to your store with tenant-isolated pricing & stock overrides.
+                            </p>
+                        </div>
+                        <div className="w-full sm:w-64">
+                            <input
+                                type="text"
+                                value={masterSearch}
+                                onChange={(e) => setMasterSearch(e.target.value)}
+                                placeholder="Search master catalog..."
+                                className="w-full px-3 py-1.5 bg-white border border-indigo-200 rounded-xl text-xs"
+                            />
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                        {masterProducts.map((m) => (
+                            <div key={m._id} className="p-3.5 border border-slate-200 rounded-2xl bg-white hover:border-indigo-300 transition shadow-xs flex flex-col justify-between space-y-3">
+                                <div className="flex items-start gap-3">
+                                    <img src={m.imageUrl} alt={m.name} className="w-12 h-12 rounded-xl object-cover border border-slate-200 shrink-0" />
+                                    <div>
+                                        <h5 className="text-xs font-bold text-slate-900 leading-snug">{m.name}</h5>
+                                        <p className="text-[10px] text-slate-500 font-mono mt-0.5">{m.brand} • {m.category}</p>
+                                        <p className="text-[10px] text-slate-600 line-clamp-1 mt-1">{m.composition || 'Active Compound'}</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                                    <div>
+                                        <span className="text-xs font-black text-slate-900">₹{m.basePrice}</span>
+                                        <span className="text-[10px] text-slate-400 line-through ml-1">₹{m.mrp}</span>
+                                    </div>
+                                    <button
+                                        onClick={() => {
+                                            setSelectedMasterItem(m);
+                                            setLinkForm({
+                                                sellingPrice: m.basePrice,
+                                                mrp: m.mrp,
+                                                stockQuantity: 50,
+                                                aisleLocation: 'Aisle-1'
+                                            });
+                                        }}
+                                        className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-extrabold rounded-xl transition cursor-pointer shadow-xs"
+                                    >
+                                        ⚡ Link to Store
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* TAB 3: ADD CUSTOM PRODUCT (WITH REAL-TIME SIMILARITY ALGORITHM) */}
             {activeTab === 'add_product' && (
                 <div className="space-y-5">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -621,7 +762,7 @@ Pan-40,Alkem,Digestion & Acidity,Pantoprazole Sodium 40mg,40mg,Tablet,98,115,80,
                                     type="button"
                                     onClick={() => handleSaveProduct(false)}
                                     disabled={loading}
-                                    className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-extrabold hover:bg-indigo-700 transition shadow-xs"
+                                    className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-extrabold hover:bg-indigo-700 transition shadow-xs cursor-pointer"
                                 >
                                     {loading ? 'Saving...' : 'Publish Product to Catalog'}
                                 </button>
@@ -631,7 +772,7 @@ Pan-40,Alkem,Digestion & Acidity,Pantoprazole Sodium 40mg,40mg,Tablet,98,115,80,
                 </div>
             )}
 
-            {/* TAB 3: BULK CATALOG BUILDER (CSV INGESTION) */}
+            {/* TAB 4: BULK CATALOG BUILDER (CSV INGESTION) */}
             {activeTab === 'bulk_import' && (
                 <div className="space-y-4">
                     <div className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-xl">
@@ -721,19 +862,108 @@ Pan-40,Alkem,Digestion & Acidity,Pantoprazole Sodium 40mg,40mg,Tablet,98,115,80,
                 </div>
             )}
 
-            {/* TAB 4: CATEGORY TREE HIERARCHY */}
-            {activeTab === 'categories' && (
-                <div className="space-y-4">
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                        {categories.map((c) => (
-                            <div key={c._id} className="p-3 border border-slate-200 rounded-xl bg-slate-50 flex items-center gap-3">
-                                <span className="text-2xl">{c.icon || '💊'}</span>
+            {/* MASTER PRODUCT LINK MODAL */}
+            {selectedMasterItem && (
+                <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+                    <div className="bg-white border border-slate-200 rounded-3xl p-5 max-w-md w-full shadow-2xl space-y-4 animate-fade-in">
+                        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                            <h4 className="text-sm font-black text-slate-900">⚡ Link Master Product to Store</h4>
+                            <button onClick={() => setSelectedMasterItem(null)} className="text-slate-400 hover:text-slate-700">✕</button>
+                        </div>
+                        <div className="flex items-center gap-3 bg-indigo-50 p-3 rounded-2xl">
+                            <img src={selectedMasterItem.imageUrl} alt={selectedMasterItem.name} className="w-12 h-12 rounded-xl object-cover" />
+                            <div>
+                                <h5 className="text-xs font-bold text-indigo-950">{selectedMasterItem.name}</h5>
+                                <p className="text-[10px] text-indigo-800 font-mono">{selectedMasterItem.brand} • {selectedMasterItem.sku}</p>
+                            </div>
+                        </div>
+                        <div className="space-y-3 text-xs">
+                            <div className="grid grid-cols-2 gap-3">
                                 <div>
-                                    <div className="text-xs font-bold text-slate-900">{c.name}</div>
-                                    <div className="text-[10px] text-slate-400 font-mono">/{c.slug}</div>
+                                    <label className="block font-bold text-slate-700 mb-1">My Store Selling Price (₹)</label>
+                                    <input
+                                        type="number"
+                                        value={linkForm.sellingPrice}
+                                        onChange={(e) => setLinkForm({ ...linkForm, sellingPrice: Number(e.target.value) })}
+                                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block font-bold text-slate-700 mb-1">MRP (₹)</label>
+                                    <input
+                                        type="number"
+                                        value={linkForm.mrp}
+                                        onChange={(e) => setLinkForm({ ...linkForm, mrp: Number(e.target.value) })}
+                                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold"
+                                    />
                                 </div>
                             </div>
-                        ))}
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block font-bold text-slate-700 mb-1">Initial Stock Qty</label>
+                                    <input
+                                        type="number"
+                                        value={linkForm.stockQuantity}
+                                        onChange={(e) => setLinkForm({ ...linkForm, stockQuantity: Number(e.target.value) })}
+                                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block font-bold text-slate-700 mb-1">Aisle Location</label>
+                                    <input
+                                        type="text"
+                                        value={linkForm.aisleLocation}
+                                        onChange={(e) => setLinkForm({ ...linkForm, aisleLocation: e.target.value })}
+                                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                        <div className="pt-2 flex justify-end gap-2">
+                            <button onClick={() => setSelectedMasterItem(null)} className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl">Cancel</button>
+                            <button onClick={handleLinkMasterProduct} className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs rounded-xl shadow-xs cursor-pointer">
+                                Confirm & Link to Store
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* QUICK EDIT MODAL */}
+            {editingItem && (
+                <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+                    <div className="bg-white border border-slate-200 rounded-3xl p-5 max-w-sm w-full shadow-2xl space-y-4 animate-fade-in">
+                        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                            <h4 className="text-sm font-black text-slate-900">⚡ Quick Update Price & Stock</h4>
+                            <button onClick={() => setEditingItem(null)} className="text-slate-400 hover:text-slate-700">✕</button>
+                        </div>
+                        <p className="text-xs font-bold text-slate-800">{editingItem.name}</p>
+                        <div className="space-y-3 text-xs">
+                            <div>
+                                <label className="block font-bold text-slate-700 mb-1">Selling Price (₹)</label>
+                                <input
+                                    type="number"
+                                    value={editForm.sellingPrice}
+                                    onChange={(e) => setEditForm({ ...editForm, sellingPrice: Number(e.target.value) })}
+                                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold"
+                                />
+                            </div>
+                            <div>
+                                <label className="block font-bold text-slate-700 mb-1">Stock Quantity</label>
+                                <input
+                                    type="number"
+                                    value={editForm.stockQuantity}
+                                    onChange={(e) => setEditForm({ ...editForm, stockQuantity: Number(e.target.value) })}
+                                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold"
+                                />
+                            </div>
+                        </div>
+                        <div className="pt-2 flex justify-end gap-2">
+                            <button onClick={() => setEditingItem(null)} className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl">Cancel</button>
+                            <button onClick={handleQuickUpdateSubmit} className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs rounded-xl shadow-xs cursor-pointer">
+                                Save Quick Update
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

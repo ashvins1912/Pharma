@@ -213,4 +213,48 @@ router.post('/categories', authenticateUser, async (req, res) => {
     }
 });
 
+/**
+ * GET /api/catalog/master-products
+ * Fetch global master catalog for 1-click pharmacy store linking
+ */
+router.get('/master-products', async (req, res) => {
+    try {
+        const result = await CatalogBuilderService.getMasterCatalog(req.query);
+        res.json(result);
+    } catch (error) {
+        console.error('[CatalogRoutes] GET /master-products error:', error);
+        res.status(500).json({ message: error.message || 'Failed to fetch master catalog' });
+    }
+});
+
+/**
+ * POST /api/catalog/products/:id/link-tenant
+ * 1-Click Link Master Product to Pharmacy Tenant Store with custom overrides
+ */
+router.post('/products/:id/link-tenant', authenticateUser, async (req, res) => {
+    try {
+        const tenantId = getTenantScope(req);
+        const result = await CatalogBuilderService.linkMasterProductToTenant(tenantId, req.params.id, req.body);
+        res.json(result);
+    } catch (error) {
+        console.error('[CatalogRoutes] POST /products/:id/link-tenant error:', error);
+        res.status(500).json({ message: error.message || 'Failed to link master product' });
+    }
+});
+
+/**
+ * PATCH /api/catalog/products/:id/quick-update
+ * Quick inline update for stock, price, or publish status
+ */
+router.patch('/products/:id/quick-update', authenticateUser, async (req, res) => {
+    try {
+        const tenantId = getTenantScope(req);
+        const result = await CatalogBuilderService.quickUpdateTenantProduct(tenantId, req.params.id, req.body);
+        res.json(result);
+    } catch (error) {
+        console.error('[CatalogRoutes] PATCH /products/:id/quick-update error:', error);
+        res.status(500).json({ message: error.message || 'Failed to update product' });
+    }
+});
+
 export default router;

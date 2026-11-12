@@ -470,4 +470,158 @@ export class CatalogBuilderService {
             errors
         };
     }
+
+    /**
+     * Fetch Global Master Catalog items for 1-click store linking
+     */
+    static async getMasterCatalog(params = {}) {
+        const { search = '', category = '', page = 1, limit = 20 } = params;
+        const pageNum = Math.max(1, Number(page) || 1);
+        const limitNum = Math.min(100, Math.max(1, Number(limit) || 20));
+
+        if (!getIsConnected()) {
+            return { masterProducts: [], total: 0, page: pageNum, totalPages: 0 };
+        }
+
+        const filter = {
+            tenantId: null,
+            status: 'published'
+        };
+
+        if (category && category !== 'All') {
+            filter.category = category;
+        }
+
+        if (search) {
+            filter.$or = [
+                { name: new RegExp(search, 'i') },
+                { brand: new RegExp(search, 'i') },
+                { composition: new RegExp(search, 'i') }
+            ];
+        }
+
+        const [masterProducts, total] = await Promise.all([
+            CatalogProduct.find(filter)
+                .sort({ name: 1 })
+                .skip((pageNum - 1) * limitNum)
+                .limit(limitNum)
+                .lean(),
+            CatalogProduct.countDocuments(filter)
+        ]);
+
+        return {
+            masterProducts,
+            total,
+            page: pageNum,
+            limit: limitNum,
+            totalPages: Math.ceil(total / limitNum) || 1
+        };
+    }
+
+    /**
+     * 1-Click Link Master Product to Tenant Pharmacy Catalog
+     */
+    static async linkMasterProductToTenant(tenantId, productId, overrideData = {}) {
+        if (!getIsConnected()) {
+            return { message: 'Linked in memory mode' };
+        }
+
+        const product = await CatalogProduct.findById(productId).lean();
+        if (!product) {
+            const error = new Error('Master catalog product not found.');
+            error.statusCode = 404;
+            throw error;
+        }
+
+        const sellingPrice = Number(overrideData.sellingPrice || product.basePrice || 100);
+        const mrp = Number(overrideData.mrp || product.mrp || 120);
+        const stockQuantity = Number(overrideData.stockQuantity || 50);
+
+        const override = await TenantCatalogOverride.findOneAndUpdate(
+            { tenantId, productId },
+            {
+                $set: {
+                    tenantId,
+                    productId,
+                    tenantSku: overrideData.tenantSku || product.sku,
+                    sellingPrice,
+                    mrp,
+                    stockQuantity,
+                    aisleLocation: overrideData.aisleLocation || 'Aisle-1',
+                    isAvailable: true,
+                    isCustomPrice: sellingPrice !== product.basePrice
+                }
+            },
+            { upsert: true, new: true, runValidators: true }
+        );
+
+        // Also ensure Medicine entry exists for legacy compatibility
+        try {
+            await Medicine.updateOne(
+                { tenantId, sku: product.sku },
+                {
+                    $set: {
+                        tenantId,
+                        sku: product.sku,
+                        name: product.name,
+                        brand: product.brand,
+                        category: product.category,
+                        price: sellingPrice,
+                        stockQuantity,
+                        stock: stockQuantity,
+                        requiresPrescription: product.prescriptionRequired,
+                        imageUrl: product.imageUrl,
+                        manufacturer: product.manufacturer
+                    }
+                },
+                { upsert: true }
+            );
+        } catch (err) {
+            console.warn('[CatalogBuilder] Legacy sync error on link:', err.message);
+        }
+
+        return { message: `Product "${product.name}" linked to pharmacy store successfully!`, override };
+    }
+
+    /**
+     * Quick inline price, stock, and availability updater
+     */
+    static async quickUpdateTenantProduct(tenantId, productId, updateData = {}) {
+        if (!getIsConnected()) {
+            return { message: 'Updated in memory mode' };
+        }
+
+        const { sellingPrice, mrp, stockQuantity, status } = updateData;
+
+        if (status) {
+            await CatalogProduct.updateOne({ _id: productId }, { $set: { status } });
+        }
+
+        const updateFields = {};
+        if (sellingPrice !== undefined) updateFields.sellingPrice = Number(sellingPrice);
+        if (mrp !== undefined) updateFields.mrp = Number(mrp);
+        if (stockQuantity !== undefined) updateFields.stockQuantity = Number(stockQuantity);
+
+        if (Object.keys(updateFields).length > 0) {
+            await TenantCatalogOverride.updateOne(
+                { tenantId, productId },
+                { $set: updateFields },
+                { upsert: true }
+            );
+
+            // Also update Medicine collection
+            const prod = await CatalogProduct.findById(productId).lean();
+            if (prod) {
+                const medFields = {};
+                if (sellingPrice !== undefined) medFields.price = Number(sellingPrice);
+                if (stockQuantity !== undefined) {
+                    medFields.stockQuantity = Number(stockQuantity);
+                    medFields.stock = Number(stockQuantity);
+                }
+                await Medicine.updateOne({ tenantId, sku: prod.sku }, { $set: medFields });
+            }
+        }
+
+        return { message: 'Product quick updated successfully!' };
+    }
 }
