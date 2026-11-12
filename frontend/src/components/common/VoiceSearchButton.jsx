@@ -203,7 +203,7 @@ export default function VoiceSearchButton({ onTranscript, onError, onListeningCh
                 }`}
             >
                 <span className="text-sm sm:text-base select-none">
-                    {isListening ? '🎙️' : '🎤'}
+                    {<svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3" /><path d="M5 10a7 7 0 0 0 14 0M12 17v5m-4 0h8" /></svg>}
                 </span>
                 {isListening && (
                     <span className="absolute -inset-1 rounded-xl bg-rose-500/30 animate-ping pointer-events-none" />
@@ -239,7 +239,7 @@ export default function VoiceSearchButton({ onTranscript, onError, onListeningCh
                                     ttsEnabled ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-white text-slate-500'
                                 }`}
                             >
-                                {ttsEnabled ? '🔊 Audio ON' : '🔇 Audio OFF'}
+                                {ttsEnabled ? 'Audio on' : 'Audio off'}
                             </button>
                             <button
                                 type="button"
@@ -247,7 +247,7 @@ export default function VoiceSearchButton({ onTranscript, onError, onListeningCh
                                 className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-800"
                                 aria-label="Close voice panel"
                             >
-                                ✕
+                                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="m6 6 12 12M18 6 6 18" /></svg>
                             </button>
                         </div>
                     </div>
@@ -285,7 +285,7 @@ export default function VoiceSearchButton({ onTranscript, onError, onListeningCh
                     {fuzzyMatchInfo && (
                         <div className="mx-3.5 mt-2 rounded-xl border border-indigo-100 bg-indigo-50/60 p-3 space-y-1.5 text-xs text-left">
                             <div className="flex items-center justify-between text-[10px] font-bold text-slate-500">
-                                <span className="truncate max-w-[65%]">🎙️ Spoken: "{fuzzyMatchInfo.originalText}"</span>
+                                <span className="truncate max-w-[65%]">Spoken: "{fuzzyMatchInfo.originalText}"</span>
                                 <span className="text-emerald-700 font-mono shrink-0">{fuzzyMatchInfo.confidence}% Match</span>
                             </div>
                             {fuzzyMatchInfo.isRefined && (
@@ -322,7 +322,7 @@ export default function VoiceSearchButton({ onTranscript, onError, onListeningCh
                     {errorState && (
                         <div role="alert" className="mx-3.5 mt-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-[11px] text-rose-700 space-y-1">
                             <div className="flex items-center justify-between font-bold">
-                                <span>🎙️ {errorState.title}</span>
+                                <span>{errorState.title}</span>
                                 <span className="text-[9px] font-mono text-rose-600">{errorState.code}</span>
                             </div>
                             <p className="text-[10px] text-rose-700 leading-snug">{errorState.message}</p>
@@ -337,7 +337,7 @@ export default function VoiceSearchButton({ onTranscript, onError, onListeningCh
                                 onClick={stopListening}
                                 className="w-full rounded-xl bg-rose-600 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-rose-700 cursor-pointer"
                             >
-                                ⏹️ Stop Listening
+                                Stop listening
                             </button>
                         ) : (
                             <button
@@ -345,7 +345,7 @@ export default function VoiceSearchButton({ onTranscript, onError, onListeningCh
                                 onClick={startListening}
                                 className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-700 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-blue-800 cursor-pointer"
                             >
-                                🎙️ Tap to Speak
+                                <><svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="9" y="2" width="6" height="12" rx="3" /><path d="M5 10a7 7 0 0 0 14 0M12 17v5m-4 0h8" /></svg> Tap to speak</>
                             </button>
                         )}
                     </div>

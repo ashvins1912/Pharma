@@ -52,6 +52,15 @@ test('inventory safety alerts are registered as a protected inventory read capab
   assert.equal(isGatewayPermissionAllowed({ role: 'TENANT_ADMIN', permissions: [] }, 'inventory.read'), false);
 });
 
+test('storefront medical search grounding is public only for its exact POST endpoint', () => {
+  const path = '/api/med-search-grounding?source=storefront';
+  assert.equal(isGatewayPublicPath('POST', path), true);
+  assert.equal(resolveGatewayCapability('POST', path), null);
+  assert.equal(isGatewayPublicPath('GET', '/api/med-search-grounding'), false);
+  assert.equal(isGatewayPublicPath('POST', '/api/med-search-grounding/admin'), false);
+  assert.equal(resolveGatewayCapability('POST', '/api/med-search-grounding/admin'), null);
+});
+
 test('storefront medicine catalog is public and does not require inventory RBAC', () => {
   const url = '/api/medicines?page=1&limit=16';
   assert.equal(isGatewayPublicPath('GET', url), true);
