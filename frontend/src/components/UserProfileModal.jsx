@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { getReadableErrorMessage } from '../utils/errorMessage';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import MFAEnrollmentModal from './auth/MFAEnrollmentModal';
@@ -54,7 +55,7 @@ export default function UserProfileModal({ isOpen, onClose, onNavigate }) {
     e.preventDefault();
     await runAction(LOADING_ACTIONS.SAVE_PERSONAL_DETAILS, async () => {
       try { await updateProfile(profileForm); addToast('Profile details updated successfully.','success'); setEditMode(false); setTab('overview'); }
-      catch(err){ addToast(err.message || t('couldNotUpdateProfile'),'error'); }
+      catch(err){ addToast(getReadableErrorMessage(err, t('couldNotUpdateProfile')),'error'); }
     });
   };
 
