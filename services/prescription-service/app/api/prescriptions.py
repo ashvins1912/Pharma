@@ -53,7 +53,7 @@ async def scan_product_label(
     allowed_types = {"image/jpeg", "image/png", "image/webp"}
     if file.content_type not in allowed_types:
         raise HTTPException(status_code=415, detail="Product label scan accepts JPEG, PNG, or WebP images.")
-    file_bytes = await file.read()
+    file_bytes = await file.read((8 * 1024 * 1024) + 1)
     if not file_bytes or len(file_bytes) > 8 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="Product label image must be between 1 byte and 8 MB.")
     signatures = {
