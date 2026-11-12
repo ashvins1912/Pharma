@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { getReadableErrorMessage } from '../../../utils/errorMessage';
 import { createPortal } from 'react-dom';
 import { useToast } from '../../../context/ToastContext';
 import apiClient from '../../../api/apiClient';
@@ -135,7 +136,7 @@ export default function AdminProposalModal({ request, isOpen, onClose, onRefresh
           .catch((error) => {
             if (active) {
               setReviewReady(false);
-              addToast(error.message || 'Could not start request review.', 'error');
+              addToast(getReadableErrorMessage(error, 'Could not start request review.'), 'error');
             }
           });
       }
@@ -365,7 +366,7 @@ export default function AdminProposalModal({ request, isOpen, onClose, onRefresh
       onRefresh();
       onClose();
     } catch (err) {
-      addToast(err.response?.data?.message || err.message || 'Failed to submit proposal.', 'error');
+      addToast(getReadableErrorMessage(err, 'Failed to submit proposal.'), 'error');
     } finally {
       setSaving(false);
     }
@@ -380,7 +381,7 @@ export default function AdminProposalModal({ request, isOpen, onClose, onRefresh
       onRefresh();
       onClose();
     } catch (err) {
-      addToast(err.response?.data?.message || err.message || 'Failed to reject request.', 'error');
+      addToast(getReadableErrorMessage(err, 'Failed to reject request.'), 'error');
     } finally {
       setSaving(false);
     }
