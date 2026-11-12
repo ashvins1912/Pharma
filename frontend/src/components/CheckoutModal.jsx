@@ -8,6 +8,7 @@ import AddressManager from './AddressManager';
 import { useTenant } from '../context/TenantContext';
 import { useLanguage } from '../context/LanguageContext';
 import ContextualHelpBanner from './common/ContextualHelpBanner';
+import { compressImageFile } from '../utils/imageCompressor';
 import { buildCheckoutWaitlistRequest, buildFulfillmentQuoteItems, getCheckoutQuoteEffectAction, isCheckoutOutcomeAmbiguous } from '../utils/checkoutFulfillment.js';
 
 export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
@@ -641,7 +642,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
                   id="prescription-upload"
                   type="file"
                   accept="application/pdf,image/*"
-                  onChange={event => {
+                  onChange={async (event) => {
                     const file = event.target.files?.[0] || null;
                     const isSupportedFile = file
                       && (file.type === 'application/pdf' || file.type.startsWith('image/'));
@@ -651,14 +652,23 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
                       event.target.value = '';
                       return;
                     }
-                    if (file && file.size > 8 * 1024 * 1024) {
+                    if (file && file.size > 15 * 1024 * 1024) {
                       setPrescriptionFile(null);
-                      setPrescriptionError('The prescription file must be 8 MB or smaller.');
+                      setPrescriptionError('The prescription file must be 15 MB or smaller.');
                       event.target.value = '';
                       return;
                     }
                     setPrescriptionError('');
-                    setPrescriptionFile(file);
+                    if (file && file.type.startsWith('image/')) {
+                      try {
+                        const compressed = await compressImageFile(file, { maxWidth: 1600, maxHeight: 1600, quality: 0.8 });
+                        setPrescriptionFile(compressed.file);
+                      } catch {
+                        setPrescriptionFile(file);
+                      }
+                    } else {
+                      setPrescriptionFile(file);
+                    }
                   }}
                   className="mt-2 block w-full text-xs text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-white file:px-3 file:py-2 file:font-bold file:text-rose-700"
                   required={prescriptionRequired}

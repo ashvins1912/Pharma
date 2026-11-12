@@ -7,6 +7,7 @@ import { createMedicineRequest } from '../../api/medicineRequestService';
 import apiClient from '../../api/apiClient';
 import AddressManager from '../AddressManager';
 import ContextualHelpBanner from '../common/ContextualHelpBanner';
+import { compressImageFile } from '../../utils/imageCompressor';
 
 // --- Client-Side Binary Signature (Magic Number) Validator ---
 // Add this right under your import statements
@@ -176,11 +177,11 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
   };
 
   const handlePrescriptionChange = async (e) => {
-    const file = e.target.files?.[0];
+    let file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 5 * 1024 * 1024) {
-      addToast('Prescription file size must be under 5 MB.', 'warning');
+    if (file.size > 15 * 1024 * 1024) {
+      addToast('Prescription file size must be under 15 MB.', 'warning');
       e.target.value = '';
       return;
     }
@@ -195,6 +196,15 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
       return;
     }
 
+    if (file.type.startsWith('image/')) {
+      try {
+        const compressed = await compressImageFile(file, { maxWidth: 1600, maxHeight: 1600, quality: 0.8 });
+        file = compressed.file;
+      } catch (err) {
+        console.warn('[MedicineRequest] Compression notice:', err);
+      }
+    }
+
     setPrescriptionFile(file);
     if (file.type.startsWith('image/')) {
       setPrescriptionPreview(URL.createObjectURL(file));
@@ -204,11 +214,11 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
   };
 
   const handleProductImageChange = async (e) => {
-    const file = e.target.files?.[0];
+    let file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 5 * 1024 * 1024) {
-      addToast('Product photo size must be under 5 MB.', 'warning');
+    if (file.size > 15 * 1024 * 1024) {
+      addToast('Product photo size must be under 15 MB.', 'warning');
       e.target.value = '';
       return;
     }
@@ -221,6 +231,15 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
       if (imagePreview) URL.revokeObjectURL(imagePreview);
       setImagePreview(null);
       return;
+    }
+
+    if (file.type.startsWith('image/')) {
+      try {
+        const compressed = await compressImageFile(file, { maxWidth: 1600, maxHeight: 1600, quality: 0.8 });
+        file = compressed.file;
+      } catch (err) {
+        console.warn('[MedicineRequest] Compression notice:', err);
+      }
     }
 
     setProductImageFile(file);

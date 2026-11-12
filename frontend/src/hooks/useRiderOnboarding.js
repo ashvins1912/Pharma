@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import apiClient from '../api/apiClient';
 import { useTenant } from '../context/TenantContext';
+import { compressImageFile } from '../utils/imageCompressor';
 
 /**
  * Custom Hook: useRiderOnboarding
@@ -29,18 +30,25 @@ export function useRiderOnboarding({ onSuccess, onError } = {}) {
         setFormErrors((prev) => ({ ...prev, [name]: null }));
     }, []);
 
-    const handleFileChange = useCallback((e) => {
-        const file = e.target.files?.[0];
+    const handleFileChange = useCallback(async (e) => {
+        let file = e.target.files?.[0];
         if (!file) return;
 
-        // Validate image mime type & size (5MB)
+        // Validate image mime type & size (15MB raw input max)
         if (!file.type.startsWith('image/')) {
             setFormErrors((prev) => ({ ...prev, photo: 'File must be an image (JPEG, PNG, WebP).' }));
             return;
         }
-        if (file.size > 5 * 1024 * 1024) {
-            setFormErrors((prev) => ({ ...prev, photo: 'Image must be smaller than 5MB.' }));
+        if (file.size > 15 * 1024 * 1024) {
+            setFormErrors((prev) => ({ ...prev, photo: 'Image must be smaller than 15MB.' }));
             return;
+        }
+
+        try {
+            const compressed = await compressImageFile(file, { maxWidth: 1200, maxHeight: 1200, quality: 0.8 });
+            file = compressed.file;
+        } catch {
+            // fallback to original
         }
 
         setPhotoFile(file);
