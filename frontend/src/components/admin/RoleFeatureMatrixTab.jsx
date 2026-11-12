@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { getReadableErrorMessage } from '../../utils/errorMessage';
 import apiClient from '../../api/apiClient';
 import { ComponentLoader, TableSkeleton, ErrorState } from '../common/ComponentLoader';
 
@@ -35,7 +36,7 @@ export default function RoleFeatureMatrixTab() {
       setFeatures(data.features || []);
       setPermissions(data.permissions || []);
     } catch (e) {
-      setError(e.message || 'Failed to load feature and permission catalog.');
+      setError(getReadableErrorMessage(e, 'Failed to load feature and permission catalog.'));
     } finally {
       setLoading(false);
     }
