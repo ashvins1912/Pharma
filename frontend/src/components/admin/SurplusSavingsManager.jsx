@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { getReadableErrorMessage } from '../../utils/errorMessage';
 import apiClient from '../../api/apiClient';
 import { useApp } from '../../context/AppContext';
 import { useTenant } from '../../context/TenantContext';
@@ -65,7 +66,7 @@ export default function SurplusSavingsManager({ canManage = false }) {
       const { data } = await apiClient.get('/api/surplus-savings/admin', { params: { tenantId, branchId } });
       setCampaigns(Array.isArray(data?.campaigns) ? data.campaigns : []);
     } catch (err) {
-      setError(err?.response?.data?.message || err.message || t('couldNotLoadCampaigns'));
+      setError(getReadableErrorMessage(err, t('couldNotLoadCampaigns')));
     } finally {
       setLoading(false);
     }
@@ -135,7 +136,7 @@ export default function SurplusSavingsManager({ canManage = false }) {
       addToast(t('campaignCreated'), 'success');
       await loadCampaigns();
     } catch (err) {
-      const message = err?.response?.data?.message || err.message || t('campaignSavedFailed');
+      const message = getReadableErrorMessage(err, t('campaignSavedFailed'));
       setError(message);
       addToast(message, 'error');
     } finally {
