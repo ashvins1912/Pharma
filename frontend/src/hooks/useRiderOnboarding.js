@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { getReadableErrorMessage } from '../utils/errorMessage';
 import apiClient from '../api/apiClient';
 import { useTenant } from '../context/TenantContext';
 import { compressImageFile } from '../utils/imageCompressor';
@@ -122,7 +123,7 @@ export function useRiderOnboarding({ onSuccess, onError } = {}) {
             if (onSuccess) onSuccess(data);
             return data;
         } catch (err) {
-            const msg = err.response?.data?.message || err.message || 'Rider onboarding failed.';
+            const msg = getReadableErrorMessage(err, 'Rider onboarding failed.');
             setFormErrors((prev) => ({ ...prev, server: msg }));
             if (onError) onError(msg);
             throw new Error(msg);
