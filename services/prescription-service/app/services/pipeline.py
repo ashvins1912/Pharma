@@ -362,6 +362,8 @@ def _build_ocr_variants(image: Any, cv2: Any) -> List[tuple[str, Any]]:
 
 def _run_ocr(file_bytes: bytes, content_type: str) -> tuple[str, str, float]:
     images: List[Any] = []
+    total_pixels = 0
+    max_document_pixels = 12_000_000
     try:
         if content_type == "application/pdf" or file_bytes[:4] == b"%PDF":
             import fitz
@@ -372,6 +374,9 @@ def _run_ocr(file_bytes: bytes, content_type: str) -> tuple[str, str, float]:
                 if index >= 15:
                     break
                 pix = page.get_pixmap(matrix=fitz.Matrix(2, 2), alpha=False)
+                total_pixels += pix.width * pix.height
+                if total_pixels > max_document_pixels:
+                    raise ProcessingError("OCR_IMAGE_TOO_LARGE", "Document resolution is too large to process safely. Upload a smaller or lower-resolution scan.")
                 import numpy as np
                 import cv2
                 img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, pix.n)
@@ -387,6 +392,9 @@ def _run_ocr(file_bytes: bytes, content_type: str) -> tuple[str, str, float]:
             img = cv2.imdecode(np.frombuffer(file_bytes, dtype=np.uint8), cv2.IMREAD_COLOR)
             if img is None:
                 raise ProcessingError("OCR_DECODE", "Unable to decode image bytes")
+            total_pixels = int(img.shape[0]) * int(img.shape[1])
+            if total_pixels > max_document_pixels:
+                raise ProcessingError("OCR_IMAGE_TOO_LARGE", "Image resolution is too large to process safely. Upload a smaller or lower-resolution scan.")
             images.append(img)
             source = "opencv+paddle"
     except ProcessingError:
