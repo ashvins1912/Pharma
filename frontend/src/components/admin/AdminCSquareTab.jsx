@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { getReadableErrorMessage } from '../../utils/errorMessage';
 import { useLanguage } from '../../context/LanguageContext';
 import apiClient from '../../api/apiClient';
 import { useAuth } from '../../context/AuthContext';
@@ -28,7 +29,7 @@ export default function AdminCSquareTab() {
       });
       setIntegration(data?.data || null);
     } catch (error) {
-      setMessage(error.message || 'Unable to load C-Square integration.');
+      setMessage(getReadableErrorMessage(error, 'Unable to load C-Square integration.'));
     } finally { setLoading(false); }
   };
 
@@ -43,7 +44,7 @@ export default function AdminCSquareTab() {
       setIntegration(data?.data || integration);
       setMessage(action === 'sync' ? 'C-Square stock sync completed.' : 'C-Square connection test completed.');
     } catch (error) {
-      setMessage(error.message || 'C-Square operation failed.');
+      setMessage(getReadableErrorMessage(error, 'C-Square operation failed.'));
     } finally { setWorking(false); }
   };
 
