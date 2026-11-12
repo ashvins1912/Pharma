@@ -252,7 +252,7 @@ export default function LiveTelemetryTab() {
                   <div className="mt-3 space-y-1 text-[11px] text-slate-500">
                     <p>Last checked: {formatTime(service.checkedAt)}</p>
                     {service.errorType && <p className="font-bold text-rose-600 dark:text-rose-300">Issue: {service.errorType}</p>}
-                    {service.errorMessage && <p className="break-words">{service.errorMessage}</p>}
+                    {service.errorMessage && <p className="break-words">{getReadableErrorMessage(service.errorMessage, '')}</p>}
                     {service.source && <p>Source: {service.source}</p>}
                     {service.telemetry && Object.keys(service.telemetry).some(key => !['service', 'status', 'timestamp', 'version'].includes(key)) && (
                       <div className="mt-3 rounded-xl border border-slate-200 p-3 dark:border-slate-800">
