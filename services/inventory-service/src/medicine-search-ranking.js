@@ -88,12 +88,18 @@ function scoreCandidate(query, product) {
       best = Math.max(best, 98);
       continue;
     }
-    const queryTokens = queryKey.split(' ');
-    const fieldTokens = new Set(field.split(' '));
-    const tokenCoverage = queryTokens.filter(token => fieldTokens.has(token)).length / queryTokens.length;
-    const score = (jaroWinkler(queryKey, field) * 50)
-      + (editSimilarity(queryKey, field) * 30)
-      + (tokenCoverage * 20);
+    const queryTokens = queryKey.split(' ').filter(Boolean);
+    const fieldTokens = field.split(' ').filter(Boolean);
+    const tokenSimilarity = queryTokens.length
+      ? queryTokens.reduce((sum, token) => {
+        const bestTokenScore = fieldTokens.reduce((bestToken, candidateToken) =>
+          Math.max(bestToken, jaroWinkler(token, candidateToken), editSimilarity(token, candidateToken)), 0);
+        return sum + bestTokenScore;
+      }, 0) / queryTokens.length
+      : 0;
+    const score = (jaroWinkler(queryKey, field) * 35)
+      + (editSimilarity(queryKey, field) * 25)
+      + (tokenSimilarity * 40);
     best = Math.max(best, Math.round(score));
   }
   return best;
