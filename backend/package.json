@@ -32,6 +32,6 @@
     "@pharma/service-kernel": "1.0.0",
     "cloudinary": "^2.5.1",
     "sharp": "^0.33.5",
-    "@pharma/algorithm-kernel": "1.0.0"
+    "@pharma/algorithm-kernel": "file:../packages/algorithm-kernel"
   }
 }
