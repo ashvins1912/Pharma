@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { calculateJaroWinklerSimilarity, normalizeText } from '../../utils/similarity';
+import { calculateEnsembleSimilarity, normalizeText } from '../../utils/similarity';
 import { useApp } from '../../context/AppContext';
 
 /**
@@ -44,7 +44,7 @@ const POPULAR_VOICE_MEDICINES = [
 ];
 
 /**
- * Refine spoken voice transcript against catalog using Jaro-Winkler Fuzzy Matching
+ * Refine spoken voice transcript against catalog using Ensemble Phonetic & Token Matching
  */
 export function refineSpokenQueryWithFuzzyMatch(rawTranscript, catalog = []) {
     const cleaned = cleanSpokenQuery(rawTranscript);
@@ -53,33 +53,24 @@ export function refineSpokenQueryWithFuzzyMatch(rawTranscript, catalog = []) {
     }
 
     const candidates = new Map();
-    // 1. Load actual inventory catalog names
     if (Array.isArray(catalog)) {
         catalog.forEach(item => {
             const name = item.name || item.brandName || item.brand;
             if (name) candidates.set(name.toLowerCase(), name);
         });
     }
-    // 2. Load popular known voice medicines
     POPULAR_VOICE_MEDICINES.forEach(med => {
         if (!candidates.has(med.toLowerCase())) candidates.set(med.toLowerCase(), med);
     });
 
-    const queryNorm = normalizeText(cleaned);
     let bestMatch = cleaned;
     let maxScore = 0;
     const scoredList = [];
 
     for (const [normKey, displayName] of candidates.entries()) {
-        const candidateNorm = normalizeText(normKey);
-        let score = calculateJaroWinklerSimilarity(queryNorm, candidateNorm);
+        const score = calculateEnsembleSimilarity(cleaned, displayName);
 
-        // Boost score if one string contains the other
-        if (candidateNorm.includes(queryNorm) || queryNorm.includes(candidateNorm)) {
-            score = Math.max(score, 0.82);
-        }
-
-        if (score >= 0.45) {
+        if (score >= 0.40) {
             scoredList.push({ name: displayName, score: Math.round(score * 100) });
         }
 
@@ -91,7 +82,7 @@ export function refineSpokenQueryWithFuzzyMatch(rawTranscript, catalog = []) {
 
     scoredList.sort((a, b) => b.score - a.score);
     const confidence = Math.round(maxScore * 100);
-    const isRefined = maxScore >= 0.65 && bestMatch.toLowerCase() !== cleaned.toLowerCase();
+    const isRefined = maxScore >= 0.60 && bestMatch.toLowerCase() !== cleaned.toLowerCase();
     const refinedText = isRefined ? bestMatch : cleaned;
     const alternatives = scoredList.filter(item => item.name.toLowerCase() !== refinedText.toLowerCase()).slice(0, 3);
 

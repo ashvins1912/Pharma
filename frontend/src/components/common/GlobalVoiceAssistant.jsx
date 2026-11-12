@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { calculateJaroWinklerSimilarity, normalizeText } from '../../utils/similarity';
+import { calculateEnsembleSimilarity, normalizeText } from '../../utils/similarity';
 import { useApp } from '../../context/AppContext';
 import { useToast } from '../../context/ToastContext';
 
@@ -99,7 +99,7 @@ export function parseVoiceCommand(transcript, catalog = []) {
         };
     }
 
-    // 8. MEDICINE SEARCH WITH FUZZY REFINEMENT
+    // 8. MEDICINE SEARCH WITH HIGH-ACCURACY ENSEMBLE FUZZY REFINEMENT
     const cleanSearch = text
         .replace(/^(search for|search|find me|look up|get me|where is|buy|order|show me|find|open)\s+/i, '')
         .trim();
@@ -117,16 +117,11 @@ export function parseVoiceCommand(transcript, catalog = []) {
             if (!candidates.has(med.toLowerCase())) candidates.set(med.toLowerCase(), med);
         });
 
-        const queryNorm = normalizeText(cleanSearch);
         let bestMatch = cleanSearch;
         let maxScore = 0;
 
         for (const [normKey, displayName] of candidates.entries()) {
-            const candidateNorm = normalizeText(normKey);
-            let score = calculateJaroWinklerSimilarity(queryNorm, candidateNorm);
-            if (candidateNorm.includes(queryNorm) || queryNorm.includes(candidateNorm)) {
-                score = Math.max(score, 0.82);
-            }
+            const score = calculateEnsembleSimilarity(cleanSearch, displayName);
             if (score > maxScore) {
                 maxScore = score;
                 bestMatch = displayName;
