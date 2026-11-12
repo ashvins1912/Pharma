@@ -1,0 +1,39 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { rankVoiceMedicineMatches } from '../src/utils/similarity.js';
+
+const catalogue = [
+  { medicineId: 'dolo-650', brandName: 'Dolo', name: 'Dolo 650 Tablet', strength: '650 mg', dosageForm: 'Tablet' },
+  { medicineId: 'dolo-500', brandName: 'Dolo', name: 'Dolo 500 Tablet', strength: '500 mg', dosageForm: 'Tablet' },
+  { medicineId: 'para-500', brandName: 'Paracetamol', name: 'Paracetamol 500 Tablet', strength: '500 mg', dosageForm: 'Tablet' }
+];
+
+test('normalizes common Indian spoken strength phrases and selects a matching catalogue item', () => {
+  const result = rankVoiceMedicineMatches('Dolo six fifty', catalogue);
+  assert.equal(result.isConfident, true);
+  assert.equal(result.best.item.medicineId, 'dolo-650');
+});
+
+test('uses phonetic evidence for a clear transcription typo without crossing strengths', () => {
+  const result = rankVoiceMedicineMatches('doloo 650', catalogue);
+  assert.equal(result.isConfident, true);
+  assert.equal(result.best.item.medicineId, 'dolo-650');
+});
+
+test('does not guess a strength when the customer omits it', () => {
+  const result = rankVoiceMedicineMatches('Dolo', catalogue);
+  assert.equal(result.isConfident, false);
+  assert.equal(result.reason, 'STRENGTH_REQUIRED');
+});
+
+test('rejects a conflicting strength instead of suggesting the wrong variant', () => {
+  const result = rankVoiceMedicineMatches('Dolo 650', [catalogue[1]]);
+  assert.equal(result.isConfident, false);
+  assert.equal(result.best, null);
+});
+
+test('does not invent a medicine that is absent from the selected pharmacy catalogue', () => {
+  const result = rankVoiceMedicineMatches('Augmentin 625', catalogue);
+  assert.equal(result.isConfident, false);
+  assert.equal(result.best, null);
+});
