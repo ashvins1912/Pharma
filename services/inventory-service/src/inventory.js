@@ -4,6 +4,7 @@ import { buildInventoryAlerts } from './alerts.js';
 import { config } from './config.js';
 import { Audit, Inventory, Product, Reservation } from './models.js';
 import { queueMedicineMatch } from './medicine-match-queue.js';
+import { rankInventorySearchCandidates } from './medicine-search-ranking.js';
 
 const asPositiveQuantity = value => Number.isSafeInteger(value) && value > 0;
 const normalizeItems = items => {
@@ -112,7 +113,10 @@ export async function lookupInventory({ productIds = [], skus = [], tenantId = n
       batchNumber: listingBatch?.batchNumber || '',
       expiryDate: listingBatch?.expiryDate || null,
       tenantId: listingBatch?.tenantId || scopeTenantId,
-      branchId: listingBatch?.branchId || scopeBranchId
+      branchId: listingBatch?.branchId || scopeBranchId,
+      ...(fuzzyScoreById.has(String(product._id))
+        ? { searchRelevanceScore: fuzzyScoreById.get(String(product._id)) }
+        : {})
     };
   });
 }
@@ -236,8 +240,45 @@ export async function searchInventoryProducts({
     } }
   ];
 
-  const [result] = await Product.aggregate(pipeline).allowDiskUse(true);
-  const total = result?.metadata?.[0]?.total || 0;
+  let [result] = await Product.aggregate(pipeline).allowDiskUse(true);
+  let total = result?.metadata?.[0]?.total || 0;
+  let searchMatchType = isSearching ? 'EXACT' : 'BROWSE';
+  let fuzzyScoreById = new Map();
+
+  // Exact indexed search stays the fast path. Only when it returns no rows,
+  // run a bounded tenant-scoped fuzzy pass and rank actual catalogue products.
+  if (isSearching && total === 0) {
+    const candidateFilter = { tenantId: scopeTenantId, active: true };
+    if (category && category !== 'All') candidateFilter.category = String(category).trim();
+    if (hideRx === true || String(hideRx).toLowerCase() === 'true') candidateFilter.requiresPrescription = false;
+
+    const candidatePool = await Product.find(candidateFilter)
+      .select('_id sku name genericName strength form')
+      .sort({ name: 1, _id: 1 })
+      .limit(5000)
+      .lean();
+    const rankedCandidates = rankInventorySearchCandidates(normalizedQuery, candidatePool, {
+      limit: 100,
+      minimumScore: 70
+    });
+
+    if (rankedCandidates.length) {
+      const candidateIds = rankedCandidates.map(match => match.product._id);
+      fuzzyScoreById = new Map(rankedCandidates.map(match => [String(match.product._id), match.score]));
+      delete productMatch.$or;
+      productMatch._id = { $in: candidateIds };
+
+      const sortIndex = pipeline.findIndex(stage => stage.$sort);
+      pipeline.splice(sortIndex, 0, {
+        $set: { _searchRelevance: { $indexOfArray: [candidateIds, '$_id'] } }
+      });
+      pipeline[sortIndex + 1].$sort = { _searchRelevance: 1, name: 1, _id: 1 };
+
+      [result] = await Product.aggregate(pipeline).allowDiskUse(true);
+      total = result?.metadata?.[0]?.total || 0;
+      searchMatchType = 'FUZZY';
+    }
+  }
   const batchDto = batch => ({
     batchNumber: batch.batchNumber || '',
     expiryDate: batch.expiryDate || null,
@@ -277,6 +318,7 @@ export async function searchInventoryProducts({
     items, total, page: normalizedPage, limit: normalizedLimit,
     pages: Math.ceil(total / normalizedLimit) || 1,
     isSearching,
+    searchMatchType,
     outOfStockHidden: !isSearching && !showOutOfStock
   };
 }
