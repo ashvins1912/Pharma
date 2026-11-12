@@ -28,7 +28,7 @@ const specs = [
 const missing = specs.filter(spec => spec.command.includes('.venv') && !existsSync(spec.command));
 if (missing.length) {
   console.error('Python environments are missing. Run "npm run setup:all" first.');
-  for (const spec of missing) console.error(\`  - \${spec.name}: \${spec.command}\`);
+  for (const spec of missing) console.error(`  - ${spec.name}: ${spec.command}`);
   process.exit(1);
 }
 
@@ -37,7 +37,7 @@ const children = new Map();
 function stopAll(exitCode = 0) {
   if (stopping) return;
   stopping = true;
-  console.info('\\nStopping all Pharma development processes...');
+  console.info('\nStopping all Pharma development processes...');
   for (const child of children.values()) {
     if (child.exitCode !== null || child.signalCode !== null) continue;
     if (isWindows) {
@@ -59,16 +59,16 @@ for (const spec of specs) {
   });
   children.set(spec.name, child);
   child.on('error', error => {
-    console.error(\`[\${spec.name}] failed to start: \${error.message}\`);
+    console.error(`[${spec.name}] failed to start: ${error.message}`);
     stopAll(1);
   });
   child.on('exit', (code, signal) => {
     if (!stopping) {
-      console.error(\`[\${spec.name}] exited unexpectedly\${signal ? \` (\${signal})\` : \` with code \${code}\`}.\`);
+      console.error(`[${spec.name}] exited unexpectedly${signal ? ` (${signal})` : ` with code ${code}`}.`);
       stopAll(code || 1);
     }
   });
-  console.info(\`Started \${spec.name}\`);
+  console.info(`Started ${spec.name}`);
 }
 
 process.once('SIGINT', () => stopAll(0));
