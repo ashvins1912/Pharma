@@ -9,7 +9,6 @@ export async function scanMedicineProductLabel(file) {
   formData.append('file', file);
   const response = await apiClient.post('/api/v1/prescriptions/scan-product-label', formData);
   const result = getPayload(response);
-  if (!String(result.text || '').trim()) throw new Error('No readable product text was found. Try a clearer, closer photo.');
   return result;
 }
 
