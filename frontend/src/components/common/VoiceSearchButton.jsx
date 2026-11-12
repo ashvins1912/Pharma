@@ -90,6 +90,11 @@ export default function VoiceSearchButton({ onTranscript, onError, onListeningCh
             setIsListening(false);
             setInterimTranscript('');
 
+            // 'aborted' occurs when user cancels or toggles rapidly. Ignore silently without error toast.
+            if (event.error === 'aborted') {
+                return;
+            }
+
             let title = 'Voice Input Error';
             let message = 'Could not process audio input. Please try again.';
             let code = event.error || 'unknown';
@@ -138,7 +143,7 @@ export default function VoiceSearchButton({ onTranscript, onError, onListeningCh
         };
     }, [onTranscript, onError, showHelpGuide]);
 
-    const toggleListening = async () => {
+    const toggleListening = () => {
         if (!isSupported) {
             const errorObj = {
                 title: 'Voice Search Unsupported',
@@ -161,27 +166,19 @@ export default function VoiceSearchButton({ onTranscript, onError, onListeningCh
             setErrorState(null);
             setShowHelpGuide(false);
 
-            // Pre-flight permission prompt via getUserMedia
-            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-                try {
-                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                    stream.getTracks().forEach(track => track.stop());
-                } catch (err) {
-                    console.warn('[VoiceSearch] getUserMedia permission check notice:', err);
-                }
-            }
-
             if (recognitionRef.current) {
                 try {
                     recognitionRef.current.start();
                 } catch (err) {
                     console.warn('[VoiceSearch] Start error:', err);
-                    setErrorState({
-                        title: 'Microphone Restricted',
-                        message: 'Browser restricted direct audio capture. Select quick voice shortcuts below or unblock permissions.',
-                        code: 'START_ERROR',
-                        timestamp: Date.now()
-                    });
+                    if (err.name !== 'InvalidStateError') {
+                        setErrorState({
+                            title: 'Microphone Restricted',
+                            message: 'Browser restricted direct audio capture. Select quick voice shortcuts below or unblock permissions.',
+                            code: 'START_ERROR',
+                            timestamp: Date.now()
+                        });
+                    }
                 }
             }
         }
