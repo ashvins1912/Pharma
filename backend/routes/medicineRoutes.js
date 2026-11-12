@@ -48,6 +48,7 @@ router.get('/admin/inventory', authenticateUser, async (req, res) => {
             page: page || 1,
             limit: limit || 16,
             includeOutOfStock: true,
+            includeBatchDetails: true,
             userId: req.user?.sub || 'inventory-admin'
         });
         return res.json({
