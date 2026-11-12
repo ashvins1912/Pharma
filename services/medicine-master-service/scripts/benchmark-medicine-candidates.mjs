@@ -11,34 +11,24 @@ import { CharacterNgramCandidateIndex } from '@pharma/algorithm-kernel';
 const COLLECTION = process.env.MEDICINE_MASTER_COLLECTION || 'medicinemasters';
 const SAMPLE_SIZE = Math.max(10, Math.min(500, Number(process.env.BENCHMARK_SAMPLE_SIZE) || 100));
 const PROJECTION = { _id: 1, medicineId: 1, brandName: 1, isArchived: 1 };
-function percentile(values, fraction) {
-  if (!values.length) return 0;
-  const sorted = [...values].sort((a, b) => a - b);
-  return Number(sorted[Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * fraction))].toFixed(2));
-}
 function typoFirstCharacter(value) {
   const name = String(value || '').trim();
   if (name.length < 4) return null;
   return (name[0].toLowerCase() === 'x' ? 'z' : 'x') + name.slice(1);
-}
 function legacyPrefixTerms(records) {
   return [...new Set(records.map(record => String(record.brandName || '')
     .normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
     .replace(/[^a-z0-9]+/g, ' ').trim().slice(0, 2)).filter(term => term.length === 2))].slice(0, 120);
-}
 function ngramTerms(records) {
   return [...new Set(records.flatMap(record =>
     CharacterNgramCandidateIndex.searchTerms(record.brandName)))].slice(0, 600);
-}
-const escapeRegex = value => String(value).replace(/[.*+?^\${}()|[\]\\]/g, '\\$&');
 function buildFilter(terms, prefix) {
   return {
     isArchived: { $ne: true },
     $or: terms.map(term => ({
-      brandName: { $regex: prefix ? '^' + escapeRegex(term) : escapeRegex(term), $options: 'i' }
+      brandName: { $regex: prefix ? '^' + term : term, $options: 'i' }
     }))
   };
-}
 function explainMetrics(explain) {
   const stats = explain.executionStats || {};
   const stages = [];
@@ -58,7 +48,6 @@ function explainMetrics(explain) {
     nReturned: stats.nReturned ?? null,
     winningStages: [...new Set(stages)]
   };
-}
 
 async function main() {
   if (!process.env.MONGODB_URI) throw new Error('MONGODB_URI is required; this benchmark never writes to MongoDB.');
@@ -120,7 +109,6 @@ async function main() {
   } finally {
     await mongoose.disconnect();
   }
-}
 main().catch(error => {
   process.stderr.write((error?.stack || String(error)) + '\n');
   process.exitCode = 1;
