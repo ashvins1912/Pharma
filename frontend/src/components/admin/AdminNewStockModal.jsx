@@ -120,7 +120,7 @@ export default function AdminNewStockModal({ isOpen, onClose, onStockCreated }) 
         addToast('Image securely uploaded and optimized for this pharmacy branch.', 'success');
       }
     } catch (err) {
-      addToast(err?.response?.data?.error || err.message || 'Image upload failed.', 'error');
+      addToast(getReadableErrorMessage(err, 'Image upload failed.'), 'error');
     } finally {
       setUploadingImage(false);
     }
@@ -179,7 +179,7 @@ export default function AdminNewStockModal({ isOpen, onClose, onStockCreated }) 
         onClose();
       }
     } catch (err) {
-      addToast(err?.response?.data?.message || err?.response?.data?.error || err.message || t('saveMedicineFailed'), 'error');
+      addToast(getReadableErrorMessage(err, t('saveMedicineFailed')), 'error');
     } finally {
       setSaving(false);
     }
