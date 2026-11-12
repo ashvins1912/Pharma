@@ -47,3 +47,13 @@ test('does not auto-match when strength or dosage form is missing', () => {
   const result = rankScannedMedicineCandidates(extracted, catalogue);
   assert.notEqual(result.status, 'MATCHED');
 });
+
+
+test('rejects a candidate when one of multiple extracted strengths is missing', () => {
+  const extracted = extractMedicineLabelDetails('BrandX\n500 mg + 250 mg Tablet');
+  const result = rankScannedMedicineCandidates(extracted, [
+    { _id: 'single', name: 'BrandX', strength: '500 mg', dosageForm: 'Tablet' }
+  ]);
+  assert.equal(result.status, 'NO_MATCH');
+  assert.equal(result.best, null);
+});
