@@ -116,12 +116,18 @@ export default function VoiceSearchButton({ onTranscript, onError, onListeningCh
 
     const recognitionRef = useRef(null);
     const autoDismissTimerRef = useRef(null);
+    const callbacksRef = useRef({ onTranscript, onError, onListeningChange });
+    const medicinesRef = useRef(medicines);
+    const ttsEnabledRef = useRef(ttsEnabled);
+
+    // Keep event handlers current without rebuilding (and aborting) an active mic session.
+    callbacksRef.current = { onTranscript, onError, onListeningChange };
+    medicinesRef.current = medicines;
+    ttsEnabledRef.current = ttsEnabled;
 
     useEffect(() => {
-        if (onListeningChange) {
-            onListeningChange(isListening);
-        }
-    }, [isListening, onListeningChange]);
+        callbacksRef.current.onListeningChange?.(isListening);
+    }, [isListening]);
 
     useEffect(() => {
         const SpeechRecognition = typeof window !== 'undefined'
@@ -135,7 +141,8 @@ export default function VoiceSearchButton({ onTranscript, onError, onListeningCh
 
         try {
             const recognition = new SpeechRecognition();
-            recognition.continuous = true;
+            // A medicine search is a single command; continuous mode can hear our own TTS feedback.
+            recognition.continuous = false;
             recognition.interimResults = true;
             recognition.lang = typeof navigator !== 'undefined' && navigator.language ? navigator.language : 'en-US';
 
@@ -165,14 +172,16 @@ export default function VoiceSearchButton({ onTranscript, onError, onListeningCh
                 if (latestFinal) {
                     const cleaned = cleanSpokenQuery(latestFinal);
                     if (cleaned) {
-                        const matchResult = refineSpokenQueryWithFuzzyMatch(cleaned, medicines);
+                        // Stop capture before updating search state or speaking feedback.
+                        try { recognition.stop(); } catch {}
+                        const matchResult = refineSpokenQueryWithFuzzyMatch(cleaned, medicinesRef.current);
                         setFuzzyMatchInfo(matchResult);
                         const queryToUse = matchResult.refinedText;
 
                         setFinalText(queryToUse);
-                        if (onTranscript) onTranscript(queryToUse);
+                        callbacksRef.current.onTranscript?.(queryToUse);
 
-                        if (ttsEnabled) {
+                        if (ttsEnabledRef.current) {
                             if (matchResult.isRefined) {
                                 speakText(`Refined to ${queryToUse}`);
                             } else {
@@ -209,7 +218,7 @@ export default function VoiceSearchButton({ onTranscript, onError, onListeningCh
                 }
 
                 setErrorState({ title, message, code, timestamp: Date.now() });
-                if (onError) onError({ title, message, code });
+                callbacksRef.current.onError?.({ title, message, code });
             };
 
             recognition.onend = () => {
@@ -223,21 +232,20 @@ export default function VoiceSearchButton({ onTranscript, onError, onListeningCh
         }
 
         return () => {
-            if (recognitionRef.current) {
-                try { recognitionRef.current.abort(); } catch {}
-            }
+            try { recognition.abort(); } catch {}
+            if (recognitionRef.current === recognition) recognitionRef.current = null;
             if (autoDismissTimerRef.current) clearTimeout(autoDismissTimerRef.current);
         };
-    }, [onTranscript, onError, ttsEnabled, medicines]);
+    }, []);
 
     const handleSelectMedicine = (medName) => {
-        const matchResult = refineSpokenQueryWithFuzzyMatch(medName, medicines);
+        const matchResult = refineSpokenQueryWithFuzzyMatch(medName, medicinesRef.current);
         setFuzzyMatchInfo(matchResult);
         const queryToUse = matchResult.refinedText || medName;
 
         setFinalText(queryToUse);
-        if (onTranscript) onTranscript(queryToUse);
-        if (ttsEnabled) speakText(`Searching for ${queryToUse}`);
+        callbacksRef.current.onTranscript?.(queryToUse);
+        if (ttsEnabledRef.current) speakText(`Searching for ${queryToUse}`);
         setErrorState(null);
     };
 
@@ -255,22 +263,24 @@ export default function VoiceSearchButton({ onTranscript, onError, onListeningCh
                 code: 'UNSUPPORTED'
             };
             setErrorState(errObj);
-            if (onError) onError(errObj);
+            callbacksRef.current.onError?.(errObj);
             if (ttsEnabled) speakText('Select a medicine shortcut');
             return;
         }
 
         try {
+            // Avoid speaking over an active recognition session; the browser may transcribe the prompt.
             recognitionRef.current.start();
-            if (ttsEnabled) speakText('Listening, speak medicine name');
         } catch (err) {
             console.warn('[VoiceSearch] Start error:', err);
             if (err.name !== 'InvalidStateError') {
-                setErrorState({
+                const errObj = {
                     title: 'Microphone Restricted',
-                    message: 'Browser restricted direct microphone access. Select quick voice shortcuts below.',
+                    message: 'Browser could not start microphone access. Check site microphone permission and try again.',
                     code: 'START_ERROR'
-                });
+                };
+                setErrorState(errObj);
+                callbacksRef.current.onError?.(errObj);
             }
         }
     };
