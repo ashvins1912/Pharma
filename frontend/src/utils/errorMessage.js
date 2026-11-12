@@ -43,9 +43,10 @@ export function getReadableErrorMessage(error, fallback = 'Something went wrong.
     return '';
   };
 
+  const safeFallback = typeof fallback === 'string' ? fallback : read(fallback) || 'Something went wrong.';
   try {
-    return read(error) || fallback;
+    return read(error) || safeFallback;
   } catch {
-    return fallback;
+    return safeFallback;
   }
 }
