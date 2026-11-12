@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import SearchGroundingInfo from './SearchGroundingInfo';
 import VoiceSearchButton from './common/VoiceSearchButton';
