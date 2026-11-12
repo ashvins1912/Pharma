@@ -53,10 +53,9 @@ async function reconcileCatalogueRecordsAgainstMaster(records) {
   const canonicalKeys = [...new Set(records.map(item => item.canonicalKey).filter(Boolean))];
   const names = [...new Set(records.filter(item => item.safeNameMatch).map(item => item.brandName).filter(Boolean))];
   const searchTerms = [...new Set(records.flatMap(item => CharacterNgramCandidateIndex.searchTerms(item.brandName)))];
-  const escapedTerms = searchTerms.map(term => term.replace(/[.*+?^${}()|[\]\\]/g, '\\  const allPrefixes = [...new Set(records.map(item => key(item.brandName).slice(0, 2)).filter(value => value.length === 2))];
-  const prefixes = allPrefixes.slice(0, 120);
-  const scannedPrefixes = new Set(prefixes);
-  const prefixScanTruncated = allPrefixes.length > prefixes.length;'));
+  const escapedTerms = searchTerms.map(term => term.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&'));
+  const candidateTerms = escapedTerms.slice(0, 600);
+  const candidateTermScanTruncated = escapedTerms.length > candidateTerms.length;
   const candidateTerms = escapedTerms.slice(0, 600);
   const candidateTermScanTruncated = escapedTerms.length > candidateTerms.length;
   const clauses = [
