@@ -151,7 +151,7 @@ export default function SurplusSavingsManager({ canManage = false }) {
       addToast(status === 'ACTIVE' ? t('campaignActivated') : t('campaignPaused'), 'success');
       await loadCampaigns();
     } catch (err) {
-      addToast(err?.response?.data?.message || t('campaignStatusFailed'), 'error');
+      addToast(getReadableErrorMessage(err, t('campaignStatusFailed')), 'error');
     }
   };
 
