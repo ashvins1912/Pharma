@@ -9,14 +9,9 @@ export function normalizeToastMessage(value) {
   if (typeof value === 'string') return value;
   if (typeof value === 'number' || typeof value === 'boolean') return String(value);
   if (value == null) return '';
-  const readable = getReadableErrorMessage(value, '');
-  if (readable) return readable;
-  try {
-    const serialized = JSON.stringify(value);
-    return typeof serialized === 'string' ? serialized : 'Something went wrong.';
-  } catch {
-    return 'Something went wrong.';
-  }
+  // Do not dump arbitrary server payloads into user-visible notifications;
+  // they may contain internal metadata or sensitive diagnostic details.
+  return getReadableErrorMessage(value, 'Something went wrong.');
 }
 
 export function ToastProvider({ children }) {
