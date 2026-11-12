@@ -119,8 +119,8 @@ export default function LiveTelemetryTab() {
       const statusCode = requestError?.response?.status;
       const message = statusCode === 401 || statusCode === 403
         ? 'Access denied. This telemetry view requires an authorized administrator session.'
-        : requestError?.response?.data?.error?.message || requestError?.message || 'Telemetry could not be loaded.';
-      setError(getReadableErrorMessage(message, 'Live telemetry request failed.'));
+        : getReadableErrorMessage(requestError, 'Telemetry could not be loaded.');
+      setError(message);
       setEvents(current => [{
         id: `telemetry-error-${Date.now()}`,
         time: new Date().toISOString(),
