@@ -453,7 +453,7 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
                         type="button"
                         key={opt.id}
                         onClick={() => setDeliveryPreference(opt.id)}
-                        className={`p-2 rounded-xl text-center border text-xs font-bold transition cursor-pointer \${
+                        className={`p-2 rounded-xl text-center border text-xs font-bold transition cursor-pointer ${
                     deliveryPreference === opt.id
                       ? 'border-blue-600 bg-blue-50 text-blue-800'
                       : 'border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-600'
