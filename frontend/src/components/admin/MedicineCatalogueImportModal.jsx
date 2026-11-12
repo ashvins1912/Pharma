@@ -62,7 +62,7 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
       setBatchStatus(statusResponse.data);
       addToast('Background catalogue processing completed. Review the reconciliation report before publishing.', 'success');
     } catch (error) {
-      addToast(error.response?.data?.message || error.response?.data?.error?.message || error.message || 'Could not analyze this JSON dataset.', 'error');
+      addToast(getReadableErrorMessage(error, 'Could not analyze this JSON dataset.'), 'error');
     } finally {
       setBusy(false);
     }
@@ -88,7 +88,7 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
       setBatchStatus(batch.data);
       addToast('Catalogue import retry completed. Review the reconciliation report.', 'success');
     } catch (error) {
-      addToast(error.response?.data?.message || error.message || 'Could not retry this import job.', 'error');
+      addToast(getReadableErrorMessage(error, 'Could not retry this import job.'), 'error');
     } finally { setBusy(false); }
   };
 
@@ -101,7 +101,7 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
       setBatchStatus(statusResponse.data);
       addToast('Reconciliation approved. You can now publish this batch.', 'success');
     } catch (error) {
-      addToast(error.response?.data?.message || error.response?.data?.error?.message || 'Could not approve this reconciliation report.', 'error');
+      addToast(getReadableErrorMessage(error, 'Could not approve this reconciliation report.'), 'error');
     } finally { setBusy(false); }
   };
   const publish = async () => {
@@ -124,7 +124,7 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
         setPublished(null);
         setReviewConfirmed(false);
       }
-      addToast(payload?.message || payload?.error?.message || error.message || 'Catalogue publishing failed.', 'error');
+      addToast(getReadableErrorMessage(payload || error, 'Catalogue publishing failed.'), 'error');
     } finally {
       setBusy(false);
     }
@@ -138,7 +138,7 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
       setBatchStatus(response.data);
       addToast('Import batch status refreshed.', 'success');
     } catch (error) {
-      addToast(error.response?.data?.message || error.response?.data?.error?.message || 'Could not refresh import batch status.', 'error');
+      addToast(getReadableErrorMessage(error, 'Could not refresh import batch status.'), 'error');
     } finally { setStatusBusy(false); }
   };
 
