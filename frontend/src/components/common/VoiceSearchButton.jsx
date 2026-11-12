@@ -14,9 +14,6 @@ function cleanSpokenQuery(transcript, language = 'en') {
 }
 
 /**
- * Text-To-Speech (TTS) Feedback Helper}
-
-/**
  * Refine only when the current pharmacy catalogue contains one clear,
  * strength-compatible match. Otherwise search the words the customer spoke.
  */
