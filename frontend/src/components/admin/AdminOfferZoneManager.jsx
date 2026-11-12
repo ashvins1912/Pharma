@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { getReadableErrorMessage } from '../../utils/errorMessage';
 import { useApp } from '../../context/AppContext';
 import { useToast } from '../../context/ToastContext';
 import { useLanguage } from '../../context/LanguageContext';
@@ -37,7 +38,7 @@ export default function AdminOfferZoneManager() {
         }
       })
       .catch(error => {
-        if (active) setCampaignLoadError(error?.response?.data?.message || 'Campaigns could not be loaded.');
+        if (active) setCampaignLoadError(getReadableErrorMessage(error, 'Campaigns could not be loaded.'));
       });
     return () => { active = false; };
   }, [tenantId]);
