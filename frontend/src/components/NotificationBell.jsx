@@ -1,12 +1,28 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { useLanguage } from '../context/LanguageContext';
+import apiClient from '../api/apiClient';
 
-export default function NotificationBell({ onOpenOrders, onRequireAuth }) {
+export default function NotificationBell({ onOpenOrders, onRequireAuth, onNavigateTab }) {
   const { t, language } = useLanguage();
-  const { notifications, unreadNotificationsCount, markNotificationRead, markAllNotificationsRead, setWhatsappModalOpen, deliveryEvents, realtimeConnectionStatus } = useApp();
+  const {
+    notifications,
+    unreadNotificationsCount,
+    markNotificationRead,
+    markAllNotificationsRead,
+    setWhatsappModalOpen,
+    deliveryEvents,
+    realtimeConnectionStatus,
+    orders,
+    setActiveTrackingOrder,
+    medicineRequests,
+    openProposalModal,
+    setActiveProposalRequest
+  } = useApp();
+
   const [isOpen, setIsOpen] = useState(false);
   const [clearingAll, setClearingAll] = useState(false);
+  const [navigatingId, setNavigatingId] = useState(null);
 
   const localizedStatus = (value) => {
     const normalized = String(value || '').trim().toLowerCase().replace(/[ _-]+/g, ' ');
@@ -32,7 +48,6 @@ export default function NotificationBell({ onOpenOrders, onRequireAuth }) {
       'medicine request created': 'medicineRequestTitle',
       'proposal approved': 'proposalApprovedTitle',
       'proposal rejected': 'proposalRejectedTitle',
-
     };
     return labels[normalized] ? t(labels[normalized]) : String(value || '');
   };
@@ -79,6 +94,101 @@ export default function NotificationBell({ onOpenOrders, onRequireAuth }) {
     return { title: t(keys[0]), body: interpolate(t(keys[1])) };
   };
 
+  const handleNotificationClick = async (n) => {
+    if (navigatingId) return;
+    setNavigatingId(n.id);
+    try {
+      // 1. Instantly mark read so it is filtered out and no longer shown
+      markNotificationRead(n.id);
+      setIsOpen(false);
+
+      // 2. Action Type Direct Routing
+      if (n.actionType === 'CONNECT_WHATSAPP') {
+        setWhatsappModalOpen(true);
+        return;
+      }
+      if (n.actionType === 'VIEW_PHARMACY_CATALOG' && n.actionUrl && n.actionUrl.startsWith('/')) {
+        window.location.assign(n.actionUrl);
+        return;
+      }
+
+      const orderTargetId = n.orderId || n.orderNumber;
+      const requestTargetId = n.medicineRequestId || n.requestId || n.requestNumber;
+      const isOrderEvent = Boolean(orderTargetId) || (n.eventType && (n.eventType.startsWith('ORDER_') || n.eventType.startsWith('RIDER_') || n.eventType.startsWith('WHATSAPP_')));
+      const isRequestEvent = Boolean(requestTargetId) || (n.eventType && (n.eventType.startsWith('PROPOSAL_') || n.eventType.startsWith('MEDICINE_REQUEST_') || n.eventType.startsWith('REQUEST_')));
+
+      // 3. Deep Link Order Notifications -> Open exact OrderTrackingModal & Order History tab
+      if (isOrderEvent) {
+        let targetOrder = (orders || []).find(o =>
+          String(o._id) === String(orderTargetId) ||
+          String(o.id) === String(orderTargetId) ||
+          String(o.orderNumber) === String(orderTargetId)
+        );
+
+        if (!targetOrder && orderTargetId) {
+          try {
+            const res = await apiClient.get(`/api/orders/${encodeURIComponent(orderTargetId)}`);
+            targetOrder = res.data?.order || res.data;
+          } catch (err) {
+            console.warn('[NotificationBell] Could not fetch target order details by ID:', err);
+          }
+        }
+
+        if (targetOrder) {
+          setActiveTrackingOrder(targetOrder);
+        }
+
+        if (onNavigateTab) {
+          onNavigateTab('orders');
+        } else if (onOpenOrders) {
+          onOpenOrders();
+        }
+        return;
+      }
+
+      // 4. Deep Link Medicine Request & Proposal Notifications -> Open exact CustomerProposalModal & Requests tab
+      if (isRequestEvent) {
+        let targetRequest = (medicineRequests || []).find(r =>
+          String(r._id) === String(requestTargetId) ||
+          String(r.id) === String(requestTargetId) ||
+          String(r.requestNumber) === String(requestTargetId)
+        );
+
+        if (!targetRequest && requestTargetId) {
+          try {
+            const res = await apiClient.get(`/api/medicine-requests/${encodeURIComponent(requestTargetId)}`);
+            targetRequest = res.data?.request || res.data;
+          } catch (err) {
+            console.warn('[NotificationBell] Could not fetch target medicine request by ID:', err);
+          }
+        }
+
+        if (targetRequest) {
+          if (typeof openProposalModal === 'function') {
+            openProposalModal(targetRequest);
+          } else if (typeof setActiveProposalRequest === 'function') {
+            setActiveProposalRequest(targetRequest);
+          }
+        }
+
+        if (onNavigateTab) {
+          onNavigateTab('requests');
+        } else if (onOpenOrders) {
+          onOpenOrders();
+        }
+        return;
+      }
+
+      // 5. Default Fallback
+      if (onNavigateTab) {
+        onNavigateTab('orders');
+      } else if (onOpenOrders) {
+        onOpenOrders();
+      }
+    } finally {
+      setNavigatingId(null);
+    }
+  };
 
   return (
     <div className="relative flex-shrink-0">
@@ -151,17 +261,7 @@ export default function NotificationBell({ onOpenOrders, onRequireAuth }) {
                 return (
                 <div
                   key={n.id}
-                  onClick={() => {
-                    markNotificationRead(n.id);
-                    setIsOpen(false);
-                    if (n.actionType === 'CONNECT_WHATSAPP') {
-                      setWhatsappModalOpen(true);
-                    } else if (n.actionType === 'VIEW_PHARMACY_CATALOG' && n.actionUrl && n.actionUrl.startsWith('/')) {
-                      window.location.assign(n.actionUrl);
-                    } else if (onOpenOrders) {
-                      onOpenOrders();
-                    }
-                  }}
+                  onClick={() => handleNotificationClick(n)}
                   className={`p-3 rounded-2xl border text-xs cursor-pointer transition ${
                     n.type === 'warning'
                       ? 'border-amber-300 bg-amber-50/80 hover:bg-amber-100/70 font-semibold'
@@ -209,7 +309,15 @@ export default function NotificationBell({ onOpenOrders, onRequireAuth }) {
                     const eventLabel = localizedStatus(event.status || event.eventType || event.type || 'FULFILLMENT_UPDATE');
                     const orderLabel = event.orderNumber || event.orderId || event.aggregateId;
                     return (
-                      <div key={event.id || `${eventLabel}-${index}`} className="rounded-xl border border-slate-100 bg-slate-50 p-2.5">
+                      <div
+                        key={event.id || `${eventLabel}-${index}`}
+                        onClick={() => {
+                          if (orderLabel) {
+                            handleNotificationClick({ orderId: orderLabel, eventType: 'ORDER_STATUS_CHANGED', id: event.id });
+                          }
+                        }}
+                        className="rounded-xl border border-slate-100 bg-slate-50 p-2.5 cursor-pointer hover:bg-slate-100 transition"
+                      >
                         <div className="flex items-start justify-between gap-2">
                           <p className="text-[11px] font-bold text-slate-800">{eventLabel}</p>
                           <span className="shrink-0 text-[9px] text-slate-400">{event.timestamp ? new Date(event.timestamp).toLocaleTimeString(language) : t('recent')}</span>
@@ -227,7 +335,11 @@ export default function NotificationBell({ onOpenOrders, onRequireAuth }) {
               <button
                 onClick={() => {
                   setIsOpen(false);
-                  if (onOpenOrders) onOpenOrders();
+                  if (onNavigateTab) {
+                    onNavigateTab('orders');
+                  } else if (onOpenOrders) {
+                    onOpenOrders();
+                  }
                 }}
                 className="text-[11px] font-bold text-blue-600 hover:underline cursor-pointer"
               >
