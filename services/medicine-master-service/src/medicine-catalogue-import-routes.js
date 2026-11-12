@@ -383,6 +383,7 @@ const medicineNameNgramIndexStateSchema = new mongoose.Schema({
   _id: { type: String, required: true },
   status: { type: String, enum: ['BUILDING', 'READY', 'FAILED', 'SYNCING'], default: 'BUILDING' },
   indexedCount: { type: Number, default: 0 },
+  activeSyncs: { type: Number, default: 0 },
   version: { type: Number, default: 1 },
   updatedAt: { type: Date, default: Date.now }
 }, { collection: 'medicine_name_ngram_index_state', versionKey: false });
@@ -1339,7 +1340,7 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
       if (persistedIndexEnabled) {
         await MedicineNameNgramIndexState.updateOne(
           { _id: 'brandName-v1' },
-          { $set: { status: 'SYNCING', updatedAt: new Date() } },
+          { $set: { status: 'SYNCING', updatedAt: new Date() }, $inc: { activeSyncs: 1 } },
           { upsert: true }
         );
       }
@@ -1351,8 +1352,11 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
         await syncMedicineNameNgramIndex(indexMedicineIds);
         await MedicineNameNgramIndexState.updateOne(
           { _id: 'brandName-v1' },
-          { $set: { status: 'READY', updatedAt: new Date() } },
-          { upsert: true }
+          { $inc: { activeSyncs: -1 }, $set: { updatedAt: new Date() } }
+        );
+        await MedicineNameNgramIndexState.updateOne(
+          { _id: 'brandName-v1', activeSyncs: 0 },
+          { $set: { status: 'READY', updatedAt: new Date() } }
         );
       }
       // A master write invalidates every cached link immediately, including partial publishes.
