@@ -126,7 +126,7 @@ export default function TenantRegistry({ tenantId: selectedTenantId } = {}) {
       setNotice(status === 'ACTIVE' ? 'Branch activated.' : 'Branch deactivated.');
       await fetchBranches();
     } catch (err) {
-      setError(err?.response?.data?.message || err.message || 'Branch status could not be changed.');
+      setError(getReadableErrorMessage(err, 'Branch status could not be changed.'));
     }
   };
 
@@ -140,7 +140,7 @@ export default function TenantRegistry({ tenantId: selectedTenantId } = {}) {
       setNotice('Branch archived. Historical records have been preserved.');
       await fetchBranches();
     } catch (err) {
-      setError(err?.response?.data?.message || err.message || 'Branch could not be archived.');
+      setError(getReadableErrorMessage(err, 'Branch could not be archived.'));
     }
   };
 
