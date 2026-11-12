@@ -10,6 +10,7 @@ import {
 test('shared normalization preserves established catalogue normalization', () => {
   assert.equal(normalizeText('Dolo 650 MG TABLETS'), 'dolo 650mg tablet');
   assert.equal(normalizeText(null), '');
+  assert.equal(normalizeText(0), '');
 });
 
 test('Jaro-Winkler is bounded and handles short strings safely', () => {
