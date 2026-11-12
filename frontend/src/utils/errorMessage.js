@@ -16,25 +16,25 @@ export function getReadableErrorMessage(error, fallback = 'Something went wrong.
     // API payloads vary by service: support Axios envelopes, nested error
     // objects, validation details and common RFC-style problem fields.
     const candidates = [
-      value.response?.data?.message,
-      value.response?.data?.error,
-      value.data?.message,
-      value.data?.error,
-      value.message,
-      value.error?.message,
-      value.error,
-      value.details?.message,
-      value.details,
-      value.detail,
-      value.errors,
-      value.error_description,
-      value.title,
-      value.code
+      () => value.response?.data?.message,
+      () => value.response?.data?.error,
+      () => value.data?.message,
+      () => value.data?.error,
+      () => value.message,
+      () => value.error?.message,
+      () => value.error,
+      () => value.details?.message,
+      () => value.details,
+      () => value.detail,
+      () => value.errors,
+      () => value.error_description,
+      () => value.title,
+      () => value.code
     ];
 
-    for (const candidate of candidates) {
+    for (const getCandidate of candidates) {
       try {
-        const message = read(candidate, depth + 1);
+        const message = read(getCandidate(), depth + 1);
         if (message) return message;
       } catch {
         // Ignore hostile/throwing getters and continue to the next field.
