@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { getReadableErrorMessage } from '../utils/errorMessage';
 import apiClient from '../api/apiClient';
 import { useLanguage } from '../context/LanguageContext';
 
@@ -30,7 +31,7 @@ export default function SearchGroundingInfo({ searchQuery }) {
         }
       } catch (err) {
         if (active) {
-          setError(err?.response?.data?.error || err.message || 'Could not fetch real-time medical search grounding.');
+          setError(getReadableErrorMessage(err, 'Could not fetch real-time medical search grounding.'));
         }
       } finally {
         if (active) setLoading(false);
