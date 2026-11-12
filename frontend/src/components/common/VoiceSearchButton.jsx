@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { calculateEnsembleSimilarity, normalizeText } from '../../utils/similarity';
+import { rankVoiceMedicineMatches } from '../../utils/similarity';
 import { useApp } from '../../context/AppContext';
 
 /**
@@ -32,66 +32,24 @@ function speakText(text) {
     }
 }
 
-const POPULAR_VOICE_MEDICINES = [
-    'Dolo 650',
-    'Paracetamol 500mg',
-    'Augmentin 625 Duo',
-    'Montair-LC',
-    'Pan-40',
-    'Azithromycin 500mg',
-    'Cetirizine 10mg',
-    'Allegra 120mg'
-];
-
 /**
- * Refine spoken voice transcript against catalog using Ensemble Phonetic & Token Matching
+ * Refine only when the current pharmacy catalogue contains one clear,
+ * strength-compatible match. Otherwise search the words the customer spoke.
  */
 export function refineSpokenQueryWithFuzzyMatch(rawTranscript, catalog = []) {
     const cleaned = cleanSpokenQuery(rawTranscript);
     if (!cleaned || cleaned.length < 2) {
-        return { originalText: cleaned, refinedText: cleaned, confidence: 0, alternatives: [], isRefined: false };
+        return { originalText: cleaned, refinedText: cleaned, confidence: 0, alternatives: [], isRefined: false, reason: 'INSUFFICIENT_INPUT' };
     }
-
-    const candidates = new Map();
-    if (Array.isArray(catalog)) {
-        catalog.forEach(item => {
-            const name = item.name || item.brandName || item.brand;
-            if (name) candidates.set(name.toLowerCase(), name);
-        });
-    }
-    POPULAR_VOICE_MEDICINES.forEach(med => {
-        if (!candidates.has(med.toLowerCase())) candidates.set(med.toLowerCase(), med);
-    });
-
-    let bestMatch = cleaned;
-    let maxScore = 0;
-    const scoredList = [];
-
-    for (const [normKey, displayName] of candidates.entries()) {
-        const score = calculateEnsembleSimilarity(cleaned, displayName);
-
-        if (score >= 0.40) {
-            scoredList.push({ name: displayName, score: Math.round(score * 100) });
-        }
-
-        if (score > maxScore) {
-            maxScore = score;
-            bestMatch = displayName;
-        }
-    }
-
-    scoredList.sort((a, b) => b.score - a.score);
-    const confidence = Math.round(maxScore * 100);
-    const isRefined = maxScore >= 0.60 && bestMatch.toLowerCase() !== cleaned.toLowerCase();
-    const refinedText = isRefined ? bestMatch : cleaned;
-    const alternatives = scoredList.filter(item => item.name.toLowerCase() !== refinedText.toLowerCase()).slice(0, 3);
-
+    const ranked = rankVoiceMedicineMatches(cleaned, catalog);
     return {
         originalText: cleaned,
-        refinedText,
-        confidence,
-        isRefined,
-        alternatives
+        refinedText: ranked.isConfident ? (ranked.best.name || cleaned) : cleaned,
+        confidence: ranked.confidence,
+        isRefined: ranked.isConfident && Boolean(ranked.best?.name)
+            && normalizeText(ranked.best.name) !== normalizeText(cleaned),
+        alternatives: ranked.alternatives,
+        reason: ranked.reason
     };
 }
 
