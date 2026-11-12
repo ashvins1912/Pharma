@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { getReadableErrorMessage } from '../../utils/errorMessage';
 import apiClient from '../../api/apiClient';
 import { useLanguage } from '../../context/LanguageContext';
 
@@ -45,7 +46,7 @@ export default function AdminPaymentReminders({ canManage = false }) {
       setTotalOutstanding(Number(data.totalOutstanding || 0));
       setTruncated(Boolean(data.truncated));
     } catch (requestError) {
-      setError(requestError.message || t('couldNotLoadPayments'));
+      setError(getReadableErrorMessage(requestError, t('couldNotLoadPayments')));
     } finally {
       setLoading(false);
     }
@@ -66,7 +67,7 @@ export default function AdminPaymentReminders({ canManage = false }) {
       setNotice(`Reminder ${status.toLowerCase().replaceAll('_', ' ')} for customer ${customer.customerId.slice(-6)}.`);
       await load();
     } catch (requestError) {
-      setError(requestError.message || t('couldNotSendPaymentReminder') || t('couldNotSendReminder'));
+      setError(getReadableErrorMessage(requestError, t('couldNotSendPaymentReminder') || t('couldNotSendReminder')));
     } finally {
       setSendingId(null);
     }
