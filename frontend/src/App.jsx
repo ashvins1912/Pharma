@@ -497,25 +497,16 @@ function MainApp() {
                           >
                             <span>📍 {activeTenant ? 'Change Pharmacy' : 'Select Pharmacy'}</span>
                           </button>
-                          {user && (
-                            <button
-                              type="button"
-                              onClick={() => setProfileOpen(true)}
-                              className="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-extrabold rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-xs shrink-0"
-                            >
-                              <span>👤 Account & Security</span>
-                            </button>
-                          )}
                         </div>
                       </div>
 
                       {/* Logged-In User Quick Telemetry Cards */}
                       {user && (
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
                           <button
                             type="button"
                             onClick={() => setActiveTab('orders')}
-                            className="bg-slate-900/90 hover:bg-slate-800/90 border border-slate-800 text-left p-3 rounded-xl transition cursor-pointer space-y-0.5"
+                            className="bg-slate-900/90 hover:bg-slate-800/90 border border-slate-800 text-left p-3.5 rounded-xl transition cursor-pointer space-y-1 shadow-xs"
                           >
                             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Active Orders</span>
                             <div className="flex items-baseline justify-between">
@@ -527,7 +518,7 @@ function MainApp() {
                           <button
                             type="button"
                             onClick={() => setActiveTab('requests')}
-                            className="bg-slate-900/90 hover:bg-slate-800/90 border border-slate-800 text-left p-3 rounded-xl transition cursor-pointer space-y-0.5"
+                            className="bg-slate-900/90 hover:bg-slate-800/90 border border-slate-800 text-left p-3.5 rounded-xl transition cursor-pointer space-y-1 shadow-xs"
                           >
                             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Medicine Requests</span>
                             <div className="flex items-baseline justify-between">
@@ -539,24 +530,12 @@ function MainApp() {
                           <button
                             type="button"
                             onClick={() => setActiveTab('addresses')}
-                            className="bg-slate-900/90 hover:bg-slate-800/90 border border-slate-800 text-left p-3 rounded-xl transition cursor-pointer space-y-0.5"
+                            className="bg-slate-900/90 hover:bg-slate-800/90 border border-slate-800 text-left p-3.5 rounded-xl transition cursor-pointer space-y-1 shadow-xs"
                           >
                             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Saved Addresses</span>
                             <div className="flex items-baseline justify-between">
                               <span className="text-xl font-black text-blue-400 font-mono tabular-nums">{addressCount || 1}</span>
                               <span className="text-[10px] font-bold text-slate-400">Manage →</span>
-                            </div>
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => setProfileOpen(true)}
-                            className="bg-slate-900/90 hover:bg-slate-800/90 border border-slate-800 text-left p-3 rounded-xl transition cursor-pointer space-y-0.5"
-                          >
-                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Health Account</span>
-                            <div className="flex items-baseline justify-between">
-                              <span className="text-xs font-black text-purple-300 truncate max-w-[100px]">{user.role || 'Active'}</span>
-                              <span className="text-[10px] font-bold text-slate-400">Settings →</span>
                             </div>
                           </button>
                         </div>
