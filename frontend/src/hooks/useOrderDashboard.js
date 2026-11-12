@@ -104,7 +104,7 @@ export function useOrderDashboard() {
             await loadOrders();
             return res.data;
         } catch (err) {
-            throw new Error(err.response?.data?.message || err.message || 'Order approval failed.');
+            throw new Error(getReadableErrorMessage(err, 'Order approval failed.'));
         } finally {
             setAssignmentExecuting(false);
         }
