@@ -70,7 +70,7 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
       setRestockQuantities(initialQty);
     } catch (err) {
       console.error('Fetch restock suggestions error:', err);
-      addToast(err.response?.data?.message || err.message || 'Could not calculate restock suggestions.', 'error');
+      addToast(getReadableErrorMessage(err, 'Could not calculate restock suggestions.'), 'error');
     } finally {
       setRestockLoading(false);
     }
@@ -116,7 +116,7 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
         setShowRestockModal(false);
       }
     } catch (err) {
-      addToast(err.response?.data?.message || err.message || 'Restock application failed.', 'error');
+      addToast(getReadableErrorMessage(err, 'Restock application failed.'), 'error');
     } finally {
       setApplyingRestock(false);
     }
@@ -225,7 +225,7 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
       await loadAdminInventory(adminPage, searchTerm);
       refreshStorefrontInventory();
     } catch (err) {
-      addToast(err.message || t('saveMedicineFailed'), 'error');
+      addToast(getReadableErrorMessage(err, t('saveMedicineFailed')), 'error');
     } finally {
       setSavingMedicine(false);
     }
@@ -240,7 +240,7 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
       await loadAdminInventory(adminPage, searchTerm);
       fetchMedicines();
     } catch (err) {
-      addToast(err.message || t('archiveMedicineFailed'), 'error');
+      addToast(getReadableErrorMessage(err, t('archiveMedicineFailed')), 'error');
     }
   };
 
