@@ -280,9 +280,12 @@ export class DataMartRefreshService {
         }
 
         if (operations.length > 0) await this.dataMartModel.bulkWrite(operations, { ordered: false });
+        // Only transition stale products that are still active. Previously every
+        // refresh rewrote already-inactive documents (including timestamps and
+        // refreshId), creating avoidable recurring disk writes and index churn.
         await this.dataMartModel.updateMany(
-            { refreshId: { $ne: refreshId } },
-            { $set: { isActive: false, refreshId, metricsComputedAt: now } }
+            { isActive: true, refreshId: { $ne: refreshId } },
+            { $set: { isActive: false } }
         ).exec();
 
         return { refreshedCount: operations.length, refreshId, metricsComputedAt: now };

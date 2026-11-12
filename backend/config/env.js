@@ -52,6 +52,7 @@ const corsOriginsSchema = z.string().trim().min(1).refine(value => {
 export const envSchema = z.object({
     PORT: z.coerce.number().int().min(1).max(65535).default(isProduction ? 5000 : 3000),
     MONGO_URI: isProduction ? mongoUriSchema : optionalString(mongoUriSchema),
+    MONGO_MAX_POOL_SIZE: z.coerce.number().int().min(2).max(50).default(10),
     SUPABASE_URL: isProduction ? z.string().trim().url() : optionalString(z.string().trim().url()),
     SUPABASE_ANON_KEY: optionalString(z.string().trim().min(1)),
     SUPABASE_SERVICE_ROLE_KEY: isProduction ? z.string().trim().min(20) : optionalString(z.string().trim().min(20)),

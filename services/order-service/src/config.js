@@ -18,6 +18,7 @@ const positiveInteger = (value, fallback, max) => {
 export const config = {
   port: positiveInteger(process.env.PORT || process.env.ORDER_SERVICE_PORT, 5200, 65535),
   mongoUri: process.env.ORDER_MONGO_URI,
+  mongoMaxPoolSize: positiveInteger(process.env.MONGO_MAX_POOL_SIZE, 10, 50),
   dbName: process.env.ORDER_DB_NAME || 'pharma_orders',
   serviceAuthSecret: process.env.SERVICE_AUTH_SECRET,
   serviceJwtIssuer: process.env.SERVICE_JWT_ISSUER || 'ashvin-pharmacy',
