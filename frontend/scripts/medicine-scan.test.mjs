@@ -9,8 +9,8 @@ const catalogue = [
 ];
 
 test('validates GTIN check digits and rejects malformed values', () => {
-  assert.equal(isValidGtin('8901080000018'), true);
-  assert.equal(isValidGtin('8901080000019'), false);
+  assert.equal(isValidGtin('8901080000015'), true);
+  assert.equal(isValidGtin('8901080000016'), false);
   assert.equal(isValidGtin('12345'), false);
 });
 
