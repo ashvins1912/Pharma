@@ -628,6 +628,9 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
                       <legend className="text-xs font-extrabold text-slate-800">
                         Medicine / Product {requestedItems.length > 1 ? index + 1 : ''} <span className="text-rose-500">*</span>
                       </legend>
+                      {item.source === 'PRESCRIPTION_EXTRACTED' && (
+                        <span className="text-[9px] font-bold text-amber-700">OCR confidence {Math.round((Number(item.confidence) || 0) * 100)}% · verify</span>
+                      )}
                       {requestedItems.length > 1 && (
                           <button
                               type="button"
