@@ -59,7 +59,7 @@ async function reconcileCatalogueRecordsAgainstMaster(records) {
   const usePersistedIndex = process.env.MEDICINE_NGRAM_INDEX_ENABLED === 'true' && indexState?.status === 'READY';
   const [indexedRows, archivedIdentityRows] = await Promise.all([
     usePersistedIndex && candidateTerms.length
-      ? MedicineNameNgramIndex.find({ grams: { $in: candidateTerms }, isArchived: { $ne: true } }, { medicineId: 1 }).limit(5001).lean()
+      ? MedicineNameNgramIndex.find({ grams: { $in: candidateTerms }, isArchived: false }, { medicineId: 1 }).limit(5001).lean()
       : [],
     ids.length ? MedicineMaster.find({ medicineId: { $in: ids }, isArchived: true }, { medicineId: 1 }).lean() : []
   ]);
