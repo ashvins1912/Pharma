@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { getReadableErrorMessage } from '../../utils/errorMessage';
 import apiClient from '../../api/apiClient';
 import { useTenant } from '../../context/TenantContext';
 
@@ -30,7 +31,7 @@ export default function TenantActivityFeed({ tenantId: selectedTenantId = '' } =
       setPagination(payload.pagination || { page, totalPages: 0, total: 0 });
     } catch (err) {
       setItems([]);
-      setError(err?.response?.data?.message || 'Activity history could not be loaded.');
+      setError(getReadableErrorMessage(err, 'Activity history could not be loaded.'));
     } finally {
       setLoading(false);
     }
