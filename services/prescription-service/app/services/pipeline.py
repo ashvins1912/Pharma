@@ -363,7 +363,8 @@ def _build_ocr_variants(image: Any, cv2: Any) -> List[tuple[str, Any]]:
 def _run_ocr(file_bytes: bytes, content_type: str) -> tuple[str, str, float]:
     images: List[Any] = []
     total_pixels = 0
-    max_document_pixels = 12_000_000
+    max_document_pixels = 24_000_000
+    max_image_pixels = 12_000_000
     try:
         if content_type == "application/pdf" or file_bytes[:4] == b"%PDF":
             import fitz
@@ -393,7 +394,7 @@ def _run_ocr(file_bytes: bytes, content_type: str) -> tuple[str, str, float]:
             if img is None:
                 raise ProcessingError("OCR_DECODE", "Unable to decode image bytes")
             total_pixels = int(img.shape[0]) * int(img.shape[1])
-            if total_pixels > max_document_pixels:
+            if total_pixels > max_image_pixels:
                 raise ProcessingError("OCR_IMAGE_TOO_LARGE", "Image resolution is too large to process safely. Upload a smaller or lower-resolution scan.")
             images.append(img)
             source = "opencv+paddle"
