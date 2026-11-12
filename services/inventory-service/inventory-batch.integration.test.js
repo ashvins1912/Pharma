@@ -49,11 +49,14 @@ test('inventory lookup aggregates active batches and reservation allocates/relea
     assert.equal(search.items[0].stockQuantity, 15);
     assert.equal(search.items[0].availableQuantity, 15);
     assert.equal(search.items[0].batchCount, 2);
+    assert.equal(Object.hasOwn(search.items[0], 'batchAvailability'), false);
     assert.equal(search.items[0].basePrice, 10);
+    const detailedSearch = await searchInventoryProducts({ tenantId, branchId, query: 'Batch Stock Test', includeBatchDetails: true });
+    assert.deepEqual(detailedSearch.items[0].batchAvailability.map(batch => batch.batchNumber), ['LOT-FEFO-1', 'LOT-FEFO-2']);
     assert.equal(search.items[0].sellingPrice, 9);
     assert.equal(search.items[0].discountPercentage, 10);
     const alertSearch = await searchInventoryProducts({
-      tenantId, branchId, query: 'Batch Stock Test', includeOutOfStock: true, includeExpiredBatches: true
+      tenantId, branchId, query: 'Batch Stock Test', includeOutOfStock: true, includeExpiredBatches: true, includeBatchDetails: true
     });
     assert.equal(alertSearch.items[0].availableQuantity, 15);
     assert.equal(alertSearch.items[0].expiredStockQuantity, 100);

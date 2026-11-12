@@ -90,10 +90,10 @@ export const inventoryClient = {
     });
   },
 
-  async searchProducts({ tenantId = null, branchId = null, query = '', category = '', hideRx = false, includeOutOfStock = false, includeExpiredBatches = false, sort = 'default', page = 1, limit = 50, userId = 'backend' } = {}) {
+  async searchProducts({ tenantId = null, branchId = null, query = '', category = '', hideRx = false, includeOutOfStock = false, includeExpiredBatches = false, includeBatchDetails = false, sort = 'default', page = 1, limit = 50, userId = 'backend' } = {}) {
     return request('GET', '/api/v1/inventory/products/search', {
       userId,
-      params: { tenantId, branchId, q: query, category, hideRx, includeOutOfStock, includeExpiredBatches, sort, page, limit }
+      params: { tenantId, branchId, q: query, category, hideRx, includeOutOfStock, includeExpiredBatches, includeBatchDetails, sort, page, limit }
     });
   },
 
