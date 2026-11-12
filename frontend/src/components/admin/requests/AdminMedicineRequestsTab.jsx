@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { getReadableErrorMessage } from '../../../utils/errorMessage';
 import {
   getAdminMedicineRequests,
   getAdminMedicineRequestMetrics
@@ -56,7 +57,7 @@ export default function AdminMedicineRequestsTab({ initialData = null, initialLo
     } catch (err) {
       if (sequence !== requestSequence.current) return;
       console.error('Failed to load admin medicine requests:', err);
-      setLoadError(err?.response?.data?.message || err?.message || 'Unable to load medicine requests.');
+      setLoadError(getReadableErrorMessage(err, 'Unable to load medicine requests.'));
       setRequests([]);
     } finally {
       if (sequence === requestSequence.current) setLoading(false);
