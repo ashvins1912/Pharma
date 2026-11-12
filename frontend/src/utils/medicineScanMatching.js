@@ -95,7 +95,7 @@ export function rankScannedMedicineCandidates(extracted, catalogue = [], { minim
     }
   }
   const ranked = valid.map(item => {
-    const names = [item.name, item.brandName, item.productName].filter(Boolean);
+    const names = [item.name, item.brandName, item.brand, item.productName].filter(Boolean);
     const generics = [item.genericName, item.composition].filter(Boolean);
     const nameScore = Math.max(0, ...names.map(value => Math.max(
       calculateEnsembleSimilarity(extracted.name, value),
