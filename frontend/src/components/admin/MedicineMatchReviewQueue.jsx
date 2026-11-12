@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { getReadableErrorMessage } from '../../utils/errorMessage';
 import apiClient from '../../api/apiClient';
 import { useToast } from '../../context/ToastContext';
 
@@ -46,7 +47,7 @@ export default function MedicineMatchReviewQueue() {
       setItems(response.data?.items || []);
       setPagination(response.data?.pagination || { page, total: 0, totalPages: 0 });
     } catch (error) {
-      addToast(error.response?.data?.message || 'Could not load possible catalogue matches.', 'error');
+      addToast(getReadableErrorMessage(error, 'Could not load possible catalogue matches.'), 'error');
     } finally { setLoading(false); }
   }, [addToast]);
 
@@ -73,7 +74,7 @@ export default function MedicineMatchReviewQueue() {
         : `Discovery complete. ${Number(result.scanned || 0)} products scanned in the final batch.`, 'success');
       await load(1);
     } catch (error) {
-      addToast(error.response?.data?.message || 'Could not discover existing Store products.', 'error');
+      addToast(getReadableErrorMessage(error, 'Could not discover existing Store products.'), 'error');
     } finally { setDiscovering(false); }
   };
 
@@ -95,7 +96,7 @@ export default function MedicineMatchReviewQueue() {
       const response = await apiClient.get('/api/v1/inventory/catalogue/medicines', { params: { search: query, page: 1, limit: 10 } });
       setResults(current => ({ ...current, [id]: response.data?.items || [] }));
     } catch (error) {
-      addToast(error.response?.data?.message || 'Could not search the Medicine Master catalogue.', 'error');
+      addToast(getReadableErrorMessage(error, 'Could not search the Medicine Master catalogue.'), 'error');
     }
   };
   const chooseTarget = (id, medicine) => {
@@ -108,7 +109,7 @@ export default function MedicineMatchReviewQueue() {
       const response = await apiClient.get(`/api/v1/inventory/catalogue/medicines/${encodeURIComponent(medicineId)}`);
       const medicine = response.data?.medicine;
       if (medicine) chooseTarget(row.identityHash, medicine);
-    } catch (error) { addToast(error.response?.data?.message || 'Could not load the suggested catalogue record.', 'error'); }
+    } catch (error) { addToast(getReadableErrorMessage(error, 'Could not load the suggested catalogue record.'), 'error'); }
   };
 
   const approve = async row => {
@@ -124,7 +125,7 @@ export default function MedicineMatchReviewQueue() {
       setDrafts(current => { const next = { ...current }; delete next[row.identityHash]; return next; });
       await load(items.length === 1 && pagination.page > 1 ? pagination.page - 1 : (pagination.page || 1));
     } catch (error) {
-      addToast(error.response?.data?.message || 'Could not approve this catalogue mapping.', 'error');
+      addToast(getReadableErrorMessage(error, 'Could not approve this catalogue mapping.'), 'error');
     } finally { setSaving(false); }
   };
 
