@@ -687,6 +687,27 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
                         />
                       </div>
                     </div>
+                    {(item.dose || item.frequency || item.duration || item.instructions || item.source === 'PRESCRIPTION_OCR') && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 rounded-xl border border-amber-200 bg-amber-50/60 p-3">
+                        <div>
+                          <label className="mb-1 block text-[10px] font-bold text-slate-600">Dose (verify)</label>
+                          <input type="text" value={item.dose} onChange={e => updateRequestedItem(index, 'dose', e.target.value)} placeholder="Dose as written" className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs" />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-[10px] font-bold text-slate-600">Frequency (verify)</label>
+                          <input type="text" value={item.frequency} onChange={e => updateRequestedItem(index, 'frequency', e.target.value)} placeholder="e.g. BD / twice daily" className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs" />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-[10px] font-bold text-slate-600">Duration (verify)</label>
+                          <input type="text" value={item.duration} onChange={e => updateRequestedItem(index, 'duration', e.target.value)} placeholder="e.g. 5 days" className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs" />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-[10px] font-bold text-slate-600">Prescription instructions (verify)</label>
+                          <input type="text" value={item.instructions} onChange={e => updateRequestedItem(index, 'instructions', e.target.value)} placeholder="Instructions as written" className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs" />
+                        </div>
+                        <p className="sm:col-span-2 text-[10px] text-amber-800">OCR suggestions only — confirm these instructions against the original prescription. The pharmacist must verify before dispensing.</p>
+                      </div>
+                    )}
                   </fieldset>
               ))}
 
