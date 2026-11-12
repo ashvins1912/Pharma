@@ -8,6 +8,9 @@ import apiClient from '../../api/apiClient';
 import AddressManager from '../AddressManager';
 import ContextualHelpBanner from '../common/ContextualHelpBanner';
 import { compressImageFile } from '../../utils/imageCompressor';
+import { fetchMedicineCatalog } from '../../api/medicineCatalogService';
+import { scanMedicineProductLabel, uploadAndReadPrescription } from '../../api/medicineScanService';
+import { extractMedicineLabelDetails, isValidGtin, rankScannedMedicineCandidates } from '../../utils/medicineScanMatching';
 
 // --- Client-Side Binary Signature (Magic Number) Validator ---
 // Add this right under your import statements
@@ -84,7 +87,15 @@ const createRequestedItem = (values = {}) => ({
   dosageForm: values.dosageForm || 'Tablet',
   manufacturer: values.brand || values.manufacturer || '',
   quantity: values.quantity || 1,
-  originalAvailabilityStatus: values.originalAvailabilityStatus || 'NOT_IN_CATALOG'
+  originalAvailabilityStatus: values.originalAvailabilityStatus || 'NOT_IN_CATALOG',
+  dose: values.dose || '',
+  frequency: values.frequency || '',
+  duration: values.duration || '',
+  instructions: values.instructions || '',
+  source: values.source || 'MANUAL',
+  validationStatus: values.validationStatus || 'MANUAL',
+  confidence: Number(values.confidence) || 0,
+  requiresReview: Boolean(values.requiresReview)
 });
 
 export default function MedicineRequestModal({ isOpen, onClose }) {
@@ -112,7 +123,13 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
   const [productImageFile, setProductImageFile] = useState(null);
   const [prescriptionPreview, setPrescriptionPreview] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
-
+  const [prescriptionId, setPrescriptionId] = useState('');
+  const [prescriptionScanLoading, setPrescriptionScanLoading] = useState(false);
+  const [prescriptionScanStatus, setPrescriptionScanStatus] = useState('');
+  const [productScanLoading, setProductScanLoading] = useState(false);
+  const [productScanText, setProductScanText] = useState('');
+  const [productScanMessage, setProductScanMessage] = useState('');
+  const [productScanCandidates, setProductScanCandidates] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const submitInProgressRef = useRef(false);
 
@@ -133,6 +150,13 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
       setProductImageFile(null);
       setPrescriptionPreview(null);
       setImagePreview(null);
+      setPrescriptionId('');
+      setPrescriptionScanLoading(false);
+      setPrescriptionScanStatus('');
+      setProductScanLoading(false);
+      setProductScanText('');
+      setProductScanMessage('');
+      setProductScanCandidates([]);
       setSubmitting(false);
       return;
     }
@@ -144,6 +168,11 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
     setProductImageFile(null);
     setPrescriptionPreview(null);
     setImagePreview(null);
+    setPrescriptionId('');
+    setPrescriptionScanStatus('');
+    setProductScanText('');
+    setProductScanMessage('');
+    setProductScanCandidates([]);
     void loadAddresses();
     let cancelled = false;
     apiClient.get('/api/v1/customers/persons')
@@ -206,6 +235,8 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
     }
 
     setPrescriptionFile(file);
+    setPrescriptionId('');
+    setPrescriptionScanStatus('');
     if (file.type.startsWith('image/')) {
       setPrescriptionPreview(URL.createObjectURL(file));
     } else {
@@ -243,11 +274,163 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
     }
 
     setProductImageFile(file);
+    setProductScanText('');
+    setProductScanMessage('');
+    setProductScanCandidates([]);
     if (file.type.startsWith('image/')) {
       setImagePreview(URL.createObjectURL(file));
     } else {
       setImagePreview(null);
     }
+  };
+
+  const handleReadPrescription = async () => {
+    if (!prescriptionFile || prescriptionScanLoading) return;
+    setPrescriptionScanLoading(true);
+    setPrescriptionScanStatus('Uploading securely and reading prescription…');
+    try {
+      const result = await uploadAndReadPrescription(prescriptionFile, {
+        patientPuid,
+        onStatus: status => setPrescriptionScanStatus(
+          status.status === 'PROCESSING' || status.status === 'QUEUED'
+            ? 'Reading prescription…'
+            : 'Prescription status: ' + String(status.status || 'Uploaded').replace(/_/g, ' ')
+        )
+      });
+      setPrescriptionId(result.prescriptionId);
+      const medicines = Array.isArray(result.medicines) ? result.medicines : [];
+      if (medicines.length) {
+        const extractedItems = medicines.map(medicine => {
+          const strength = medicine.strength && typeof medicine.strength === 'object'
+            ? [medicine.strength.value, medicine.strength.unit].filter(Boolean).join(' ')
+            : medicine.strength || '';
+          const dose = medicine.dose && typeof medicine.dose === 'object'
+            ? [medicine.dose.value, medicine.dose.unit].filter(Boolean).join(' ')
+            : medicine.dose || '';
+          const duration = medicine.duration && typeof medicine.duration === 'object'
+            ? [medicine.duration.value, medicine.duration.unit].filter(Boolean).join(' ')
+            : medicine.duration || '';
+          const instructions = medicine.instructions?.value || medicine.instructions || '';
+          return createRequestedItem({
+            name: medicine.normalizedName || medicine.rawName || '',
+            strength,
+            dosageForm: /\b(capsule|cap)\b/i.test(medicine.rawName || '') ? 'Capsule'
+              : /\b(syrup|suspension)\b/i.test(medicine.rawName || '') ? 'Syrup'
+                : /\b(injection|vial)\b/i.test(medicine.rawName || '') ? 'Injection' : 'Other',
+            quantity: medicine.course?.calculatedQuantity || 1,
+            dose,
+            frequency: medicine.frequency?.raw || medicine.frequency?.normalized || '',
+            duration,
+            instructions: String(instructions || ''),
+            source: 'PRESCRIPTION_OCR',
+            validationStatus: 'OCR_REVIEW',
+            confidence: Number(medicine.confidence) || 0,
+            requiresReview: true
+          });
+        }).filter(item => item.requestedName);
+        if (extractedItems.length) {
+          setRequestedItems(current => current.length === 1 && !current[0].requestedName.trim()
+            ? extractedItems
+            : [...current, ...extractedItems]);
+        }
+        setPrescriptionScanStatus('Read ' + extractedItems.length + ' medicine line(s). Please verify every field.');
+      } else {
+        setPrescriptionScanStatus(
+          'Prescription saved for pharmacist review. No reliable medicine lines were extracted; enter the medicines manually.'
+        );
+      }
+      if (result.quality?.requiresReview || String(result.status).toUpperCase() === 'REVIEW_REQUIRED') {
+        addToast('Prescription needs pharmacist verification. Please check the extracted details.', 'warning');
+      } else {
+        addToast('Prescription scan completed. Review the extracted medicine details before submitting.', 'success');
+      }
+    } catch (error) {
+      setPrescriptionScanStatus(error?.response?.data?.detail?.message || error.message || 'Prescription scan failed. You can still attach it for pharmacist review.');
+      addToast(error?.response?.data?.detail?.message || error.message || 'Could not read this prescription.', 'error');
+    } finally {
+      setPrescriptionScanLoading(false);
+    }
+  };
+
+  const handleScanProductLabel = async () => {
+    if (!productImageFile || productScanLoading) return;
+    if (!tenantId) {
+      addToast('Select a pharmacy before searching its medicine catalogue.', 'warning');
+      return;
+    }
+    setProductScanLoading(true);
+    setProductScanMessage('Reading the product label…');
+    setProductScanCandidates([]);
+    try {
+      const ocr = await scanMedicineProductLabel(productImageFile);
+      const extracted = extractMedicineLabelDetails(ocr.text);
+      let barcode = null;
+      if (typeof window !== 'undefined' && 'BarcodeDetector' in window && typeof createImageBitmap === 'function') {
+        try {
+          const supported = await window.BarcodeDetector.getSupportedFormats();
+          const formats = ['ean_13', 'ean_8', 'upc_a'].filter(format => supported.includes(format));
+          if (formats.length) {
+            const bitmap = await createImageBitmap(productImageFile);
+            try {
+              const detected = await new window.BarcodeDetector({ formats }).detect(bitmap);
+              const valid = [...new Set(detected.map(item => String(item.rawValue || '').replace(/\D/g, '')).filter(isValidGtin))];
+              if (valid.length === 1) barcode = valid[0];
+            } finally {
+              bitmap.close?.();
+            }
+          }
+        } catch (barcodeError) {
+          console.info('[MedicineScan] Native barcode detection unavailable:', barcodeError?.message || barcodeError);
+        }
+      }
+      const scanDetails = { ...extracted, ...(barcode ? { barcode, barcodeCandidates: [barcode] } : {}) };
+      setProductScanText(ocr.text);
+      const query = scanDetails.barcode || scanDetails.name || scanDetails.normalizedText;
+      let catalogue = await fetchMedicineCatalog({ tenantId, page: 1, limit: 50, search: query });
+      let medicines = catalogue.medicines || [];
+      if (!medicines.length && scanDetails.name && query !== scanDetails.name) {
+        catalogue = await fetchMedicineCatalog({ tenantId, page: 1, limit: 50, search: scanDetails.name });
+        medicines = catalogue.medicines || [];
+      }
+      const ranked = rankScannedMedicineCandidates(scanDetails, medicines);
+      const candidates = ranked.status === 'MATCHED' && ranked.best
+        ? [{ product: ranked.best, score: Math.round(ranked.confidence * 100), exact: true }]
+        : ranked.alternatives;
+      setProductScanCandidates(candidates);
+      if (ranked.status === 'MATCHED') {
+        setProductScanMessage('Best catalogue match found. Confirm the medicine below to add it to your request.');
+      } else if (candidates.length) {
+        setProductScanMessage('Possible matches found. Select the exact strength and form, or enter the details manually.');
+      } else {
+        setProductScanMessage('Label text was read, but no catalogue match was found. Enter the medicine details manually.');
+      }
+    } catch (error) {
+      setProductScanMessage(error?.response?.data?.detail?.message || error.message || 'Could not scan this product. Try another photo.');
+      addToast(error?.response?.data?.detail?.message || error.message || 'Product scan failed.', 'error');
+    } finally {
+      setProductScanLoading(false);
+    }
+  };
+
+  const addScannedCandidate = candidate => {
+    const product = candidate?.product || candidate;
+    if (!product) return;
+    const item = createRequestedItem({
+      name: product.name || product.productName || product.brandName || product.genericName || '',
+      medicineId: product._id || product.productId || product.medicineId || null,
+      strength: product.strength || '',
+      dosageForm: product.dosageForm || product.form || 'Other',
+      brand: product.brandName || product.brand || product.manufacturer || '',
+      quantity: productScanCandidates[0]?.exact ? (extractMedicineLabelDetails(productScanText).packSize || 1) : 1,
+      source: 'PRODUCT_SCAN',
+      validationStatus: candidate.exact ? 'CATALOGUE_MATCH_REVIEW' : 'CATALOGUE_CANDIDATE_REVIEW',
+      confidence: Number(candidate.score || 0) / 100,
+      requiresReview: true
+    });
+    setRequestedItems(current => current.length === 1 && !current[0].requestedName.trim()
+      ? [item]
+      : [...current, item]);
+    addToast('Medicine details added. Please review before submitting.', 'success');
   };
 
   const handleSubmit = async (e) => {
@@ -286,8 +469,8 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
           dosageForm: item.dosageForm.trim(),
           manufacturer: item.manufacturer.trim(),
           quantity: Math.max(1, Number(item.quantity) || 1),
-          source: 'MANUAL',
-          validationStatus: 'MANUAL'
+          source: item.source || 'MANUAL',
+          validationStatus: item.validationStatus || 'MANUAL'
         }));
 
       formData.append('requestedItems', JSON.stringify(requestItems));
@@ -304,7 +487,9 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
       formData.append('customerNote', customerNote.trim());
       formData.append('customerPhone', user?.user_metadata?.mobile || '');
 
-      if (prescriptionFile) {
+      if (prescriptionId) {
+        formData.append('prescriptionId', prescriptionId);
+      } else if (prescriptionFile) {
         formData.append('prescription', prescriptionFile);
       }
       if (productImageFile) {
@@ -366,6 +551,64 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
 
           {/* Request Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
+
+            <section className="rounded-2xl border border-indigo-200 bg-indigo-50/60 p-3 sm:p-4 space-y-3" aria-label="Medicine scanning tools">
+              <div>
+                <h4 className="text-xs font-black text-slate-800">Scan medicine or prescription</h4>
+                <p className="mt-1 text-[10px] leading-relaxed text-slate-600">Use your phone camera or upload a clear photo. Scans only suggest details; verify every medicine before sending your request.</p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <label className="rounded-xl border border-indigo-200 bg-white p-3 text-xs font-bold text-indigo-800 cursor-pointer">
+                  <span className="block">Scan product / medicine pack</span>
+                  <span className="mt-1 block text-[10px] font-normal text-slate-500">Camera or image upload</span>
+                  <input type="file" accept="image/jpeg,image/png,image/webp" capture="environment" onChange={handleProductImageChange} className="mt-2 block w-full text-[10px]" />
+                </label>
+                <label className="rounded-xl border border-indigo-200 bg-white p-3 text-xs font-bold text-indigo-800 cursor-pointer">
+                  <span className="block">Scan doctor prescription</span>
+                  <span className="mt-1 block text-[10px] font-normal text-slate-500">Camera, image or PDF</span>
+                  <input type="file" accept="application/pdf,image/jpeg,image/png,image/webp,image/heic,image/heif" capture="environment" onChange={handlePrescriptionChange} className="mt-2 block w-full text-[10px]" />
+                </label>
+              </div>
+              {productImageFile && (
+                <div className="rounded-xl bg-white border border-slate-200 p-2 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[10px] font-semibold text-slate-600 truncate">{productImageFile.name}</span>
+                    <button type="button" onClick={handleScanProductLabel} disabled={productScanLoading} className="shrink-0 rounded-lg bg-indigo-600 px-3 py-2 text-[10px] font-bold text-white disabled:opacity-50">
+                      {productScanLoading ? 'Scanning…' : 'Read product details'}
+                    </button>
+                  </div>
+                  {imagePreview && <img src={imagePreview} alt="Selected medicine package" className="h-24 max-w-full rounded-lg object-contain" />}
+                  {productScanMessage && <p className="text-[10px] text-slate-600" role="status">{productScanMessage}</p>}
+                  {productScanText && <p className="text-[10px] text-slate-500 line-clamp-3">{productScanText}</p>}
+                  {productScanCandidates.length > 0 && (
+                    <div className="space-y-1.5">
+                      {productScanCandidates.slice(0, 5).map((candidate, index) => {
+                        const product = candidate.product || candidate;
+                        return (
+                          <button type="button" key={product._id || product.productId || product.name || index} onClick={() => addScannedCandidate(candidate)} className="w-full rounded-lg border border-slate-200 p-2 text-left hover:border-indigo-400">
+                            <span className="block text-[11px] font-bold text-slate-800">{product.name || product.productName || product.brandName || 'Catalogue medicine'}</span>
+                            <span className="block text-[10px] text-slate-500">{[product.strength, product.dosageForm || product.form, product.manufacturer || product.brand].filter(Boolean).join(' • ')} {candidate.score != null ? ' • ' + candidate.score + '%' : ''}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+              {prescriptionFile && (
+                <div className="rounded-xl bg-white border border-slate-200 p-2 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[10px] font-semibold text-slate-600 truncate">{prescriptionFile.name}</span>
+                    <button type="button" onClick={handleReadPrescription} disabled={prescriptionScanLoading} className="shrink-0 rounded-lg bg-indigo-600 px-3 py-2 text-[10px] font-bold text-white disabled:opacity-50">
+                      {prescriptionScanLoading ? 'Reading…' : prescriptionId ? 'Read again' : 'Read prescription'}
+                    </button>
+                  </div>
+                  {prescriptionPreview && <img src={prescriptionPreview} alt="Selected prescription" className="h-24 max-w-full rounded-lg object-contain" />}
+                  {prescriptionScanStatus && <p className="text-[10px] text-slate-600" role="status">{prescriptionScanStatus}</p>}
+                  {prescriptionId && <p className="text-[10px] font-semibold text-emerald-700">Prescription securely uploaded and linked to this request.</p>}
+                </div>
+              )}
+            </section>
 
             <div className="space-y-3">
               {requestedItems.map((item, index) => (
