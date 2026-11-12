@@ -123,7 +123,7 @@ export async function lookupInventory({ productIds = [], skus = [], tenantId = n
 
 export async function searchInventoryProducts({
   tenantId = null, branchId = null, query = '', category = '', hideRx = false,
-  includeOutOfStock = false, includeExpiredBatches = false, sort = 'default', page = 1, limit = 50
+  includeOutOfStock = false, includeExpiredBatches = false, includeBatchDetails = false, sort = 'default', page = 1, limit = 50
 } = {}) {
   const scopeTenantId = typeof tenantId === 'string' ? tenantId.trim() : '';
   const scopeBranchId = typeof branchId === 'string' ? branchId.trim() : '';
@@ -207,7 +207,8 @@ export async function searchInventoryProducts({
         } }, 0] },
         { $arrayElemAt: ['$activeBatches', 0] }
       ] },
-      expiredStockQuantity: { $sum: { $map: { input: '$expiredBatches', as: 'batch', in: { $ifNull: ['$$batch.stockQuantity', 0] } } } }
+      expiredStockQuantity: { $sum: { $map: { input: '$expiredBatches', as: 'batch', in: { $ifNull: ['$batch.stockQuantity', 0] } } } },
+      activeBatchCount: { $size: '$activeBatches' }
     } },
     ...(!isSearching && !showOutOfStock ? [{ $match: { availableQuantity: { $gt: 0 } } }] : []),
     { $set: {
@@ -234,7 +235,8 @@ export async function searchInventoryProducts({
           category: 1, requiresPrescription: 1, baseCostPrice: 1,
           discountPercentage: 1, marginTier: 1, price: 1, sellingPrice: 1,
           stockQuantity: 1, reservedQuantity: 1, availableQuantity: 1,
-          activeBatches: 1, expiredBatches: 1, listingBatch: 1, expiredStockQuantity: 1
+          ...(includeBatchDetails ? { activeBatches: 1, expiredBatches: 1 } : {}),
+          activeBatchCount: 1, listingBatch: 1, expiredStockQuantity: 1
         } }
       ]
     } }
@@ -306,9 +308,12 @@ export async function searchInventoryProducts({
       stock: product.stockQuantity, quantity: product.availableQuantity,
       stockStatus: product.availableQuantity > 10 ? 'IN_STOCK' : product.availableQuantity > 0 ? 'LOW_STOCK' : 'OUT_OF_STOCK',
       batchNumber: listingBatch?.batchNumber || '', expiryDate: listingBatch?.expiryDate || null,
-      batchCount: batches.length, expiredStockQuantity: showExpired ? (product.expiredStockQuantity || 0) : 0,
-      expiredBatchAvailability: expiredBatches.map(batchDto),
-      batchAvailability: batches.map(batchDto),
+      batchCount: product.activeBatchCount ?? batches.length,
+      expiredStockQuantity: showExpired ? (product.expiredStockQuantity || 0) : 0,
+      ...(includeBatchDetails ? {
+        expiredBatchAvailability: expiredBatches.map(batchDto),
+        batchAvailability: batches.map(batchDto)
+      } : {}),
       tenantId: listingBatch?.tenantId || scopeTenantId,
       branchId: listingBatch?.branchId || scopeBranchId
     };
