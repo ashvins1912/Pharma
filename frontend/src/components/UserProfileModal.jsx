@@ -70,7 +70,7 @@ export default function UserProfileModal({ isOpen, onClose, onNavigate }) {
         onTouchMove={(e) => e.preventDefault()}
         aria-hidden="true"
       />
-      <div className="pharma-modal-surface relative z-10 m-auto flex h-[560px] sm:h-[600px] max-h-[85vh] min-h-0 w-full max-w-lg flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-slate-50 text-slate-800 shadow-2xl overscroll-contain">
+      <div className="pharma-modal-surface relative z-10 m-auto flex h-[540px] sm:h-[580px] min-h-[540px] sm:min-h-[580px] max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-slate-50 text-slate-800 shadow-2xl overscroll-contain">
         <header className="relative shrink-0 bg-gradient-to-r from-blue-700 to-indigo-800 px-5 pt-5 pb-4 text-white w-full rounded-t-[28px]">
           <button onClick={onClose} aria-label={t("close")} className="absolute right-4 top-4 h-8 w-8 rounded-full bg-white/10 text-white/80 hover:bg-white/20">×</button>
           <div className="flex items-center gap-3 pr-8">
@@ -98,7 +98,7 @@ export default function UserProfileModal({ isOpen, onClose, onNavigate }) {
           <TabButton active={tab==='security'} onClick={()=>setTab('security')}>{t('security')}</TabButton>
         </div>
 
-        <main className="content-area min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
+        <main className="content-area flex-1 min-h-[320px] sm:min-h-[360px] overflow-y-auto p-4 sm:p-5">
           {tab==='overview' && <div className="space-y-3">
             <div className="grid grid-cols-2 gap-2">
               <div className="rounded-2xl bg-slate-50 p-3"><p className="text-[10px] font-bold text-slate-400">{t('emailAddress')}</p><p className="mt-1 truncate text-xs font-black text-slate-800" title={email}>{email}</p><p className={`mt-1 text-[9px] font-bold ${emailVerified?'text-emerald-600':'text-amber-600'}`}>{emailVerified?`✓ ${t('verified')}`:t('notVerified')}</p></div>
