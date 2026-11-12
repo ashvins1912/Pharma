@@ -68,6 +68,8 @@ function MainApp() {
   const {
     cart,
     orders,
+    medicineRequests,
+    addresses,
     activeTrackingOrder,
     setActiveTrackingOrder,
     whatsappModalOpen,
