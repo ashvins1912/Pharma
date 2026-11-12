@@ -12,6 +12,7 @@ import { useToast } from './ToastContext';
 import { getUnreadNotificationsCount } from '../utils/notificationCount.js';
 import useGlobalStore from '../store/useGlobalStore';
 import { useActionLoading, LOADING_ACTIONS } from './LoadingContext';
+import { getReadableErrorMessage } from '../utils/errorMessage';
 
 const AppContext = createContext(null);
 
@@ -459,7 +460,7 @@ export function AppProvider({ children }) {
       // Do not synthesize local IDs here: they cannot be acknowledged across sessions.
     } catch (error) {
       console.error('Failed to load customer medicine requests:', error);
-      setMedicineRequestsError(error.message || 'Medicine requests are temporarily unavailable. Please try again in a moment.');
+      setMedicineRequestsError(getReadableErrorMessage(error, 'Medicine requests are temporarily unavailable. Please try again in a moment.'));
     } finally {
       if (!silent && requestSequence === medicineRequestLoadSequence.current) setLoadingMedicineRequests(false);
     }
