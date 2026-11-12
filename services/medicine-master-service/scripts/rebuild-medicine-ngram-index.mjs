@@ -37,7 +37,7 @@ async function main() {
 
     await state.updateOne(
       { _id: 'brandName-v1' },
-      { $set: { status: 'BUILDING', version: 1, updatedAt: new Date() } },
+      { $set: { status: 'BUILDING', version: 1, activeSyncs: 0, updatedAt: new Date() } },
       { upsert: true }
     );
     await index.createIndex({ medicineId: 1 }, { unique: true, name: 'medicine_id_unique' });
