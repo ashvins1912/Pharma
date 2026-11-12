@@ -3,7 +3,7 @@
  * Domain-specific medicine safety rules intentionally live in their owning services.
  */
 export function normalizeText(value) {
-  if (value === null || value === undefined) return '';
+  if (!value) return '';
   return String(value)
     .toLowerCase()
     .replace(/[^a-z0-9\s]/gi, '')
