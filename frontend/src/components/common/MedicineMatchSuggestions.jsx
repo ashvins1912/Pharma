@@ -13,7 +13,7 @@ export default function MedicineMatchSuggestions({ query, tenantId, catalogue = 
 
   useEffect(() => {
     const cleaned = String(query || '').trim();
-    if (cleaned.length < 3 || !tenantId) {
+    if (cleaned.length < 3 || !tenantId || catalogue.length) {
       setRemoteCatalogue([]);
       setError('');
       setLoading(false);
@@ -43,7 +43,7 @@ export default function MedicineMatchSuggestions({ query, tenantId, catalogue = 
       }
     }, 300);
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [query, tenantId]);
+  }, [query, tenantId, catalogue.length]);
 
   const matches = useMemo(() => {
     const source = catalogue.length ? catalogue : remoteCatalogue;
