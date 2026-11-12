@@ -436,18 +436,23 @@ router.post('/', authenticateUser, requirePermission('medicine_requests.create')
                 requestedItems = [];
             }
         }
-        if (!requestedItems || !requestedItems.length) {
-            // Single-item shorthand support from form fields
-            requestedItems = [
-                {
-                    requestedName: req.body.requestedName || req.body.medicineName || '',
+        if (!Array.isArray(requestedItems)) requestedItems = [];
+        if (!requestedItems.length) {
+            // Preserve legacy single-item shorthand, but allow prescription-only
+            // requests to remain item-empty until pharmacist review. A synthetic
+            // blank medicine row violates the request schema and misrepresents
+            // an OCR result that could not be read.
+            const shorthandName = String(req.body.requestedName || req.body.medicineName || '').trim();
+            if (shorthandName) {
+                requestedItems = [{
+                    requestedName: shorthandName,
                     strength: req.body.strength || '',
                     dosageForm: req.body.dosageForm || '',
                     manufacturer: req.body.manufacturer || '',
                     quantity: Number(req.body.quantity) || 1,
                     originalAvailabilityStatus: req.body.originalAvailabilityStatus || 'NOT_IN_CATALOG'
-                }
-            ];
+                }];
+            }
         }
 
         let prescriptionUrl = req.body.prescriptionUrl || null;
