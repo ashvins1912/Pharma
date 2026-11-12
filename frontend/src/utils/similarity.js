@@ -301,9 +301,9 @@ const getVoiceNumbers = value => normalizeVoiceMedicineText(value).match(/\d+(?:
 function scoreVoiceCandidate(query, candidate) {
     const queryKey = normalizeVoiceMedicineText(query);
     const fields = [
-        candidate.brandName, candidate.brand, candidate.name, candidate.productName,
+        candidate.brandName, candidate.name, candidate.productName,
         candidate.genericName, candidate.composition,
-        candidate.strength ? `${candidate.brandName || candidate.brand || candidate.name || ''} ${candidate.strength}` : '',
+        candidate.strength ? `${candidate.brandName || candidate.name || ''} ${candidate.strength}` : '',
         candidate.strength ? `${candidate.genericName || ''} ${candidate.strength}` : ''
     ].filter(value => typeof value === 'string' && value.trim());
     if (!queryKey || !fields.length) return 0;
@@ -351,7 +351,7 @@ export function rankVoiceMedicineMatches(query, catalog = []) {
         .filter(item => item && typeof item === 'object')
         .map(item => {
             const score = scoreVoiceCandidate(cleanedQuery, item);
-            const name = item.name || item.productName || item.brandName || item.brand || item.genericName || '';
+            const name = item.name || item.productName || item.brandName || item.genericName || '';
             const strength = String(item.strength || '').trim();
             const form = String(item.dosageForm || item.form || '').trim();
             const queryNumbers = getVoiceNumbers(cleanedQuery);
