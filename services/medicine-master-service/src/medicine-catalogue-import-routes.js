@@ -71,7 +71,7 @@ async function reconcileCatalogueRecordsAgainstMaster(records) {
     ...(names.length ? [{ brandName: { $in: names } }] : []),
     ...(usePersistedIndex
       ? (indexedCandidateIds.length ? [{ medicineId: { $in: indexedCandidateIds } }] : [])
-      : candidateTerms.map(term => ({ brandName: { $regex: term, $options: 'i' } }))
+      : candidateTerms.map(term => ({ brandName: { $regex: term, $options: 'i' } })))
   ];
   const candidates = clauses.length ? await MedicineMaster.find({ $or: clauses, isArchived: { $ne: true } }, {
     _id: 1, medicineId: 1, canonicalKey: 1, brandName: 1, genericName: 1, composition: 1,
