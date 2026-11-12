@@ -30,7 +30,7 @@ export function parseVoiceCommand(transcript, catalog = []) {
     if (!text) return { intent: 'UNKNOWN', label: 'No input', spokenResponse: '' };
 
     // 1. ORDERS / HISTORY / TRACKING
-    if (/\\b(orders|history|tracking|track|receipt|status)\\b/i.test(text) || /\\bmy order\\b/i.test(text)) {
+    if (/\b(orders|history|tracking|track|receipt|status)\b/i.test(text) || /\bmy order\b/i.test(text)) {
         return {
             intent: 'OPEN_ORDERS',
             label: '📦 Open Orders & Tracking',
