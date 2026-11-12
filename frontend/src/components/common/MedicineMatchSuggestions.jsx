@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { getReadableErrorMessage } from '../../utils/errorMessage';
 import { fetchMedicineCatalog } from '../../api/medicineCatalogService';
 import { rankMedicineTextMatches } from '../../utils/medicineScanMatching';
 
@@ -36,7 +37,7 @@ export default function MedicineMatchSuggestions({ query, tenantId, catalogue = 
       } catch (err) {
         if (!cancelled) {
           setRemoteCatalogue([]);
-          setError(err?.message || 'Could not load catalogue suggestions.');
+          setError(getReadableErrorMessage(err, 'Could not load catalogue suggestions.'));
         }
       } finally {
         if (!cancelled) setLoading(false);
