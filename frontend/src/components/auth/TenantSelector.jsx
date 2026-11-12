@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { getReadableErrorMessage } from '../../utils/errorMessage';
 import apiClient from '../../api/apiClient';
 import { useTenant } from '../../context/TenantContext';
 import { useLanguage } from '../../context/LanguageContext';
@@ -88,7 +89,7 @@ export default function TenantSelector({ onTenantSelected }) {
         if (found) setActiveTenant(found);
       }
     } catch (err) {
-      setError(err?.response?.data?.message || err.message || 'Failed to fetch available tenants');
+      setError(getReadableErrorMessage(err, 'Failed to fetch available tenants'));
     } finally {
       setLoading(false);
     }
