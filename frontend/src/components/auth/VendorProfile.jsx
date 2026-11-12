@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { getReadableErrorMessage } from '../../utils/errorMessage';
 import apiClient from '../../api/apiClient';
 import { useLanguage } from '../../context/LanguageContext';
 
@@ -15,7 +16,7 @@ export default function VendorProfile() {
       const response = await apiClient.get('/api/vendor/profile');
       setProfileData(response.data);
     } catch (err) {
-      setError(err?.response?.data?.message || err.message || 'Failed to fetch vendor profile');
+      setError(getReadableErrorMessage(err, 'Failed to fetch vendor profile'));
     } finally {
       setLoading(false);
     }
