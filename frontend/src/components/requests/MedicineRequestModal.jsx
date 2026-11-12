@@ -432,7 +432,7 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
       strength: product.strength || '',
       dosageForm: product.dosageForm || product.form || 'Other',
       brand: product.brandName || product.brand || product.manufacturer || '',
-      quantity: productScanCandidates[0]?.exact ? (extractMedicineLabelDetails(productScanText).packSize || 1) : 1,
+      quantity: 1,
       source: 'MANUAL',
       validationStatus: 'REVIEW_REQUIRED',
       confidence: Number(candidate.score || 0) / 100,
