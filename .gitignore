@@ -71,3 +71,8 @@ Thumbs.db
 .local-logs/
 bun.lock
 *.lockb
+
+# Isolated Python environments and bytecode
+**/.venv/
+**/__pycache__/
+*.py[cod]
