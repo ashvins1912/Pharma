@@ -1,43 +1,27 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { normalizeText, rankVoiceMedicineMatches } from '../../utils/similarity';
 import { useApp } from '../../context/AppContext';
+import { useLanguage } from '../../context/LanguageContext';
+import { getVoiceLocale, getVoiceResponse, speakVoiceText, stripVoiceSearchPrefix } from './voiceLanguage';
 
 /**
  * Clean up common spoken prefixes in voice search
  * e.g. "search for Dolo 650" -> "Dolo 650"
  */
-function cleanSpokenQuery(transcript) {
+function cleanSpokenQuery(transcript, language = 'en') {
     if (!transcript) return '';
-    return transcript
-        .replace(/^(search for|search|find me|look up|get me|where is|buy|order|show me|find)\s+/i, '')
-        .trim();
+    return stripVoiceSearchPrefix(transcript, language);
 }
 
 /**
- * Text-To-Speech (TTS) Feedback Helper
- */
-function speakText(text) {
-    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-        try {
-            window.speechSynthesis.cancel();
-            const utterance = new SpeechSynthesisUtterance(text);
-            utterance.rate = 1.0;
-            utterance.pitch = 1.0;
-            utterance.volume = 1.0;
-            utterance.lang = 'en-US';
-            window.speechSynthesis.speak(utterance);
-        } catch (e) {
-            console.warn('[VoiceSearch] Speech synthesis failed:', e);
-        }
-    }
-}
+ * Text-To-Speech (TTS) Feedback Helper}
 
 /**
  * Refine only when the current pharmacy catalogue contains one clear,
  * strength-compatible match. Otherwise search the words the customer spoke.
  */
-export function refineSpokenQueryWithFuzzyMatch(rawTranscript, catalog = []) {
-    const cleaned = cleanSpokenQuery(rawTranscript);
+export function refineSpokenQueryWithFuzzyMatch(rawTranscript, catalog = [], language = 'en') {
+    const cleaned = cleanSpokenQuery(rawTranscript, language);
     if (!cleaned || cleaned.length < 2) {
         return { originalText: cleaned, refinedText: cleaned, confidence: 0, alternatives: [], isRefined: false, reason: 'INSUFFICIENT_INPUT' };
     }
@@ -54,6 +38,7 @@ export function refineSpokenQueryWithFuzzyMatch(rawTranscript, catalog = []) {
 }
 
 export default function VoiceSearchButton({ onTranscript, onError, onListeningChange, currentQuery = '', className = '' }) {
+    const { language = 'en' } = useLanguage();
     let medicines = [];
     try {
         const app = useApp();
@@ -87,123 +72,65 @@ export default function VoiceSearchButton({ onTranscript, onError, onListeningCh
         callbacksRef.current.onListeningChange?.(isListening);
     }, [isListening]);
 
+
     useEffect(() => {
-        const SpeechRecognition = typeof window !== 'undefined'
-            ? (window.SpeechRecognition || window.webkitSpeechRecognition)
-            : null;
-
-        if (!SpeechRecognition) {
-            setIsSupported(false);
-            return;
-        }
-
+        const SpeechRecognition = typeof window !== 'undefined' ? (window.SpeechRecognition || window.webkitSpeechRecognition) : null;
+        if (!SpeechRecognition) { setIsSupported(false); return undefined; }
+        let recognition = null;
         try {
-            const recognition = new SpeechRecognition();
-            // A medicine search is a single command; continuous mode can hear our own TTS feedback.
+            recognition = new SpeechRecognition();
             recognition.continuous = false;
             recognition.interimResults = true;
-            recognition.lang = typeof navigator !== 'undefined' && navigator.language ? navigator.language : 'en-US';
-
-            recognition.onstart = () => {
-                setIsListening(true);
-                setErrorState(null);
-                setInterimTranscript('');
-            };
-
+            recognition.lang = getVoiceLocale(language);
+            recognition.onstart = () => { setIsListening(true); setErrorState(null); setInterimTranscript(''); };
             recognition.onresult = (event) => {
-                let currentInterim = '';
-                let latestFinal = '';
-
+                let interim = '', finalText = '';
                 for (let i = event.resultIndex; i < event.results.length; i++) {
-                    const transcriptText = event.results[i][0].transcript;
-                    if (event.results[i].isFinal) {
-                        latestFinal += transcriptText;
-                    } else {
-                        currentInterim += transcriptText;
-                    }
+                    const value = event.results[i][0].transcript;
+                    if (event.results[i].isFinal) finalText += value; else interim += value;
                 }
-
-                if (currentInterim) {
-                    setInterimTranscript(currentInterim);
-                }
-
-                if (latestFinal) {
-                    const cleaned = cleanSpokenQuery(latestFinal);
-                    if (cleaned) {
-                        // Stop capture before updating search state or speaking feedback.
-                        try { recognition.stop(); } catch {}
-                        const matchResult = refineSpokenQueryWithFuzzyMatch(cleaned, medicinesRef.current);
-                        setFuzzyMatchInfo(matchResult);
-                        const queryToUse = matchResult.refinedText;
-
-                        setFinalText(queryToUse);
-                        callbacksRef.current.onTranscript?.(queryToUse);
-
-                        if (ttsEnabledRef.current) {
-                            if (matchResult.isRefined) {
-                                speakText(`Refined to ${queryToUse}`);
-                            } else {
-                                speakText(`Searching for ${queryToUse}`);
-                            }
-                        }
-                        setInterimTranscript('');
-                    }
+                if (interim) setInterimTranscript(interim);
+                if (finalText.trim()) {
+                    try { recognition.stop(); } catch {}
+                    const match = refineSpokenQueryWithFuzzyMatch(finalText, medicinesRef.current, language);
+                    setFuzzyMatchInfo(match); setFinalText(match.refinedText);
+                    callbacksRef.current.onTranscript?.(match.refinedText);
+                    if (ttsEnabledRef.current) speakVoiceText(getVoiceResponse(match.isRefined ? 'MATCHED' : 'SEARCHING', language, match.refinedText), language);
+                    setInterimTranscript('');
                 }
             };
-
             recognition.onerror = (event) => {
-                console.warn('[VoiceSearch] Speech Recognition Error:', event.error);
+                console.warn('[VoiceSearch] Speech recognition error:', event.error);
                 setIsListening(false);
-
                 if (event.error === 'aborted') return;
-
-                let title = 'Voice Input Notice';
-                let message = 'Microphone input ended. Select a quick voice shortcut below or try speaking again.';
-                let code = event.error || 'UNKNOWN';
-
-                if (event.error === 'not-allowed' || event.error === 'permission-denied') {
-                    title = 'Microphone Access Blocked';
-                    message = 'Browser permission is blocked in this window. Allow microphone access in site settings or select quick voice shortcuts.';
-                    code = 'NOT_ALLOWED';
-                } else if (event.error === 'no-speech') {
-                    title = 'No Speech Heard';
-                    message = 'No spoken sound detected. Speak clearly into your mic or tap a medicine shortcut below.';
-                    code = 'NO_SPEECH';
-                } else if (event.error === 'network') {
-                    title = 'Voice Network Error';
-                    message = 'Voice recognition service unreachable. You can select a quick voice shortcut below.';
-                    code = 'NETWORK';
-                }
-
-                setErrorState({ title, message, code, timestamp: Date.now() });
-                callbacksRef.current.onError?.({ title, message, code });
+                const errors = {
+                    'not-allowed': ['Microphone Access Blocked', 'Allow microphone access in your browser site settings.', 'NOT_ALLOWED'],
+                    'service-not-allowed': ['Speech Service Unavailable', 'The browser speech service is unavailable for this site.', 'SERVICE_NOT_ALLOWED'],
+                    'audio-capture': ['Microphone Not Found', 'Check that a microphone is connected and enabled.', 'AUDIO_CAPTURE'],
+                    network: ['Voice Network Error', 'Speech recognition could not connect. Check your internet connection.', 'NETWORK'],
+                    'no-speech': ['No Speech Heard', 'No speech was detected. Try speaking clearly and again.', 'NO_SPEECH'],
+                    'language-not-supported': ['Language Not Supported', 'This browser does not support speech recognition in the selected language.', 'LANGUAGE_UNSUPPORTED']
+                };
+                const [title, message, code] = errors[event.error] || ['Voice Input Notice', 'Voice recognition stopped. Please try again.', event.error || 'UNKNOWN'];
+                const err = { title, message, code, timestamp: Date.now() }; setErrorState(err); callbacksRef.current.onError?.(err);
             };
-
-            recognition.onend = () => {
-                setIsListening(false);
-            };
-
-            recognitionRef.current = recognition;
-        } catch (err) {
-            console.warn('[VoiceSearch] Failed to instantiate SpeechRecognition:', err);
-            setIsSupported(false);
-        }
-
+            recognition.onend = () => setIsListening(false);
+            recognitionRef.current = recognition; setIsSupported(true);
+        } catch (error) { console.warn('[VoiceSearch] Recognition initialization failed:', error); setIsSupported(false); }
         return () => {
-            try { recognition.abort(); } catch {}
-            if (recognitionRef.current === recognition) recognitionRef.current = null;
+            if (recognition) { try { recognition.abort(); } catch {} if (recognitionRef.current === recognition) recognitionRef.current = null; }
             if (autoDismissTimerRef.current) clearTimeout(autoDismissTimerRef.current);
         };
-    }, []);
+    }, [language]);
 
     const handleSelectMedicine = (medName) => {
-        const matchResult = refineSpokenQueryWithFuzzyMatch(medName, medicinesRef.current);
+        const matchResult = refineSpokenQueryWithFuzzyMatch(medName, medicinesRef.current, language);
         setFuzzyMatchInfo(matchResult);
         const queryToUse = matchResult.refinedText || medName;
 
         setFinalText(queryToUse);
         callbacksRef.current.onTranscript?.(queryToUse);
-        if (ttsEnabledRef.current) speakText(`Searching for ${queryToUse}`);
+        if (ttsEnabledRef.current) speakVoiceText(getVoiceResponse('SEARCHING', language, queryToUse), language);
         setErrorState(null);
     };
 
@@ -222,7 +149,7 @@ export default function VoiceSearchButton({ onTranscript, onError, onListeningCh
             };
             setErrorState(errObj);
             callbacksRef.current.onError?.(errObj);
-            if (ttsEnabled) speakText('Select a medicine shortcut');
+            if (ttsEnabled) speakVoiceText(getVoiceResponse('READY', language), language);
             return;
         }
 
