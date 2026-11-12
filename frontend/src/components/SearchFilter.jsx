@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import SearchGroundingInfo from './SearchGroundingInfo';
 import VoiceSearchButton from './common/VoiceSearchButton';
 import { useLanguage } from '../context/LanguageContext';
 
@@ -32,6 +31,7 @@ export default function SearchFilter() {
 
   const [isVoiceListening, setIsVoiceListening] = useState(false);
   const [micError, setMicError] = useState(null);
+  const [voiceSuggestions, setVoiceSuggestions] = useState(null);
 
   const clearAllFilters = () => {
     setSearchQuery('');
@@ -82,7 +82,7 @@ export default function SearchFilter() {
               type="text"
               placeholder={isVoiceListening ? "🎙️ Listening... Speak medicine name (e.g. Dolo 650)" : t("searchPlaceholder")}
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => { setSearchQuery(e.target.value); setVoiceSuggestions(null); }}
               className={`pharma-search-query__input w-full min-w-0 pl-8 pr-7 py-2 text-xs sm:text-sm rounded-xl outline-none transition min-h-[40px] ${
                 isVoiceListening
                   ? 'bg-rose-50/80 border-2 border-rose-500 text-rose-950 font-bold placeholder-rose-400 ring-2 ring-rose-400/40'
@@ -107,8 +107,33 @@ export default function SearchFilter() {
             }}
             onError={(err) => setMicError(err)}
             onListeningChange={(listening) => setIsVoiceListening(listening)}
+            onSuggestionsChange={setVoiceSuggestions}
             currentQuery={searchQuery}
           />
+          {voiceSuggestions?.alternatives?.length > 0 && (
+            <section className="absolute left-0 right-0 top-full z-[1201] mt-2 overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-900 shadow-lg" aria-label="Medicine name suggestions" aria-live="polite">
+              <div className="flex items-start justify-between gap-3 border-b border-slate-100 bg-slate-50 px-3 py-2.5">
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-slate-800">Did you mean one of these spoken medicine names?</p>
+                  <p className="mt-0.5 truncate text-[10px] text-slate-500">Heard: “{voiceSuggestions.originalText}”</p>
+                </div>
+                <button type="button" onClick={() => setVoiceSuggestions(null)} className="shrink-0 rounded-md p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-700" aria-label="Dismiss medicine suggestions">✕</button>
+              </div>
+              <div className="max-h-56 space-y-1 overflow-y-auto p-2">
+                {voiceSuggestions.alternatives.map((alt) => (
+                  <button key={alt.name} type="button" onClick={() => { setSearchQuery(alt.name); setVoiceSuggestions(null); }} className="flex w-full items-center gap-3 rounded-lg border border-transparent px-3 py-2 text-left transition hover:border-blue-200 hover:bg-blue-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-xs font-bold text-slate-800">{alt.name}</span>
+                      {(alt.strength || alt.dosageForm) && <span className="mt-0.5 block text-[10px] text-slate-500">{[alt.strength, alt.dosageForm].filter(Boolean).join(' · ')}</span>}
+                    </span>
+                    <span className="shrink-0 rounded-md bg-blue-50 px-2 py-1 text-[10px] font-bold text-blue-700">{alt.score}% match</span>
+                    <span aria-hidden="true" className="text-sm text-blue-600">›</span>
+                  </button>
+                ))}
+              </div>
+              <p className="border-t border-slate-100 px-3 py-2 text-[10px] text-slate-400">Choose a medicine to search the catalogue. Nothing is selected automatically.</p>
+            </section>
+          )}
         </div>
 
         <div className="pharma-search-controls flex items-center gap-2 shrink-0">
@@ -166,9 +191,6 @@ export default function SearchFilter() {
           <span>{t('hideRx')}</span>
         </label>
       </div>
-
-      {/* Real-Time Medical Search Grounding Box */}
-      <SearchGroundingInfo searchQuery={searchQuery} />
     </div>
   );
 }
