@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import apiClient from '../../api/apiClient';
 import VoiceSearchButton from '../common/VoiceSearchButton';
+import { getPharmaPlaceholderImage, PHARMA_PLACEHOLDER_IMAGES } from '../../utils/pharmaImagePlaceholders';
 
 export default function ProductCatalogBuilderStudio() {
     const [activeTab, setActiveTab] = useState('explorer'); // 'explorer' | 'add_product' | 'bulk_import' | 'categories'
@@ -505,6 +506,30 @@ Pan-40,Alkem,Digestion & Acidity,Pantoprazole Sodium 40mg,40mg,Tablet,98,115,80,
                                     placeholder="e.g. Paracetamol IP 650mg"
                                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs"
                                 />
+                            </div>
+
+                            {/* Professional Placeholder Image Selector */}
+                            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                                <label className="block text-xs font-bold text-slate-800">
+                                    📸 Product Image Asset (Professional Studio Generated)
+                                </label>
+                                <div className="grid grid-cols-4 gap-2">
+                                    {Object.entries(PHARMA_PLACEHOLDER_IMAGES).map(([key, url]) => (
+                                        <button
+                                            key={key}
+                                            type="button"
+                                            onClick={() => setForm({ ...form, imageUrl: url })}
+                                            className={`relative rounded-xl overflow-hidden border-2 transition ${
+                                                form.imageUrl === url ? 'border-indigo-600 ring-2 ring-indigo-500/40' : 'border-slate-200 hover:border-slate-300'
+                                            }`}
+                                        >
+                                            <img src={url} alt={key} className="w-full h-12 object-cover" />
+                                            <span className="absolute bottom-0 inset-x-0 bg-slate-900/80 text-white text-[8px] font-black uppercase text-center py-0.5 truncate px-0.5">
+                                                {key}
+                                            </span>
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
                         </div>
 

@@ -11,7 +11,7 @@ function cleanSpokenQuery(transcript) {
         .trim();
 }
 
-export default function VoiceSearchButton({ onTranscript, onError, currentQuery = '', className = '' }) {
+export default function VoiceSearchButton({ onTranscript, onError, onListeningChange, currentQuery = '', className = '' }) {
     const [isListening, setIsListening] = useState(false);
     const [interimTranscript, setInterimTranscript] = useState('');
     const [errorState, setErrorState] = useState(null); // { title, message, code, showHelp }
@@ -20,6 +20,12 @@ export default function VoiceSearchButton({ onTranscript, onError, currentQuery 
 
     const recognitionRef = useRef(null);
     const autoDismissTimerRef = useRef(null);
+
+    useEffect(() => {
+        if (onListeningChange) {
+            onListeningChange(isListening);
+        }
+    }, [isListening, onListeningChange]);
 
     useEffect(() => {
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;

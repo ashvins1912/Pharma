@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react';
 import ProductCard from './ProductCard';
+import VoiceSuggestedCorrections from './common/VoiceSuggestedCorrections';
 import { useApp } from '../context/AppContext';
 import Pagination from './common/Pagination';
 import { useLanguage } from '../context/LanguageContext';
@@ -85,6 +86,16 @@ export default function ProductGrid() {
               : t('noActiveFilters')}
           </p>
         </div>
+
+        {/* Voice-Suggested Corrections for Spoken/Phonetic Queries */}
+        {searchQuery && (
+          <div className="max-w-md mx-auto">
+            <VoiceSuggestedCorrections
+              searchQuery={searchQuery}
+              onSelectSuggestion={(suggestion) => setSearchQuery(suggestion)}
+            />
+          </div>
+        )}
 
         {/* Case 1: Can't find medicine -> Request Medicine */}
         <div className="max-w-md mx-auto bg-gradient-to-br from-blue-50 to-blue-50 border border-blue-200 rounded-2xl p-4 sm:p-5 text-left space-y-2.5 shadow-xs">

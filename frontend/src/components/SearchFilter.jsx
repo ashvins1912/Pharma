@@ -30,7 +30,7 @@ export default function SearchFilter() {
   const categoryLabels = { All: t('all'), 'Pain & Fever': t('painFever'), Antibiotics: t('antibiotics'), 'Allergy & Cold': t('allergyCold'), 'Vitamins & Supplements': t('vitamins'), 'Digestion & Acidity': t('digestionAcidity'), 'Wellness & First Aid': t('wellnessFirstAid') };
   const isFilterActive = searchQuery || selectedCategory !== 'All' || hideRx || sortOption !== 'default';
 
-  const [micError, setMicError] = useState(null);
+  const [isVoiceListening, setIsVoiceListening] = useState(false);
 
   const clearAllFilters = () => {
     setSearchQuery('');
@@ -41,7 +41,9 @@ export default function SearchFilter() {
   };
 
   return (
-    <div className="pharma-search-panel bg-white border border-slate-200 rounded-2xl sm:rounded-3xl p-3 sm:p-4 shadow-sm space-y-2.5 sm:space-y-3">
+    <div className={`pharma-search-panel bg-white border rounded-2xl sm:rounded-3xl p-3 sm:p-4 shadow-sm space-y-2.5 sm:space-y-3 transition-all duration-300 ${
+      isVoiceListening ? 'border-rose-400 ring-4 ring-rose-400/30 bg-rose-50/10' : 'border-slate-200'
+    }`}>
       {/* Inline Voice Search Error Alert Banner */}
       {micError && (
         <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl flex items-center justify-between text-xs text-rose-900 animate-fade-in">
@@ -64,13 +66,19 @@ export default function SearchFilter() {
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
         <div className="pharma-search-query relative flex-1 min-w-0 flex items-center gap-1.5">
           <div className="relative flex-1 min-w-0">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs">🔍</span>
+            <span className={`absolute left-3 top-1/2 -translate-y-1/2 text-xs transition ${isVoiceListening ? 'text-rose-600 font-bold animate-bounce' : 'text-slate-400'}`}>
+              {isVoiceListening ? '🎙️' : '🔍'}
+            </span>
             <input
               type="text"
-              placeholder={t("searchPlaceholder")}
+              placeholder={isVoiceListening ? "🎙️ Listening... Speak medicine name (e.g. Dolo 650)" : t("searchPlaceholder")}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pharma-search-query__input w-full min-w-0 pl-8 pr-7 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 focus:border-blue-500 focus:bg-white rounded-xl outline-none transition min-h-[40px]"
+              className={`pharma-search-query__input w-full min-w-0 pl-8 pr-7 py-2 text-xs sm:text-sm rounded-xl outline-none transition min-h-[40px] ${
+                isVoiceListening
+                  ? 'bg-rose-50/80 border-2 border-rose-500 text-rose-950 font-bold placeholder-rose-400 ring-2 ring-rose-400/40'
+                  : 'bg-slate-50 border border-slate-200 focus:border-blue-500 focus:bg-white'
+              }`}
             />
             {searchQuery && (
               <button
@@ -85,6 +93,7 @@ export default function SearchFilter() {
           <VoiceSearchButton
             onTranscript={(spokenText) => setSearchQuery(spokenText)}
             onError={(err) => setMicError(err)}
+            onListeningChange={(listening) => setIsVoiceListening(listening)}
             currentQuery={searchQuery}
           />
         </div>
