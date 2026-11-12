@@ -24,7 +24,8 @@
     "zod": "^4.6.5",
     "zustand": "^5.0.15",
     "socket.io-client": "^4.8.1",
-    "recharts": "^2.15.0"
+    "recharts": "^2.15.0",
+    "@pharma/algorithm-kernel": "1.0.0"
   },
   "devDependencies": {
     "@originjs/vite-plugin-federation": "^1.4.1",
