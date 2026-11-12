@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { getReadableErrorMessage } from '../../utils/errorMessage';
 import apiClient from '../../api/apiClient';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
@@ -93,7 +94,7 @@ export default function PlatformTenantsView() {
       const items = Array.isArray(raw) ? raw : (raw.tenants || []);
       setTenants(Array.isArray(items) ? items : []);
     } catch (err) {
-      setError(err.message || t('platformTenantLoadFailed'));
+      setError(getReadableErrorMessage(err, t('platformTenantLoadFailed')));
       setTenants([]);
     } finally {
       setLoading(false);
@@ -133,7 +134,7 @@ export default function PlatformTenantsView() {
     } catch (err) {
       if (requestId === workspaceTenantSearchRequest.current) {
         setWorkspaceTenantSuggestions([]);
-        setError(err?.response?.data?.message || err.message || 'Could not search platform tenants.');
+        setError(getReadableErrorMessage(err, 'Could not search platform tenants.'));
       }
     } finally {
       if (requestId === workspaceTenantSearchRequest.current) setWorkspaceTenantSearchLoading(false);
@@ -176,7 +177,7 @@ export default function PlatformTenantsView() {
       return [id, response.data?.data || response.data || {}];
     }))
       .then(entries => { if (!cancelled) setCompareDetails(Object.fromEntries(entries)); })
-      .catch(err => { if (!cancelled) setError(err?.response?.data?.message || err.message || 'Could not load tenant comparison details.'); })
+      .catch(err => { if (!cancelled) setError(getReadableErrorMessage(err, 'Could not load tenant comparison details.')); })
       .finally(() => { if (!cancelled) setCompareLoading(false); });
     return () => { cancelled = true; };
   }, [platformTab, compareTenantIds]);
@@ -254,7 +255,7 @@ export default function PlatformTenantsView() {
       });
       await loadTenants();
     } catch (err) {
-      setOnboardError(err.message || 'Failed to onboard tenant.');
+      setOnboardError(getReadableErrorMessage(err, 'Failed to onboard tenant.'));
     } finally {
       setSubmittingOnboard(false);
     }
@@ -270,7 +271,7 @@ export default function PlatformTenantsView() {
       setActionSuccess((action === 'suspend' ? t('tenantSuspended') : t('tenantActivated')).replace('{name}', tenant.name));
       await loadTenants();
     } catch (err) {
-      setError(t('tenantActionFailed').replace('{error}', err.message));
+      setError(t('tenantActionFailed').replace('{error}', getReadableErrorMessage(err, 'Unknown error')));
     } finally {
       setStatusActionPending(null);
     }
@@ -306,7 +307,7 @@ export default function PlatformTenantsView() {
       setActionSuccess(`Invitation issued to ${inviteForm.email.trim()}.`);
       // Keep modal open to show token details
     } catch (err) {
-      setInviteError(err.message || t('adminInvitationFailed'));
+      setInviteError(getReadableErrorMessage(err, t('adminInvitationFailed')));
     } finally {
       setSubmittingInvite(false);
     }
@@ -353,7 +354,7 @@ export default function PlatformTenantsView() {
         pincode: ''
       });
     } catch (err) {
-      setVendorError(err.response?.data?.error?.message || err.message || t('vendorInviteFailed'));
+      setVendorError(getReadableErrorMessage(err, t('vendorInviteFailed')));
     } finally {
       setSubmittingVendor(false);
     }
@@ -367,7 +368,7 @@ export default function PlatformTenantsView() {
       setActionSuccess('Vendor invitation link resent successfully.');
       await loadVendors();
     } catch (err) {
-      setError(t('resendInvitationFailed').replace('{error}', err.message));
+      setError(t('resendInvitationFailed').replace('{error}', getReadableErrorMessage(err, 'Unknown error')));
     } finally {
       setResendingVendorId(null);
     }
@@ -390,7 +391,7 @@ export default function PlatformTenantsView() {
       });
     } catch (err) {
       setTenantDetails(null);
-      setError(err?.response?.data?.error?.message || err?.response?.data?.message || err.message || 'Could not load this tenant. No sample data has been substituted.');
+      setError(getReadableErrorMessage(err, 'Could not load this tenant. No sample data has been substituted.'));
     } finally {
       setLoadingDetails(false);
     }
