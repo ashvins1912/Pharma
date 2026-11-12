@@ -155,7 +155,7 @@ async function reconcileCatalogueRecordsAgainstMaster(records) {
   const targetCounts = new Map();
   for (const plan of plans) if (plan.decision === 'AUTO_MERGE' && plan.targetMedicineId) targetCounts.set(plan.targetMedicineId, (targetCounts.get(plan.targetMedicineId) || 0) + 1);
   for (const [targetMedicineId, count] of targetCounts) if (count > 1) blockers.push({ reason: 'MULTIPLE_INCOMING_RECORDS_TARGET_SAME_MEDICINE', targetMedicineId, count });
-  if (scanTruncated && plans.some(plan => plan.decision === 'NO_MATCH')) blockers.push({ reason: 'FUZZY_CANDIDATE_SCAN_TRUNCATED', message: 'The live candidate scan exceeded its safety limit; unmatched records cannot safely be inserted.' });
+  if (scanTruncated) blockers.push({ reason: 'FUZZY_CANDIDATE_SCAN_TRUNCATED', message: 'The live candidate scan exceeded its safety limit; publishing is blocked until the complete candidate set can be reviewed.' });
   return {
     plans, blockers, scanTruncated,
     summary: {
