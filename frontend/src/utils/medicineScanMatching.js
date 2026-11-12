@@ -102,9 +102,20 @@ export function rankScannedMedicineCandidates(extracted, catalogue = [], { minim
       calculateJaroWinklerSimilarity(extracted.name, value),
       calculateDamerauLevenshteinSimilarity(extracted.name, value),
       tokenCoverage(extracted.name, value))));
-    const genericScore = Math.max(0, ...generics.map(value => Math.max(
-      calculateEnsembleSimilarity(extracted.normalizedText, value),
-      calculateJaroWinklerSimilarity(extracted.normalizedText, value), tokenCoverage(extracted.normalizedText, value))));
+    const genericScore = generics.length
+      ? Math.max(0, ...generics.map(value => {
+        const overlap = tokenCoverage(extracted.normalizedText, value);
+        // Packaging OCR often omits the generic line. Treat absent generic
+        // evidence as neutral instead of penalizing an otherwise strong brand
+        // match; when generic tokens are present, use the full ensemble score.
+        if (overlap === 0) return 0.5;
+        return Math.max(
+          calculateEnsembleSimilarity(extracted.normalizedText, value),
+          calculateJaroWinklerSimilarity(extracted.normalizedText, value),
+          overlap
+        );
+      }))
+      : 0.5;
     const strengthConflict = hasStrengthConflict(extracted, item);
     const candidateForm = clean(item.dosageForm || item.form);
     const formConflict = Boolean(extracted.dosageForm && candidateForm
