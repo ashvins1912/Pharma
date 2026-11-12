@@ -242,7 +242,7 @@ export async function searchInventoryProducts({
 
   let [result] = await Product.aggregate(pipeline).allowDiskUse(true);
   let total = result?.metadata?.[0]?.total || 0;
-  let searchMatchType = isSearching ? 'EXACT' : 'BROWSE';
+  let searchMatchType = isSearching ? (total > 0 ? 'EXACT' : 'NO_MATCH') : 'BROWSE';
   let fuzzyScoreById = new Map();
 
   // Exact indexed search stays the fast path. Only when it returns no rows,
