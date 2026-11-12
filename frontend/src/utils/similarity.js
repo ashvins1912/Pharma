@@ -163,8 +163,49 @@ export function calculateTokenSetSimilarity(s1, s2) {
 }
 
 /**
+ * Indian English & Regional Pharmaceutical Phonetic Encoder
+ * Handles Indian speech-to-text sound-alikes, silent letters, aspirates & spoken number words
+ * e.g. "parasetamol" -> "PRSTML"
+ * e.g. "dholo six fifty" -> "DL650"
+ * e.g. "setrizin" -> "STRSN"
+ */
+export function getIndianPhoneticKey(text) {
+    let norm = normalizeText(text);
+    if (!norm) return '';
+
+    // Convert Indian spoken number phrases to standard numbers
+    norm = norm
+        .replace(/\bsix fifty\b/g, '650')
+        .replace(/\bfive hundred\b/g, '500')
+        .replace(/\bsix twenty five\b/g, '625')
+        .replace(/\bforty\b/g, '40')
+        .replace(/\bten\b/g, '10')
+        .replace(/\bone twenty\b/g, '120');
+
+    // Indian Phonetic Replacements
+    return norm
+        .replace(/ph/g, 'f')
+        .replace(/v/g, 'f')
+        .replace(/c([eiy])/g, 's$1')
+        .replace(/c/g, 'k')
+        .replace(/ck/g, 'k')
+        .replace(/q/g, 'k')
+        .replace(/g/g, 'k')
+        .replace(/z/g, 's')
+        .replace(/sh/g, 's')
+        .replace(/ch/g, 's')
+        .replace(/th/g, 'd')
+        .replace(/dh/g, 'd')
+        .replace(/bh/g, 'p')
+        .replace(/b/g, 'p')
+        .replace(/[aeiouyw]/g, '') // Remove vowels
+        .toUpperCase()
+        .replace(/\s+/g, '');
+}
+
+/**
  * Ensemble High-Accuracy Matcher
- * Combines Phonetic Metaphone, Jaro-Winkler, Damerau-Levenshtein, and Token Set Matchers
+ * Combines Indian Phonetic Metaphone, Jaro-Winkler, Damerau-Levenshtein, and Token Set Matchers
  */
 export function calculateEnsembleSimilarity(s1, s2) {
     const norm1 = normalizeText(s1);
@@ -176,6 +217,10 @@ export function calculateEnsembleSimilarity(s1, s2) {
     const phoneticKey2 = getPhoneticKey(norm2);
     const phoneticExact = phoneticKey1 && phoneticKey2 && phoneticKey1 === phoneticKey2;
 
+    const indianKey1 = getIndianPhoneticKey(norm1);
+    const indianKey2 = getIndianPhoneticKey(norm2);
+    const indianPhoneticExact = indianKey1 && indianKey2 && indianKey1 === indianKey2;
+
     const jaroScore = calculateJaroWinklerSimilarity(norm1, norm2);
     const levScore = calculateDamerauLevenshteinSimilarity(norm1, norm2);
     const tokenScore = calculateTokenSetSimilarity(norm1, norm2);
@@ -184,8 +229,8 @@ export function calculateEnsembleSimilarity(s1, s2) {
     let ensemble = (tokenScore * 0.40) + (jaroScore * 0.30) + (levScore * 0.30);
 
     // Boost score if phonetic keys match
-    if (phoneticExact) {
-        ensemble = Math.max(ensemble, 0.88) + 0.10;
+    if (indianPhoneticExact || phoneticExact) {
+        ensemble = Math.max(ensemble, 0.90) + 0.08;
     }
 
     // Boost if one string contains the other

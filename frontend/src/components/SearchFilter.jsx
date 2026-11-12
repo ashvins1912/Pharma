@@ -50,8 +50,16 @@ export default function SearchFilter() {
         <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl flex items-center justify-between text-xs text-rose-900 animate-fade-in">
           <div className="flex items-center gap-2">
             <span>🎙️⚠️</span>
-            <span className="font-bold">{micError.title}:</span>
-            <span className="text-[11px] text-rose-800">{micError.message}</span>
+            <span className="font-bold">
+              {typeof micError === 'string' ? 'Notice' : String(micError?.title || micError?.code || 'Voice Alert')}:
+            </span>
+            <span className="text-[11px] text-rose-800">
+              {typeof micError === 'string'
+                ? micError
+                : typeof micError?.message === 'string'
+                ? micError.message
+                : String(micError?.message?.message || micError?.message || micError?.code || 'Audio input alert')}
+            </span>
           </div>
           <button
             onClick={() => setMicError(null)}
