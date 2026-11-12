@@ -80,3 +80,33 @@ test('does not auto-match when the catalogue omits required strength or dosage f
   assert.equal(noStrength.status, 'NO_MATCH');
   assert.equal(noForm.status, 'NO_MATCH');
 });
+
+
+test('ranks typo-tolerant catalogue suggestions without silently selecting a product', async () => {
+  const { rankMedicineTextMatches } = await import('../src/utils/medicineScanMatching.js');
+  const result = rankMedicineTextMatches('Dlo 650 mg tablet', [
+    { _id: 'dolo650', name: 'Dolo 650', genericName: 'Paracetamol', strength: '650 mg', dosageForm: 'Tablet' },
+    { _id: 'dolo500', name: 'Dolo 500', genericName: 'Paracetamol', strength: '500 mg', dosageForm: 'Tablet' }
+  ]);
+  assert.equal(result.alternatives[0]?.product._id, 'dolo650');
+  assert.equal(result.alternatives.some(item => item.product._id === 'dolo500'), false);
+  assert.equal(result.reason, 'SUGGESTIONS_REQUIRE_USER_REVIEW');
+});
+
+test('keeps incomplete catalogue identity as a suggestion but labels missing clinical fields', async () => {
+  const { rankMedicineTextMatches } = await import('../src/utils/medicineScanMatching.js');
+  const result = rankMedicineTextMatches('Dolo 650 mg tablet', [
+    { _id: 'partial', name: 'Dolo 650' }
+  ]);
+  assert.equal(result.alternatives[0]?.product._id, 'partial');
+  assert.equal(result.alternatives[0]?.reviewRequired, true);
+  assert.match(result.alternatives[0]?.reasons.join(' '), /not listed/i);
+});
+
+test('does not suggest a candidate with a conflicting dosage form', async () => {
+  const { rankMedicineTextMatches } = await import('../src/utils/medicineScanMatching.js');
+  const result = rankMedicineTextMatches('Dolo 650 mg tablet', [
+    { _id: 'syrup', name: 'Dolo 650', strength: '650 mg', dosageForm: 'Syrup' }
+  ]);
+  assert.equal(result.alternatives.length, 0);
+});
