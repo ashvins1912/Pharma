@@ -362,8 +362,6 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
     setProductScanMessage('Reading the product label…');
     setProductScanCandidates([]);
     try {
-      const ocr = await scanMedicineProductLabel(productImageFile);
-      const extracted = extractMedicineLabelDetails(ocr.text);
       let barcode = null;
       if (typeof window !== 'undefined' && 'BarcodeDetector' in window && typeof createImageBitmap === 'function') {
         try {
@@ -383,6 +381,12 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
           console.info('[MedicineScan] Native barcode detection unavailable:', barcodeError?.message || barcodeError);
         }
       }
+      const ocr = await scanMedicineProductLabel(productImageFile);
+      if (!String(ocr.text || '').trim() && !barcode) {
+        throw new Error('No readable text or valid barcode was detected. Try a clearer, closer photo.');
+      }
+      const extracted = extractMedicineLabelDetails(ocr.text || '');
+      setProductScanText(ocr.text || '');
       const scanDetails = { ...extracted, ...(barcode ? { barcode, barcodeCandidates: [barcode] } : {}) };
       setProductScanText(ocr.text);
       const query = scanDetails.barcode || scanDetails.name || scanDetails.normalizedText;
