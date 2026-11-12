@@ -40,7 +40,7 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
       const response = await apiClient.get('/api/v1/inventory/catalogue/medicines', { params: { search: query, page, limit: 20 } });
       setData(response.data || { items: [], pagination: { total: 0, totalPages: 0 } });
     } catch (error) {
-      addToast(error.response?.data?.message || 'Could not load the shared medicine catalogue.', 'error');
+      addToast(getReadableErrorMessage(error, 'Could not load the shared medicine catalogue.'), 'error');
     } finally { setLoading(false); }
   }, [query, page, addToast]);
 
@@ -51,7 +51,7 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
       const jobs = (response.data?.jobs || []).map(job => ({ ...job, isImportJob: true, batchId: job.batchId || job.jobId, recordCount: job.totalRecords || job.processedRecords || 0 }));
       setImports([...jobs, ...(response.data?.items || [])].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)).slice(0, 12));
     } catch (error) {
-      addToast(error.response?.data?.message || 'Could not load catalogue import history.', 'warning');
+      addToast(getReadableErrorMessage(error, 'Could not load catalogue import history.'), 'warning');
     } finally { setHistoryLoading(false); }
   }, [addToast]);
   const retryImportJob = async jobId => {
@@ -60,7 +60,7 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
       await loadImportHistory();
       addToast('Failed import queued for retry. Refresh history to follow its progress.', 'success');
     } catch (error) {
-      addToast(error.response?.data?.message || 'Could not retry this import job.', 'error');
+      addToast(getReadableErrorMessage(error, 'Could not retry this import job.'), 'error');
     }
   };
   const restartStuckImportJob = async jobId => {
@@ -73,7 +73,7 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
       await loadImportHistory();
       addToast('Stuck import re-queued. Refresh history to follow its progress.', 'success');
     } catch (error) {
-      addToast(error.response?.data?.message || 'Could not restart this import. Refresh history to check its worker lease.', 'error');
+      addToast(getReadableErrorMessage(error, 'Could not restart this import. Refresh history to check its worker lease.'), 'error');
       await loadImportHistory();
     } finally { setBatchActionBusy(false); }
   };
@@ -87,7 +87,7 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
       setReviewRecordsSearch('');
       await loadBatchRecords(batchId, 1, '');
     } catch (error) {
-      addToast(error.response?.data?.message || 'Could not load the staged batch report.', 'error');
+      addToast(getReadableErrorMessage(error, 'Could not load the staged batch report.'), 'error');
     } finally { setBatchActionBusy(false); }
   };
   const loadBatchRecords = async (batchId, nextPage = reviewRecordsPage, searchValue = reviewRecordsSearch) => {
@@ -104,7 +104,7 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
       setReviewRecords(response.data || { items: [], pagination: { page: nextPage, total: 0, totalPages: 0 } });
       setReviewRecordsPage(nextPage);
     } catch (error) {
-      addToast(error.response?.data?.message || 'Could not load staged medicine records.', 'error');
+      addToast(getReadableErrorMessage(error, 'Could not load staged medicine records.'), 'error');
     } finally { setReviewRecordsLoading(false); }
   };
 
@@ -122,7 +122,7 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
       await refreshReviewedBatch();
       addToast('Combined reconciliation report approved.', 'success');
     } catch (error) {
-      addToast(error.response?.data?.message || 'Could not approve the combined batch.', 'error');
+      addToast(getReadableErrorMessage(error, 'Could not approve the combined batch.'), 'error');
     } finally { setBatchActionBusy(false); }
   };
   const publishReviewedBatch = async () => {
@@ -134,7 +134,7 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
       await refreshReviewedBatch();
       addToast('Combined medicine batch published.', 'success');
     } catch (error) {
-      addToast(error.response?.data?.message || 'Could not publish the combined batch.', 'error');
+      addToast(getReadableErrorMessage(error, 'Could not publish the combined batch.'), 'error');
     } finally { setBatchActionBusy(false); }
   };
 
@@ -147,7 +147,7 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
       await loadImportHistory();
       addToast(`Combined ${Number(response.data?.report?.sourceRecords || 0).toLocaleString()} source rows into ${Number(response.data?.report?.normalizedRecords || 0).toLocaleString()} reconciled records. Review the merged batch before approval.`, 'success');
     } catch (error) {
-      addToast(error.response?.data?.message || 'Could not combine the selected staged batches.', 'error');
+      addToast(getReadableErrorMessage(error, 'Could not combine the selected staged batches.'), 'error');
       await loadImportHistory();
     } finally { setMergeBusy(false); }
   };
@@ -163,7 +163,7 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
       await loadImportHistory();
       addToast(response.data?.message || `Removed ${Number(response.data?.removedCount || 0)} enrichment batch(es) from the recent list.`, 'success');
     } catch (error) {
-      addToast(error.response?.data?.message || 'Could not permanently delete the selected enrichment batches.', 'error');
+      addToast(getReadableErrorMessage(error, 'Could not permanently delete the selected enrichment batches.'), 'error');
       await loadImportHistory();
     } finally { setRemoveBatchesBusy(false); }
   };
@@ -186,7 +186,7 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
       setForm(Object.fromEntries([...TEXT_FIELDS, ...ARRAY_FIELDS].map(field => [field, ARRAY_FIELDS.includes(field) ? (medicine[field] || []).join('\n') : (medicine[field] || '')])));
       setAudit(history.data?.items || []);
     } catch (error) {
-      addToast(error.response?.data?.message || 'Could not load medicine details or audit history.', 'warning');
+      addToast(getReadableErrorMessage(error, 'Could not load medicine details or audit history.'), 'warning');
     }
   };
 
@@ -202,7 +202,7 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
       await load();
       addToast('Medicine master record deleted from the active catalogue. Audit and provenance retained.', 'success');
     } catch (error) {
-      addToast(error.response?.data?.message || 'Could not delete the medicine master record.', 'error');
+      addToast(getReadableErrorMessage(error, 'Could not delete the medicine master record.'), 'error');
     } finally { setSaving(false); }
   };
 
@@ -221,7 +221,7 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
       await load();
       addToast('Shared medicine master record updated. Change history recorded.', 'success');
     } catch (error) {
-      addToast(error.response?.data?.message || 'Medicine master update failed.', 'error');
+      addToast(getReadableErrorMessage(error, 'Medicine master update failed.'), 'error');
     } finally { setSaving(false); }
   };
 
