@@ -78,17 +78,43 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
     } finally { setBatchActionBusy(false); }
   };
   const openBatchReview = async batchId => {
+    if (!batchId || batchActionBusy) return;
+
+    // Show the dialog before any network request so a slow report/records API
+    // can never leave the Review action looking like an unresponsive click.
+    setReviewBatch({ batchId, status: 'LOADING', dataset: 'Loading batch report…', report: null });
+    setReviewConfirmed(false);
+    setReviewRecords({ items: [], pagination: { page: 1, total: 0, totalPages: 0 } });
+    setReviewRecordsPage(1);
+    setReviewRecordsSearch('');
+    setReviewRecordsLoading(true);
     setBatchActionBusy(true);
-    try {
-      const response = await apiClient.get(`/api/v1/inventory/catalogue/imports/${encodeURIComponent(batchId)}`, { timeout: 30000 });
-      setReviewBatch(response.data);
-      setReviewConfirmed(false);
+
+    const encodedBatchId = encodeURIComponent(batchId);
+    const [batchResult, recordsResult] = await Promise.allSettled([
+      apiClient.get(`/api/v1/inventory/catalogue/imports/${encodedBatchId}`, { timeout: 30000 }),
+      apiClient.get(`/api/v1/inventory/catalogue/imports/${encodedBatchId}/records`, {
+        params: { page: 1, limit: 20 },
+        timeout: 45000
+      })
+    ]);
+
+    if (batchResult.status === 'fulfilled') {
+      setReviewBatch(batchResult.value.data || { batchId, status: 'UNKNOWN', report: null });
+    } else {
+      addToast(getReadableErrorMessage(batchResult.reason, 'Could not load the staged batch report.'), 'error');
+      setReviewBatch(null);
+    }
+
+    if (recordsResult.status === 'fulfilled') {
+      setReviewRecords(recordsResult.value.data || { items: [], pagination: { page: 1, total: 0, totalPages: 0 } });
       setReviewRecordsPage(1);
-      setReviewRecordsSearch('');
-      await loadBatchRecords(batchId, 1, '');
-    } catch (error) {
-      addToast(getReadableErrorMessage(error, 'Could not load the staged batch report.'), 'error');
-    } finally { setBatchActionBusy(false); }
+    } else {
+      addToast(getReadableErrorMessage(recordsResult.reason, 'Could not load staged medicine records.'), 'warning');
+    }
+
+    setReviewRecordsLoading(false);
+    setBatchActionBusy(false);
   };
   const loadBatchRecords = async (batchId, nextPage = reviewRecordsPage, searchValue = reviewRecordsSearch) => {
     if (!batchId) return;
