@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { rankInventorySearchCandidates } from '../src/medicine-search-ranking.js';
 
 const products = [
-  { _id: 'dolo650', name: 'Dolo 650 Tablet', genericName: 'Paracetamol', strength: '650 mg' },
-  { _id: 'dolo500', name: 'Dolo 500 Tablet', genericName: 'Paracetamol', strength: '500 mg' },
+  { _id: 'dolo650', name: 'Dolo 650 Tablet', genericName: 'Paracetamol', strength: '650 mg', form: 'Tablet' },
+  { _id: 'dolo500', name: 'Dolo 500 Tablet', genericName: 'Paracetamol', strength: '500 mg', form: 'Tablet' },
   { _id: 'para500', name: 'Paracetamol 500 Tablet', genericName: 'Paracetamol', strength: '500 mg' }
 ];
 
@@ -31,5 +31,10 @@ test('a brand-only search can return real strength variants without choosing one
 
 test('unknown medicine names do not produce invented results', () => {
   const matches = rankInventorySearchCandidates('NotARealMedicine 999', products);
+  assert.deepEqual(matches, []);
+});
+
+test('a conflicting dosage form is not returned', () => {
+  const matches = rankInventorySearchCandidates('Dolo 650 capsule', [products[0]]);
   assert.deepEqual(matches, []);
 });
