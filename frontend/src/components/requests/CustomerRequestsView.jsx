@@ -292,7 +292,7 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
                       Requested Medicine
                     </span>
                     <ul className="space-y-1">
-                      {(req.requestedItems || []).map((item, index) => (
+                      {(req.requestedItems || []).length > 0 ? (req.requestedItems || []).map((item, index) => (
                         <li key={`${item.requestedName}-${index}`}>
                           <p className="font-extrabold text-slate-900 text-sm">
                             {item.requestedName || t('medicine')}
@@ -303,7 +303,12 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
                             Qty: {item.quantity || 1}
                           </p>
                         </li>
-                      ))}
+                      )) : req.prescriptionId || req.prescriptionUrl ? (
+                        <li>
+                          <p className="font-extrabold text-slate-900 text-sm">Prescription attached</p>
+                          <p className="text-[11px] text-slate-500">Medicine details pending pharmacist review</p>
+                        </li>
+                      ) : null}
                     </ul>
                   </div>
 
