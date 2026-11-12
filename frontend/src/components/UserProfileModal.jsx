@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { getReadableErrorMessage } from '../utils/errorMessage';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import MFAEnrollmentModal from './auth/MFAEnrollmentModal';
@@ -54,12 +55,12 @@ export default function UserProfileModal({ isOpen, onClose, onNavigate }) {
     e.preventDefault();
     await runAction(LOADING_ACTIONS.SAVE_PERSONAL_DETAILS, async () => {
       try { await updateProfile(profileForm); addToast('Profile details updated successfully.','success'); setEditMode(false); setTab('overview'); }
-      catch(err){ addToast(err.message || t('couldNotUpdateProfile'),'error'); }
+      catch(err){ addToast(getReadableErrorMessage(err, t('couldNotUpdateProfile')),'error'); }
     });
   };
 
   const signOut = async () => { if(signingOut)return; await logout(); addToast('Signed out successfully','info'); onClose(); };
-  const disable = async () => { setDisablingMfa(true); try { await disableMfa(); addToast(t('twoFactorDisabled'),'info'); } catch(e){addToast(e.message || t('couldNotDisable2fa'),'error');} finally{setDisablingMfa(false);} };
+  const disable = async () => { setDisablingMfa(true); try { await disableMfa(); addToast(t('twoFactorDisabled'),'info'); } catch(e){addToast(getReadableErrorMessage(e, t('couldNotDisable2fa')),'error');} finally{setDisablingMfa(false);} };
 
   return <>
     <div className="fixed inset-0 z-[1100] flex items-center justify-center p-3 sm:p-5 bg-black/45 backdrop-blur-[2px] animate-fade-in overscroll-none" aria-modal="true" role="dialog" onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); onClose?.(); } }}>

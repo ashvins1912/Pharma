@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { getReadableErrorMessage } from '../utils/errorMessage';
 import apiClient from '../api/apiClient';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
@@ -99,7 +100,7 @@ export default function OfferZoneBanner() {
         if (!active || sequence !== requestSequence.current) return;
         // Keep the last known-good campaign list during temporary auth/network/API
         // failures. An error is not proof that the pharmacy has no active offers.
-        setLoadError(error?.response?.data?.message || error?.message || 'Surplus Savings are temporarily unavailable.');
+        setLoadError(getReadableErrorMessage(error, 'Surplus Savings are temporarily unavailable.'));
       })
       .finally(() => {
         if (active && sequence === requestSequence.current) setLoading(false);

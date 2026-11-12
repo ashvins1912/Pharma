@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { getReadableErrorMessage } from '../../utils/errorMessage';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
@@ -48,7 +49,7 @@ export default function CustomerProposalModal({ request, isOpen, onClose, onOrde
         if (active) setStockWaitlistCase(items.find(item => String(item._id) === String(request.fulfillmentCaseId)) || null);
       })
       .catch(error => {
-        if (active) addToast(error.response?.data?.message || 'Could not refresh stock availability.', 'warning');
+        if (active) addToast(getReadableErrorMessage(error, 'Could not refresh stock availability.'), 'warning');
       })
       .finally(() => { if (active) setWaitlistLoading(false); });
     return () => { active = false; };
@@ -64,7 +65,7 @@ export default function CustomerProposalModal({ request, isOpen, onClose, onOrde
     previewMedicineRequestFulfillment(request._id)
       .then(plan => { if (active) setAvailabilityPlan(plan); })
       .catch(error => {
-        if (active) setAvailabilityError(error.response?.data?.message || error.message || 'Could not check live stock.');
+        if (active) setAvailabilityError(getReadableErrorMessage(error, 'Could not check live stock.'));
       })
       .finally(() => { if (active) setAvailabilityLoading(false); });
     return () => { active = false; };
@@ -116,7 +117,7 @@ export default function CustomerProposalModal({ request, isOpen, onClose, onOrde
       if (onOrderCreated && res.order) onOrderCreated(res.order);
       onClose();
     } catch (err) {
-      addToast(err.response?.data?.message || err.message || 'Unable to confirm fulfilment right now. Please try again.', 'error');
+      addToast(getReadableErrorMessage(err, 'Unable to confirm fulfilment right now. Please try again.'), 'error');
       setShowApprovalConfirm(false);
       setAvailabilityPlan(null);
       previewMedicineRequestFulfillment(request._id).then(setAvailabilityPlan).catch(() => {});
@@ -134,7 +135,7 @@ export default function CustomerProposalModal({ request, isOpen, onClose, onOrde
       addToast('Stock availability refreshed.', 'success');
       await loadUserMedicineRequests();
     } catch (error) {
-      addToast(error.response?.data?.message || 'Could not refresh stock availability.', 'error');
+      addToast(getReadableErrorMessage(error, 'Could not refresh stock availability.'), 'error');
     } finally {
       setWaitlistLoading(false);
     }
@@ -151,7 +152,7 @@ export default function CustomerProposalModal({ request, isOpen, onClose, onOrde
       const cases = await getCustomerStockWaitlist();
       setStockWaitlistCase(cases.find(item => String(item._id) === String(request.fulfillmentCaseId)) || null);
     } catch (error) {
-      addToast(error.response?.data?.message || 'Could not confirm the available stock. Please refresh and retry.', 'error');
+      addToast(getReadableErrorMessage(error, 'Could not confirm the available stock. Please refresh and retry.'), 'error');
       await handleRefreshStockWaitlist();
     } finally {
       setWaitlistActionLoading(false);
@@ -167,7 +168,7 @@ export default function CustomerProposalModal({ request, isOpen, onClose, onOrde
       addToast('Stock waitlist cancelled.', 'info');
       await loadUserMedicineRequests();
     } catch (error) {
-      addToast(error.response?.data?.message || 'Could not cancel the stock waitlist.', 'error');
+      addToast(getReadableErrorMessage(error, 'Could not cancel the stock waitlist.'), 'error');
     } finally {
       setWaitlistActionLoading(false);
     }
@@ -182,7 +183,7 @@ export default function CustomerProposalModal({ request, isOpen, onClose, onOrde
       await loadUserMedicineRequests();
       onClose();
     } catch (err) {
-      addToast(err.message || 'Unable to update this proposal right now. Please try again.', 'error');
+      addToast(getReadableErrorMessage(err, 'Unable to update this proposal right now. Please try again.'), 'error');
     } finally {
       setRejecting(false);
     }

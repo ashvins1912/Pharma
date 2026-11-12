@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { getReadableErrorMessage } from '../../utils/errorMessage';
 import apiClient from '../../api/apiClient';
 import { useAuth } from '../../context/AuthContext';
 
@@ -42,7 +43,7 @@ export default function TenantStaffManager({ tenantId }) {
       setMemberships(Array.isArray(staff) ? staff : []);
       setBranches(Array.isArray(branchPayload) ? branchPayload.filter(branch => String(branch.status || 'ACTIVE').toUpperCase() === 'ACTIVE') : []);
     } catch (err) {
-      setError(err?.response?.data?.message || 'Branch staff could not be loaded. Check tenant administrator access.');
+      setError(getReadableErrorMessage(err, 'Branch staff could not be loaded. Check tenant administrator access.'));
     } finally {
       setLoading(false);
     }
@@ -67,7 +68,7 @@ export default function TenantStaffManager({ tenantId }) {
       setNotice('User access assigned. The change is recorded in pharmacy activity.');
       await load();
     } catch (err) {
-      setError(err?.response?.data?.message || 'Could not assign this user to the pharmacy branch.');
+      setError(getReadableErrorMessage(err, 'Could not assign this user to the pharmacy branch.'));
     } finally {
       setSaving(false);
     }
@@ -81,7 +82,7 @@ export default function TenantStaffManager({ tenantId }) {
       setNotice('Staff role or branch assignment updated.');
       await load();
     } catch (err) {
-      setError(err?.response?.data?.message || 'Staff membership could not be updated.');
+      setError(getReadableErrorMessage(err, 'Staff membership could not be updated.'));
     }
   };
 
@@ -92,7 +93,7 @@ export default function TenantStaffManager({ tenantId }) {
       setNotice('Staff access revoked. Historical records are preserved.');
       await load();
     } catch (err) {
-      setError(err?.response?.data?.message || 'Staff access could not be revoked.');
+      setError(getReadableErrorMessage(err, 'Staff access could not be revoked.'));
     }
   };
 

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { getReadableErrorMessage } from '../../utils/errorMessage';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
@@ -353,7 +354,7 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
       }
     } catch (error) {
       setPrescriptionScanStatus(error?.response?.data?.detail?.message || error.message || 'Prescription scan failed. You can still attach it for pharmacist review.');
-      addToast(error?.response?.data?.detail?.message || error.message || 'Could not read this prescription.', 'error');
+      addToast(getReadableErrorMessage(error, 'Could not read this prescription.'), 'error');
     } finally {
       setPrescriptionScanLoading(false);
     }
@@ -415,8 +416,8 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
         setProductScanMessage('Label text was read, but no catalogue match was found. Enter the medicine details manually.');
       }
     } catch (error) {
-      setProductScanMessage(error?.response?.data?.detail?.message || error.message || 'Could not scan this product. Try another photo.');
-      addToast(error?.response?.data?.detail?.message || error.message || 'Product scan failed.', 'error');
+      setProductScanMessage(getReadableErrorMessage(error, 'Could not scan this product. Try another photo.'));
+      addToast(getReadableErrorMessage(error, 'Product scan failed.'), 'error');
     } finally {
       setProductScanLoading(false);
     }
@@ -513,7 +514,7 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
       await loadUserMedicineRequests({ page: 1, statusGroup: 'ALL' });
       onClose();
     } catch (err) {
-      addToast(err.message || 'Unable to submit your medicine request right now. Please try again.', 'error');
+      addToast(getReadableErrorMessage(err, 'Unable to submit your medicine request right now. Please try again.'), 'error');
     } finally {
       submitInProgressRef.current = false;
       setSubmitting(false);

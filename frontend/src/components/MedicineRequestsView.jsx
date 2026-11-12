@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { getReadableErrorMessage } from '../utils/errorMessage';
 import apiClient from '../api/apiClient';
 import { useToast } from '../context/ToastContext';
 import MedicineRequestModal from './MedicineRequestModal';
@@ -20,7 +21,7 @@ export default function MedicineRequestsView({ onOrderCreated }) {
       const res = await apiClient.get('/api/medicine-requests/my');
       setRequests(res.data || []);
     } catch (err) {
-      addToast(err.message || t('requestSubmitFailed'), 'error');
+      addToast(getReadableErrorMessage(err, t('requestSubmitFailed')), 'error');
     } finally {
       setLoading(false);
     }
@@ -42,7 +43,7 @@ export default function MedicineRequestsView({ onOrderCreated }) {
         await loadRequests();
         if (decision === 'approve' && onOrderCreated) onOrderCreated();
       } catch (err) {
-        addToast(err.message || `Failed to ${decision} proposal.`, 'error');
+        addToast(getReadableErrorMessage(err, `Failed to ${decision} proposal.`), 'error');
       }
     });
   };

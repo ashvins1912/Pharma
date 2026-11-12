@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { getReadableErrorMessage } from '../../utils/errorMessage';
 import { createPortal } from 'react-dom';
 import apiClient from '../../api/apiClient';
 import { useLanguage } from '../../context/LanguageContext';
@@ -40,7 +41,7 @@ export default function TenantRegistry({ tenantId: selectedTenantId } = {}) {
       setBranches(Array.isArray(response.data?.branches) ? response.data.branches : []);
       setUsesTenantAsBranch(response.data?.usesTenantAsBranch === true);
     } catch (err) {
-      setError(err?.response?.data?.message || err.message || 'Failed to fetch branches.');
+      setError(getReadableErrorMessage(err, 'Failed to fetch branches.'));
     } finally {
       setLoading(false);
     }
@@ -111,7 +112,7 @@ export default function TenantRegistry({ tenantId: selectedTenantId } = {}) {
       setModalOpen(false);
       await fetchBranches();
     } catch (err) {
-      setError(err?.response?.data?.message || err.message || 'Branch could not be saved.');
+      setError(getReadableErrorMessage(err, 'Branch could not be saved.'));
     } finally {
       setSaving(false);
     }
@@ -125,7 +126,7 @@ export default function TenantRegistry({ tenantId: selectedTenantId } = {}) {
       setNotice(status === 'ACTIVE' ? 'Branch activated.' : 'Branch deactivated.');
       await fetchBranches();
     } catch (err) {
-      setError(err?.response?.data?.message || err.message || 'Branch status could not be changed.');
+      setError(getReadableErrorMessage(err, 'Branch status could not be changed.'));
     }
   };
 
@@ -139,7 +140,7 @@ export default function TenantRegistry({ tenantId: selectedTenantId } = {}) {
       setNotice('Branch archived. Historical records have been preserved.');
       await fetchBranches();
     } catch (err) {
-      setError(err?.response?.data?.message || err.message || 'Branch could not be archived.');
+      setError(getReadableErrorMessage(err, 'Branch could not be archived.'));
     }
   };
 

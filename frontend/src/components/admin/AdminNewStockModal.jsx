@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { getReadableErrorMessage } from '../../utils/errorMessage';
 import { useLanguage } from '../../context/LanguageContext';
 import apiClient from '../../api/apiClient';
 import { useToast } from '../../context/ToastContext';
@@ -82,7 +83,7 @@ export default function AdminNewStockModal({ isOpen, onClose, onStockCreated }) 
         setBranchId(nextBranchId || null);
         setTenantId(tenantId);
       } catch (error) {
-        if (!cancelled) { setAvailableBranches([]); setSelectedBranchId(''); setBranchLoadError(error?.response?.data?.message || 'Unable to load active pharmacy branches.'); }
+        if (!cancelled) { setAvailableBranches([]); setSelectedBranchId(''); setBranchLoadError(getReadableErrorMessage(error, 'Unable to load active pharmacy branches.')); }
       } finally { if (!cancelled) setBranchesLoading(false); }
     };
     loadBranches();
@@ -119,7 +120,7 @@ export default function AdminNewStockModal({ isOpen, onClose, onStockCreated }) 
         addToast('Image securely uploaded and optimized for this pharmacy branch.', 'success');
       }
     } catch (err) {
-      addToast(err?.response?.data?.error || err.message || 'Image upload failed.', 'error');
+      addToast(getReadableErrorMessage(err, 'Image upload failed.'), 'error');
     } finally {
       setUploadingImage(false);
     }
@@ -178,7 +179,7 @@ export default function AdminNewStockModal({ isOpen, onClose, onStockCreated }) 
         onClose();
       }
     } catch (err) {
-      addToast(err?.response?.data?.message || err?.response?.data?.error || err.message || t('saveMedicineFailed'), 'error');
+      addToast(getReadableErrorMessage(err, t('saveMedicineFailed')), 'error');
     } finally {
       setSaving(false);
     }

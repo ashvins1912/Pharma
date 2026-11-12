@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { getReadableErrorMessage } from '../utils/errorMessage';
 import { fetchOrders } from '../api/orderService';
 
 export function useOrders(filters = {}) {
@@ -15,7 +16,7 @@ export function useOrders(filters = {}) {
       setOrders(result);
       return result;
     } catch (requestError) {
-      const message = requestError?.message || 'Could not fetch orders.';
+      const message = getReadableErrorMessage(requestError, 'Could not fetch orders.');
       setError(message);
       throw requestError;
     } finally {
@@ -32,7 +33,7 @@ export function useOrders(filters = {}) {
         if (active) setOrders(result);
       })
       .catch((requestError) => {
-        if (active) setError(requestError?.message || 'Could not fetch orders.');
+        if (active) setError(getReadableErrorMessage(requestError, 'Could not fetch orders.'));
       })
       .finally(() => {
         if (active) setLoading(false);

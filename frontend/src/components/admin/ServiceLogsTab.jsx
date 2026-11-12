@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { getReadableErrorMessage } from '../../utils/errorMessage';
 import apiClient from '../../api/apiClient';
 
 const HOUR_OPTIONS = Array.from({ length: 12 }, (_, index) => index + 1);
@@ -12,7 +13,7 @@ export default function ServiceLogsTab() {
     try {
       const { data = {} } = await apiClient.get('/api/v1/admin/service-logs', { params: { hours, ...(service ? { service } : {}), ...(level ? { level } : {}), limit: 300 } });
       setLogs(Array.isArray(data.data) ? data.data : []); setServices(Array.isArray(data.services) ? data.services : []); setLastUpdated(new Date());
-    } catch (err) { setError(err?.response?.data?.message || 'Application service logs could not be loaded.'); }
+    } catch (err) { setError(getReadableErrorMessage(err, 'Application service logs could not be loaded.')); }
     finally { setLoading(false); }
   }, [hours, service, level]);
   useEffect(() => { void load(); }, [load]);

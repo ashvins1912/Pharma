@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { getReadableErrorMessage } from '../../utils/errorMessage';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
@@ -61,7 +62,7 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
       await loadUserMedicineRequests({ page: 1, statusGroup: statusFilter });
       window.dispatchEvent(new Event('stock-waitlist-updated'));
     } catch (error) {
-      addToast(error.response?.data?.message || 'Could not add this medicine request to the stock waitlist.', 'error');
+      addToast(getReadableErrorMessage(error, 'Could not add this medicine request to the stock waitlist.'), 'error');
     } finally {
       setWaitingRequestId('');
     }
@@ -80,7 +81,7 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
         addToast(result.message || t('prescriptionUpdated'), 'success');
         await loadUserMedicineRequests({ page: 1, statusGroup: statusFilter });
       } catch (error) {
-        addToast(error.message || t('prescriptionUpdateFailed'), 'error');
+        addToast(getReadableErrorMessage(error, t('prescriptionUpdateFailed')), 'error');
       } finally {
         setUpdatingPrescriptionId(null);
       }

@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { getReadableErrorMessage } from '../utils/errorMessage';
 import { buildCatalogQuery, fetchMedicineCatalog } from '../api/medicineCatalogService';
 
 const pendingRequests = new Map();
@@ -76,7 +77,7 @@ export const useCatalogStore = create((set, get) => ({
             total: 0,
             totalPages: 1,
             loading: false,
-            error: error?.response?.data?.message || error.message || 'Unable to load medicines.'
+            error: getReadableErrorMessage(error, 'Unable to load medicines.')
           });
         }
         throw error;

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { getReadableErrorMessage } from '../../utils/errorMessage';
 import * as xlsx from 'xlsx';
 import AdminImportBatchManager from './AdminImportBatchManager';
 import apiClient from '../../api/apiClient';
@@ -66,7 +67,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
       .catch(error => {
         if (!cancelled) {
           setBranchOptions([]);
-          setBranchLoadError(error.response?.data?.error?.message || error.response?.data?.message || 'Could not load branches for this pharmacy.');
+          setBranchLoadError(getReadableErrorMessage(error, 'Could not load branches for this pharmacy.'));
         }
       })
       .finally(() => {
@@ -115,7 +116,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
           );
         }
       } catch (error) {
-        if (!cancelled) setPollError(error.response?.data?.message || t('couldNotRefreshImport'));
+        if (!cancelled) setPollError(getReadableErrorMessage(error, t('couldNotRefreshImport')));
       }
     };
 
@@ -144,7 +145,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
       setPreviewData(response.data);
       addToast('Mapped ' + response.data.rowsDetected + ' stock rows (' + response.data.validCount + ' ready, ' + response.data.errorsCount + ' need review)', 'info');
     } catch (error) {
-      setFile(null); addToast(error.response?.data?.error?.message || error.response?.data?.message || error.message || 'Server-side validation failed.', 'error');
+      setFile(null); addToast(getReadableErrorMessage(error, 'Server-side validation failed.'), 'error');
     } finally { setAnalyzing(false); }
   };
   const handleDrop = (e) => {
@@ -197,7 +198,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
       setImportJob(res.data);
       addToast(t('importQueued'), 'info');
     } catch (err) {
-      addToast(err.response?.data?.error?.message || err.response?.data?.message || err.message || t('importStartFailed'), 'error');
+      addToast(getReadableErrorMessage(err, t('importStartFailed')), 'error');
     } finally {
       setCommitting(false);
     }
@@ -216,7 +217,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
       fetchMedicines();
       addToast(t('batchReverted'), 'success');
     } catch (error) {
-      addToast(error.response?.data?.message || t('rollbackBlocked'), 'error');
+      addToast(getReadableErrorMessage(error, t('rollbackBlocked')), 'error');
     }
   };
 
@@ -235,7 +236,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
       link.click();
       URL.revokeObjectURL(url);
     } catch (error) {
-      addToast(error.response?.data?.message || t('failedRecordsDownload'), 'error');
+      addToast(getReadableErrorMessage(error, t('failedRecordsDownload')), 'error');
     }
   };
 
@@ -259,7 +260,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
       setImportJob(previous => ({ ...previous, ...response.data, status: 'QUEUED' }));
       addToast(t('importRetryQueued'), 'info');
     } catch (error) {
-      addToast(error.response?.data?.message || t('importRetryFailed'), 'error');
+      addToast(getReadableErrorMessage(error, t('importRetryFailed')), 'error');
     }
   };
 
@@ -540,7 +541,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
                   </p>
                 </div>
                 {importJob.errorMessage && (
-                  <p className="text-xs font-semibold text-rose-800">{importJob.errorMessage}</p>
+                  <p className="text-xs font-semibold text-rose-800">{getReadableErrorMessage(importJob.errorMessage, '')}</p>
                 )}
                 {pollError && (
                   <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-rose-800">

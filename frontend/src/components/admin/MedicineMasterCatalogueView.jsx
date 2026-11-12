@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { getReadableErrorMessage } from '../../utils/errorMessage';
 import apiClient from '../../api/apiClient';
 import { useToast } from '../../context/ToastContext';
 import MedicineMatchReviewQueue from './MedicineMatchReviewQueue';
@@ -39,7 +40,7 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
       const response = await apiClient.get('/api/v1/inventory/catalogue/medicines', { params: { search: query, page, limit: 20 } });
       setData(response.data || { items: [], pagination: { total: 0, totalPages: 0 } });
     } catch (error) {
-      addToast(error.response?.data?.message || 'Could not load the shared medicine catalogue.', 'error');
+      addToast(getReadableErrorMessage(error, 'Could not load the shared medicine catalogue.'), 'error');
     } finally { setLoading(false); }
   }, [query, page, addToast]);
 
@@ -50,7 +51,7 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
       const jobs = (response.data?.jobs || []).map(job => ({ ...job, isImportJob: true, batchId: job.batchId || job.jobId, recordCount: job.totalRecords || job.processedRecords || 0 }));
       setImports([...jobs, ...(response.data?.items || [])].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)).slice(0, 12));
     } catch (error) {
-      addToast(error.response?.data?.message || 'Could not load catalogue import history.', 'warning');
+      addToast(getReadableErrorMessage(error, 'Could not load catalogue import history.'), 'warning');
     } finally { setHistoryLoading(false); }
   }, [addToast]);
   const retryImportJob = async jobId => {
@@ -59,7 +60,7 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
       await loadImportHistory();
       addToast('Failed import queued for retry. Refresh history to follow its progress.', 'success');
     } catch (error) {
-      addToast(error.response?.data?.message || 'Could not retry this import job.', 'error');
+      addToast(getReadableErrorMessage(error, 'Could not retry this import job.'), 'error');
     }
   };
   const restartStuckImportJob = async jobId => {
@@ -72,7 +73,7 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
       await loadImportHistory();
       addToast('Stuck import re-queued. Refresh history to follow its progress.', 'success');
     } catch (error) {
-      addToast(error.response?.data?.message || 'Could not restart this import. Refresh history to check its worker lease.', 'error');
+      addToast(getReadableErrorMessage(error, 'Could not restart this import. Refresh history to check its worker lease.'), 'error');
       await loadImportHistory();
     } finally { setBatchActionBusy(false); }
   };
@@ -86,7 +87,7 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
       setReviewRecordsSearch('');
       await loadBatchRecords(batchId, 1, '');
     } catch (error) {
-      addToast(error.response?.data?.message || 'Could not load the staged batch report.', 'error');
+      addToast(getReadableErrorMessage(error, 'Could not load the staged batch report.'), 'error');
     } finally { setBatchActionBusy(false); }
   };
   const loadBatchRecords = async (batchId, nextPage = reviewRecordsPage, searchValue = reviewRecordsSearch) => {
@@ -103,7 +104,7 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
       setReviewRecords(response.data || { items: [], pagination: { page: nextPage, total: 0, totalPages: 0 } });
       setReviewRecordsPage(nextPage);
     } catch (error) {
-      addToast(error.response?.data?.message || 'Could not load staged medicine records.', 'error');
+      addToast(getReadableErrorMessage(error, 'Could not load staged medicine records.'), 'error');
     } finally { setReviewRecordsLoading(false); }
   };
 
@@ -121,7 +122,7 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
       await refreshReviewedBatch();
       addToast('Combined reconciliation report approved.', 'success');
     } catch (error) {
-      addToast(error.response?.data?.message || 'Could not approve the combined batch.', 'error');
+      addToast(getReadableErrorMessage(error, 'Could not approve the combined batch.'), 'error');
     } finally { setBatchActionBusy(false); }
   };
   const publishReviewedBatch = async () => {
@@ -133,7 +134,7 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
       await refreshReviewedBatch();
       addToast('Combined medicine batch published.', 'success');
     } catch (error) {
-      addToast(error.response?.data?.message || 'Could not publish the combined batch.', 'error');
+      addToast(getReadableErrorMessage(error, 'Could not publish the combined batch.'), 'error');
     } finally { setBatchActionBusy(false); }
   };
 
@@ -146,7 +147,7 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
       await loadImportHistory();
       addToast(`Combined ${Number(response.data?.report?.sourceRecords || 0).toLocaleString()} source rows into ${Number(response.data?.report?.normalizedRecords || 0).toLocaleString()} reconciled records. Review the merged batch before approval.`, 'success');
     } catch (error) {
-      addToast(error.response?.data?.message || 'Could not combine the selected staged batches.', 'error');
+      addToast(getReadableErrorMessage(error, 'Could not combine the selected staged batches.'), 'error');
       await loadImportHistory();
     } finally { setMergeBusy(false); }
   };
@@ -162,7 +163,7 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
       await loadImportHistory();
       addToast(response.data?.message || `Removed ${Number(response.data?.removedCount || 0)} enrichment batch(es) from the recent list.`, 'success');
     } catch (error) {
-      addToast(error.response?.data?.message || 'Could not permanently delete the selected enrichment batches.', 'error');
+      addToast(getReadableErrorMessage(error, 'Could not permanently delete the selected enrichment batches.'), 'error');
       await loadImportHistory();
     } finally { setRemoveBatchesBusy(false); }
   };
@@ -185,7 +186,7 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
       setForm(Object.fromEntries([...TEXT_FIELDS, ...ARRAY_FIELDS].map(field => [field, ARRAY_FIELDS.includes(field) ? (medicine[field] || []).join('\n') : (medicine[field] || '')])));
       setAudit(history.data?.items || []);
     } catch (error) {
-      addToast(error.response?.data?.message || 'Could not load medicine details or audit history.', 'warning');
+      addToast(getReadableErrorMessage(error, 'Could not load medicine details or audit history.'), 'warning');
     }
   };
 
@@ -201,7 +202,7 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
       await load();
       addToast('Medicine master record deleted from the active catalogue. Audit and provenance retained.', 'success');
     } catch (error) {
-      addToast(error.response?.data?.message || 'Could not delete the medicine master record.', 'error');
+      addToast(getReadableErrorMessage(error, 'Could not delete the medicine master record.'), 'error');
     } finally { setSaving(false); }
   };
 
@@ -220,7 +221,7 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
       await load();
       addToast('Shared medicine master record updated. Change history recorded.', 'success');
     } catch (error) {
-      addToast(error.response?.data?.message || 'Medicine master update failed.', 'error');
+      addToast(getReadableErrorMessage(error, 'Medicine master update failed.'), 'error');
     } finally { setSaving(false); }
   };
 
@@ -231,7 +232,7 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3"><div><strong className="text-xs text-slate-800">Recent enrichment batches</strong><p className="mt-1 text-[10px] text-slate-500">Select standalone, unapproved READY batches to merge or permanently delete</p></div><div className="flex flex-wrap items-center gap-2"><button type="button" onClick={mergeSelectedBatches} disabled={mergeBusy || removeBatchesBusy || selectedBatchIds.length < 2 || selectedBatchIds.length > 10} className="rounded-lg bg-violet-600 px-3 py-2 text-[11px] font-extrabold text-white disabled:opacity-40">{mergeBusy ? 'Merging…' : `Merge selected (${selectedBatchIds.length})`}</button><button type="button" onClick={removeSelectedBatches} disabled={removeBatchesBusy || mergeBusy || selectedBatchIds.length < 1} className="rounded-lg border border-rose-200 px-3 py-2 text-[11px] font-extrabold text-rose-700 disabled:opacity-40">{removeBatchesBusy ? 'Deleting…' : `Delete selected (${selectedBatchIds.length})`}</button><button type="button" onClick={loadImportHistory} disabled={historyLoading || removeBatchesBusy} className="rounded-lg border px-3 py-2 text-[11px] font-bold disabled:opacity-50">{historyLoading ? "Refreshing…" : "Refresh history"}</button></div></div>
         {imports.length ? <>
-          <div className="hidden overflow-x-auto sm:block"><table className="w-full min-w-[680px] text-left text-xs"><thead className="bg-slate-50 text-[10px] uppercase text-slate-500"><tr><th className="p-3">Select</th><th className="p-3">Uploaded file</th><th className="p-3">Dataset</th><th className="p-3">Status</th><th className="p-3">Records</th><th className="p-3">Published</th><th className="p-3">Approval</th><th className="p-3">Uploaded</th><th className="p-3">Action</th></tr></thead><tbody className="divide-y divide-slate-100">{imports.map(batch => <tr key={batch.jobId || batch.batchId}><td className="p-3"><input type="checkbox" aria-label={`Select batch ${batch.batchId} for merge or removal`} checked={selectedBatchIds.includes(batch.batchId)} disabled={batch.isImportJob || batch.status !== 'READY' || Boolean(batch.approvedAt) || Boolean(batch.supersededByBatchId) || Boolean(batch.sourceBatchIds?.length) || mergeBusy || removeBatchesBusy} onChange={event => setSelectedBatchIds(current => event.target.checked ? [...current, batch.batchId].slice(-10) : current.filter(id => id !== batch.batchId))} /></td><td className="p-3"><strong className="block text-slate-800">{batch.fileName}</strong><span className="font-mono text-[10px] text-slate-400">{batch.isImportJob ? `Job ${batch.jobId}` : batch.batchId}</span></td><td className="p-3 text-slate-600">{batch.dataset || 'Detecting…'}</td><td className="p-3"><span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold">{batch.status}</span>{batch.isImportJob && batch.status === 'PROCESSING' && <div className="mt-1 min-w-20"><div className="h-1.5 overflow-hidden rounded-full bg-blue-100"><div className="h-full bg-blue-600" style={{width:`${Math.max(0,Math.min(100,Number(batch.progressPercent||0)))}%`}} /></div><span className="text-[9px] text-slate-500">{batch.progressPercent || 0}% · {batch.stage}</span></div>}{batch.isImportJob && batch.status === 'FAILED' && <p className="mt-1 max-w-40 text-[9px] text-rose-700">{batch.errorMessage}</p>}</td><td className="p-3 tabular-nums">{batch.isImportJob ? `${Number(batch.processedRecords||0).toLocaleString()} / ${Number(batch.totalRecords||0).toLocaleString()}` : Number(batch.recordCount || batch.report?.normalizedRecords || 0).toLocaleString()}</td><td className="p-3 tabular-nums">{Number(batch.publishedCount || 0).toLocaleString()}</td><td className="p-3">{batch.isImportJob ? '—' : batch.approvedAt ? <span className="font-bold text-emerald-700">Approved</span> : <span className="text-amber-700">Pending</span>}</td><td className="p-3 text-slate-500">{batch.createdAt ? new Date(batch.createdAt).toLocaleString() : "—"}</td><td className="p-3">{batch.isImportJob && batch.status === 'FAILED' ? <button type="button" onClick={() => retryImportJob(batch.jobId)} disabled={batchActionBusy} className="rounded-lg border border-amber-200 px-2.5 py-1.5 text-[10px] font-bold text-amber-800 disabled:opacity-50">Retry</button> : batch.isImportJob && batch.status === 'PROCESSING' && (batch.leaseExpiresAt ? new Date(batch.leaseExpiresAt).getTime() <= Date.now() : Date.now() - new Date(batch.updatedAt || batch.createdAt || 0).getTime() >= 15 * 60 * 1000) ? <button type="button" onClick={() => restartStuckImportJob(batch.jobId)} disabled={batchActionBusy} title="Worker lease expired; safely requeue the retained upload" className="rounded-lg border border-rose-200 px-2.5 py-1.5 text-[10px] font-bold text-rose-700 disabled:opacity-50">{batchActionBusy ? 'Restarting…' : 'Restart'}</button> : !batch.isImportJob && ['READY','PUBLISHED','PARTIALLY_PUBLISHED','FAILED'].includes(batch.status) && <button type="button" onClick={() => openBatchReview(batch.batchId)} disabled={batchActionBusy} className="rounded-lg border border-blue-200 px-2.5 py-1.5 text-[10px] font-bold text-blue-700 disabled:opacity-50">Review</button>}</td></tr>)}</tbody></table></div>
+          <div className="hidden overflow-x-auto sm:block"><table className="w-full min-w-[680px] text-left text-xs"><thead className="bg-slate-50 text-[10px] uppercase text-slate-500"><tr><th className="p-3">Select</th><th className="p-3">Uploaded file</th><th className="p-3">Dataset</th><th className="p-3">Status</th><th className="p-3">Records</th><th className="p-3">Published</th><th className="p-3">Approval</th><th className="p-3">Uploaded</th><th className="p-3">Action</th></tr></thead><tbody className="divide-y divide-slate-100">{imports.map(batch => <tr key={batch.jobId || batch.batchId}><td className="p-3"><input type="checkbox" aria-label={`Select batch ${batch.batchId} for merge or removal`} checked={selectedBatchIds.includes(batch.batchId)} disabled={batch.isImportJob || batch.status !== 'READY' || Boolean(batch.approvedAt) || Boolean(batch.supersededByBatchId) || Boolean(batch.sourceBatchIds?.length) || mergeBusy || removeBatchesBusy} onChange={event => setSelectedBatchIds(current => event.target.checked ? [...current, batch.batchId].slice(-10) : current.filter(id => id !== batch.batchId))} /></td><td className="p-3"><strong className="block text-slate-800">{batch.fileName}</strong><span className="font-mono text-[10px] text-slate-400">{batch.isImportJob ? `Job ${batch.jobId}` : batch.batchId}</span></td><td className="p-3 text-slate-600">{batch.dataset || 'Detecting…'}</td><td className="p-3"><span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold">{batch.status}</span>{batch.isImportJob && batch.status === 'PROCESSING' && <div className="mt-1 min-w-20"><div className="h-1.5 overflow-hidden rounded-full bg-blue-100"><div className="h-full bg-blue-600" style={{width:`${Math.max(0,Math.min(100,Number(batch.progressPercent||0)))}%`}} /></div><span className="text-[9px] text-slate-500">{batch.progressPercent || 0}% · {batch.stage}</span></div>}{batch.isImportJob && batch.status === 'FAILED' && <p className="mt-1 max-w-40 text-[9px] text-rose-700">{getReadableErrorMessage(batch.errorMessage, '')}</p>}</td><td className="p-3 tabular-nums">{batch.isImportJob ? `${Number(batch.processedRecords||0).toLocaleString()} / ${Number(batch.totalRecords||0).toLocaleString()}` : Number(batch.recordCount || batch.report?.normalizedRecords || 0).toLocaleString()}</td><td className="p-3 tabular-nums">{Number(batch.publishedCount || 0).toLocaleString()}</td><td className="p-3">{batch.isImportJob ? '—' : batch.approvedAt ? <span className="font-bold text-emerald-700">Approved</span> : <span className="text-amber-700">Pending</span>}</td><td className="p-3 text-slate-500">{batch.createdAt ? new Date(batch.createdAt).toLocaleString() : "—"}</td><td className="p-3">{batch.isImportJob && batch.status === 'FAILED' ? <button type="button" onClick={() => retryImportJob(batch.jobId)} disabled={batchActionBusy} className="rounded-lg border border-amber-200 px-2.5 py-1.5 text-[10px] font-bold text-amber-800 disabled:opacity-50">Retry</button> : batch.isImportJob && batch.status === 'PROCESSING' && (batch.leaseExpiresAt ? new Date(batch.leaseExpiresAt).getTime() <= Date.now() : Date.now() - new Date(batch.updatedAt || batch.createdAt || 0).getTime() >= 15 * 60 * 1000) ? <button type="button" onClick={() => restartStuckImportJob(batch.jobId)} disabled={batchActionBusy} title="Worker lease expired; safely requeue the retained upload" className="rounded-lg border border-rose-200 px-2.5 py-1.5 text-[10px] font-bold text-rose-700 disabled:opacity-50">{batchActionBusy ? 'Restarting…' : 'Restart'}</button> : !batch.isImportJob && ['READY','PUBLISHED','PARTIALLY_PUBLISHED','FAILED'].includes(batch.status) && <button type="button" onClick={() => openBatchReview(batch.batchId)} disabled={batchActionBusy} className="rounded-lg border border-blue-200 px-2.5 py-1.5 text-[10px] font-bold text-blue-700 disabled:opacity-50">Review</button>}</td></tr>)}</tbody></table></div>
           <div className="grid gap-3 p-3 sm:hidden">{imports.map(batch => {
             const selectable = !batch.isImportJob && batch.status === 'READY' && !batch.approvedAt && !batch.supersededByBatchId && !batch.sourceBatchIds?.length && !mergeBusy && !removeBatchesBusy;
             const canReview = !batch.isImportJob && ['READY','PUBLISHED','PARTIALLY_PUBLISHED','FAILED'].includes(batch.status);
@@ -239,7 +240,7 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
               <div className="flex items-start gap-2"><div className="min-w-0 flex-1"><p className="break-words text-sm font-bold text-slate-900">{batch.fileName || 'Catalogue import'}</p><p className="mt-1 break-all font-mono text-[9px] text-slate-400">{batch.isImportJob ? `Job ${batch.jobId}` : batch.batchId}</p></div><span className="shrink-0 rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold">{batch.status}</span></div>
               <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]"><div><span className="text-slate-400">Dataset</span><p className="mt-0.5 break-words font-semibold text-slate-700">{batch.dataset || 'Detecting…'}</p></div><div><span className="text-slate-400">Records</span><p className="mt-0.5 font-semibold tabular-nums text-slate-700">{batch.isImportJob ? `${Number(batch.processedRecords||0).toLocaleString()} / ${Number(batch.totalRecords||0).toLocaleString()}` : Number(batch.recordCount || batch.report?.normalizedRecords || 0).toLocaleString()}</p></div><div><span className="text-slate-400">Published</span><p className="mt-0.5 font-semibold tabular-nums text-slate-700">{Number(batch.publishedCount || 0).toLocaleString()}</p></div><div><span className="text-slate-400">Approval</span><p className="mt-0.5 font-semibold text-slate-700">{batch.isImportJob ? '—' : batch.approvedAt ? 'Approved' : 'Pending'}</p></div></div>
               {batch.isImportJob && batch.status === 'PROCESSING' && <div className="mt-3"><div className="h-1.5 overflow-hidden rounded-full bg-blue-100"><div className="h-full bg-blue-600" style={{width:`${Math.max(0,Math.min(100,Number(batch.progressPercent||0)))}%`}} /></div><p className="mt-1 text-[10px] text-slate-500">{batch.progressPercent || 0}% · {batch.stage}</p></div>}
-              {batch.isImportJob && batch.status === 'FAILED' && <p className="mt-2 break-words text-[10px] text-rose-700">{batch.errorMessage}</p>}
+              {batch.isImportJob && batch.status === 'FAILED' && <p className="mt-2 break-words text-[10px] text-rose-700">{getReadableErrorMessage(batch.errorMessage, '')}</p>}
               <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">{selectable && <label className="flex min-h-10 items-center gap-2 text-xs font-semibold text-slate-700"><input type="checkbox" aria-label={`Select batch ${batch.batchId} for merge or removal`} checked={selectedBatchIds.includes(batch.batchId)} onChange={event => setSelectedBatchIds(current => event.target.checked ? [...current, batch.batchId].slice(-10) : current.filter(id => id !== batch.batchId))}/> Select to merge</label>}<div className="ml-auto flex gap-2">{batch.isImportJob && batch.status === 'FAILED' && <button type="button" onClick={() => retryImportJob(batch.jobId)} disabled={batchActionBusy} className="min-h-10 rounded-lg border border-amber-200 px-3 text-xs font-bold text-amber-800 disabled:opacity-50">Retry</button>}{batch.isImportJob && batch.status === 'PROCESSING' && (batch.leaseExpiresAt ? new Date(batch.leaseExpiresAt).getTime() <= Date.now() : Date.now() - new Date(batch.updatedAt || batch.createdAt || 0).getTime() >= 15 * 60 * 1000) && <button type="button" onClick={() => restartStuckImportJob(batch.jobId)} disabled={batchActionBusy} className="min-h-10 rounded-lg border border-rose-200 px-3 text-xs font-bold text-rose-700 disabled:opacity-50">{batchActionBusy ? 'Restarting…' : 'Restart'}</button>}{canReview && <button type="button" onClick={() => openBatchReview(batch.batchId)} disabled={batchActionBusy} className="min-h-10 rounded-lg border border-blue-200 px-3 text-xs font-bold text-blue-700 disabled:opacity-50">Review batch</button>}</div></div>
               <p className="mt-2 text-[10px] text-slate-400">{batch.createdAt ? new Date(batch.createdAt).toLocaleString() : 'Upload time unavailable'}</p>
             </article>;

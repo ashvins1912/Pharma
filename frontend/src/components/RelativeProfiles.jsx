@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { getReadableErrorMessage } from '../utils/errorMessage';
 import apiClient from '../api/apiClient';
 import { useToast } from '../context/ToastContext';
 import { useActionLoading, LOADING_ACTIONS } from '../context/LoadingContext';
@@ -35,7 +36,7 @@ export default function RelativeProfiles({ user, onSelfPuid }) {
       const selfPerson = list.find(person => String(person.relationshipToOwner || '').toUpperCase() === 'SELF');
       if (selfPerson?.puid) onSelfPuid?.(selfPerson.puid);
     } catch (error) {
-      addToast(error.message || t('couldNotLoadRelatives'), 'error');
+      addToast(getReadableErrorMessage(error, t('couldNotLoadRelatives')), 'error');
     } finally {
       setLoading(false);
     }
@@ -79,7 +80,7 @@ export default function RelativeProfiles({ user, onSelfPuid }) {
         setOpenForm(false);
         addToast(selected ? 'Relative profile updated successfully.' : 'Relative profile created successfully.', 'success');
       } catch (error) {
-        addToast(error.message || t('couldNotSaveRelative'), 'error');
+        addToast(getReadableErrorMessage(error, t('couldNotSaveRelative')), 'error');
       }
     });
   };
@@ -94,7 +95,7 @@ export default function RelativeProfiles({ user, onSelfPuid }) {
         setOpenForm(false);
         addToast('Relative profile removed.', 'success');
       } catch (error) {
-        addToast(error.message || t('couldNotRemoveRelatives'), 'error');
+        addToast(getReadableErrorMessage(error, t('couldNotRemoveRelatives')), 'error');
       }
     });
   };

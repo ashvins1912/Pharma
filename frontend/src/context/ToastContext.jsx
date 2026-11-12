@@ -1,24 +1,17 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
+import { getReadableErrorMessage } from '../utils/errorMessage';
 
 const ToastContext = createContext(null);
 
-// API and browser errors can be objects. React text children must be renderable primitives.
+// Toasts are a shared React text-rendering boundary. Always store a primitive string,
+// including when callers pass Axios errors, nested objects, arrays, or cyclic values.
 export function normalizeToastMessage(value) {
   if (typeof value === 'string') return value;
   if (typeof value === 'number' || typeof value === 'boolean') return String(value);
   if (value == null) return '';
-  if (value instanceof Error) return value.message || 'Something went wrong.';
-  if (typeof value === 'object') {
-    if (typeof value.message === 'string' && value.message.trim()) return value.message;
-    if (typeof value.error === 'string' && value.error.trim()) return value.error;
-    if (value.message && typeof value.message === 'object') {
-      const nested = normalizeToastMessage(value.message);
-      if (nested) return nested;
-    }
-    if (typeof value.code === 'string' && value.code.trim()) return value.code;
-    try { return JSON.stringify(value); } catch { return 'Something went wrong.'; }
-  }
-  return String(value);
+  // Do not dump arbitrary server payloads into user-visible notifications;
+  // they may contain internal metadata or sensitive diagnostic details.
+  return getReadableErrorMessage(value, 'Something went wrong.');
 }
 
 export function ToastProvider({ children }) {

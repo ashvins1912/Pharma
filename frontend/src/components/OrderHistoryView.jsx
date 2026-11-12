@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { getReadableErrorMessage } from '../utils/errorMessage';
 import { useApp } from '../context/AppContext';
 import apiClient from '../api/apiClient';
 import { useToast } from '../context/ToastContext';
@@ -37,7 +38,7 @@ export default function OrderHistoryView({ onTrackOrder }) {
         addToast(t('orderCancelled'), 'success');
         await loadUserOrders({ silent: true });
       } catch (error) {
-        addToast(error.message || t('couldNotCancel'), 'error');
+        addToast(getReadableErrorMessage(error, t('couldNotCancel')), 'error');
       }
     });
   };
@@ -48,7 +49,7 @@ export default function OrderHistoryView({ onTrackOrder }) {
         const res = await apiClient.get(`/api/orders/${encodeURIComponent(order._id)}`);
         onTrackOrder(res.data?.order || res.data?.data || res.data || order);
       } catch (error) {
-        addToast(error.message || t('couldNotTrack'), 'error');
+        addToast(getReadableErrorMessage(error, t('couldNotTrack')), 'error');
       }
     });
   };

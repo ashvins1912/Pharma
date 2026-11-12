@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { getReadableErrorMessage } from '../../utils/errorMessage';
 import apiClient from '../../api/apiClient';
 import { useToast } from '../../context/ToastContext';
 
@@ -61,7 +62,7 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
       setBatchStatus(statusResponse.data);
       addToast('Background catalogue processing completed. Review the reconciliation report before publishing.', 'success');
     } catch (error) {
-      addToast(error.response?.data?.message || error.response?.data?.error?.message || error.message || 'Could not analyze this JSON dataset.', 'error');
+      addToast(getReadableErrorMessage(error, 'Could not analyze this JSON dataset.'), 'error');
     } finally {
       setBusy(false);
     }
@@ -87,7 +88,7 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
       setBatchStatus(batch.data);
       addToast('Catalogue import retry completed. Review the reconciliation report.', 'success');
     } catch (error) {
-      addToast(error.response?.data?.message || error.message || 'Could not retry this import job.', 'error');
+      addToast(getReadableErrorMessage(error, 'Could not retry this import job.'), 'error');
     } finally { setBusy(false); }
   };
 
@@ -100,7 +101,7 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
       setBatchStatus(statusResponse.data);
       addToast('Reconciliation approved. You can now publish this batch.', 'success');
     } catch (error) {
-      addToast(error.response?.data?.message || error.response?.data?.error?.message || 'Could not approve this reconciliation report.', 'error');
+      addToast(getReadableErrorMessage(error, 'Could not approve this reconciliation report.'), 'error');
     } finally { setBusy(false); }
   };
   const publish = async () => {
@@ -123,7 +124,7 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
         setPublished(null);
         setReviewConfirmed(false);
       }
-      addToast(payload?.message || payload?.error?.message || error.message || 'Catalogue publishing failed.', 'error');
+      addToast(getReadableErrorMessage(payload || error, 'Catalogue publishing failed.'), 'error');
     } finally {
       setBusy(false);
     }
@@ -137,7 +138,7 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
       setBatchStatus(response.data);
       addToast('Import batch status refreshed.', 'success');
     } catch (error) {
-      addToast(error.response?.data?.message || error.response?.data?.error?.message || 'Could not refresh import batch status.', 'error');
+      addToast(getReadableErrorMessage(error, 'Could not refresh import batch status.'), 'error');
     } finally { setStatusBusy(false); }
   };
 
@@ -173,7 +174,7 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
             </div>
           )}
           {jobStatus && busy && <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 space-y-2"><div className="flex items-center justify-between gap-3 text-xs"><strong className="text-blue-950">Background import: {jobStatus.stage || jobStatus.status}</strong><span className="font-bold tabular-nums text-blue-800">{Number(jobStatus.progressPercent || 0)}%</span></div><div className="h-2 overflow-hidden rounded-full bg-blue-100"><div className="h-full rounded-full bg-blue-600 transition-all" style={{ width: `${Math.max(0, Math.min(100, Number(jobStatus.progressPercent || 0)))}%` }} /></div><p className="text-[11px] text-blue-900">{jobStatus.fileName} · {jobStatus.processedRecords ? Number(jobStatus.processedRecords).toLocaleString() : 'Preparing'} / {jobStatus.totalRecords ? Number(jobStatus.totalRecords).toLocaleString() : '—'} records · Job {jobStatus.jobId}</p></div>}
-          {jobStatus?.status === 'FAILED' && <p className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">Processing failed: {jobStatus.errorMessage || 'Unknown processing error'} · Attempt {jobStatus.attempts || 1}</p>}
+          {jobStatus?.status === 'FAILED' && <p className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">Processing failed: {getReadableErrorMessage(jobStatus.errorMessage, 'Unknown processing error')} · Attempt {jobStatus.attempts || 1}</p>}
           {file && !preview && <p className="text-xs text-slate-500 break-all">Selected: <strong>{file.name}</strong> · {(file.size / 1024 / 1024).toFixed(2)} MB</p>}
           {report && (
             <div className="space-y-3">
@@ -192,7 +193,7 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
                   <div><span className="block text-[10px] text-slate-500">File</span><strong className="break-all">{batchStatus?.fileName || file?.name || '—'}</strong></div>
                   <div><span className="block text-[10px] text-slate-500">Published</span><strong>{Number(batchStatus?.publishedCount ?? published?.publishedCount ?? 0).toLocaleString()}</strong></div>
                 </div>
-                {batchStatus?.errorMessage && <p className="rounded-lg bg-rose-50 p-2 text-xs text-rose-800">{batchStatus.errorMessage}</p>}
+                {batchStatus?.errorMessage && <p className="rounded-lg bg-rose-50 p-2 text-xs text-rose-800">{getReadableErrorMessage(batchStatus.errorMessage, '')}</p>}
               </div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                 {metric('Source records', report.sourceRecords)}

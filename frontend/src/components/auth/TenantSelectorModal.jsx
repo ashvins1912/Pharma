@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { getReadableErrorMessage } from '../../utils/errorMessage';
 import apiClient from '../../api/apiClient';
 import { useTenant } from '../../context/TenantContext';
 import { useApp } from '../../context/AppContext';
@@ -182,7 +183,7 @@ export default function TenantSelectorModal({ isOpen, onClose, preferredTenantId
         setActiveTenant(preferred);
       }
     } catch (err) {
-      setError(err?.response?.data?.message || err.message || t('failedFetchNearby'));
+      setError(getReadableErrorMessage(err, t('failedFetchNearby')));
     } finally {
       setLoading(false);
     }

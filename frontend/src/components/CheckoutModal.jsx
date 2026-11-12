@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { getReadableErrorMessage } from '../utils/errorMessage';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -124,7 +125,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       } catch (error) {
         if (requestId === quoteRequestId.current) {
           setRewardQuote(null);
-          setQuoteError(error.message || t('catalogUnavailable'));
+          setQuoteError(getReadableErrorMessage(error, t('catalogUnavailable')));
         }
       } finally {
         if (requestId === quoteRequestId.current) setQuoteLoading(false);
@@ -155,7 +156,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
         if (active) setRestockItems(Array.isArray(response.data?.items) ? response.data.items : []);
       })
       .catch((error) => {
-        if (active) setRestockError(error.response?.data?.message || 'Personalized restock suggestions are temporarily unavailable.');
+        if (active) setRestockError(getReadableErrorMessage(error, 'Personalized restock suggestions are temporarily unavailable.'));
       })
       .finally(() => {
         if (active) setRestockLoading(false);
@@ -547,7 +548,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       });
       setRestockItems(Array.isArray(response.data?.items) ? response.data.items : []);
     } catch (error) {
-      setRestockError(error.response?.data?.message || 'Personalized restock suggestions are temporarily unavailable.');
+      setRestockError(getReadableErrorMessage(error, 'Personalized restock suggestions are temporarily unavailable.'));
     } finally {
       setRestockLoading(false);
     }

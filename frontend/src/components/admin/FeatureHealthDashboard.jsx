@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { getReadableErrorMessage } from '../../utils/errorMessage';
 import apiClient from '../../api/apiClient';
 import { ComponentLoader, CardSkeleton, TableSkeleton, ErrorState, EmptyState } from '../common/ComponentLoader';
 
@@ -45,7 +46,7 @@ export default function FeatureHealthDashboard() {
         setError('E2E Automation execution completed with errors.');
       }
     } catch (err) {
-      setError(err.response?.data?.error?.message || err.message || 'E2E Automation execution failed.');
+      setError(getReadableErrorMessage(err, 'E2E Automation execution failed.'));
     } finally {
       setRunningE2E(false);
     }
@@ -64,7 +65,7 @@ export default function FeatureHealthDashboard() {
         setError('Failed to retrieve feature health report.');
       }
     } catch (err) {
-      setError(err.response?.data?.error?.message || err.message || 'Error communicating with Feature Health API.');
+      setError(getReadableErrorMessage(err, 'Error communicating with Feature Health API.'));
     } finally {
       setLoading(false);
     }
@@ -85,7 +86,7 @@ export default function FeatureHealthDashboard() {
         setError('Audit completed without a feature health report.');
       }
     } catch (err) {
-      setError(err.response?.data?.error?.message || err.message || 'Audit execution failed.');
+      setError(getReadableErrorMessage(err, 'Audit execution failed.'));
     } finally {
       setAuditing(false);
     }
@@ -101,7 +102,7 @@ export default function FeatureHealthDashboard() {
         await fetchHealth(false);
       }
     } catch (err) {
-      setError(err.response?.data?.error?.message || err.message || 'Microservice probe failed.');
+      setError(getReadableErrorMessage(err, 'Microservice probe failed.'));
     } finally {
       setProbingAllServices(false);
     }
