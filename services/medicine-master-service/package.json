@@ -7,7 +7,8 @@
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
     "test": "node --test",
-    "index:medicine-ngrams": "node scripts/rebuild-medicine-ngram-index.mjs"
+    "index:medicine-ngrams": "node scripts/rebuild-medicine-ngram-index.mjs",
+    "benchmark:persisted-medicine-ngrams": "node scripts/benchmark-persisted-medicine-ngram-index.mjs"
   },
   "dependencies": {
     "dotenv": "^16.4.7",
