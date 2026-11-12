@@ -48,7 +48,12 @@ export const connectDB = async ({ silent = false } = {}) => {
                 return false;
             }
             mongoose.set('bufferCommands', false);
-            await mongoose.connect(env.MONGO_URI, { serverSelectionTimeoutMS: 3000 });
+            await mongoose.connect(env.MONGO_URI, {
+                serverSelectionTimeoutMS: 3000,
+                maxPoolSize: env.MONGO_MAX_POOL_SIZE,
+                minPoolSize: 0,
+                maxIdleTimeMS: 30_000
+            });
             const hello = await mongoose.connection.db.admin().command({ hello: 1 });
             // Keep split-order confirmation IDs unique only when present. The legacy
             // sparse unique index also indexed explicit null values and could block
