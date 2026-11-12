@@ -151,3 +151,101 @@ export function rankScannedMedicineCandidates(extracted, catalogue = [], { minim
       : best.score < minimumScore ? 'LOW_MATCH_SCORE' : 'MATCHED'
   };
 }
+
+
+/**
+ * General catalogue suggestion matcher for typed search, prescription OCR and
+ * product discovery. Uses an ensemble of phonetic, edit-distance, Jaro-Winkler,
+ * token overlap and prefix/substring evidence. It only ranks real catalogue
+ * rows; it never substitutes a strength or silently selects a candidate.
+ */
+export function rankMedicineTextMatches(query, catalogue = [], { limit = 5, minimumScore = 0.48 } = {}) {
+  const rawQuery = String(query || '').trim();
+  const normalizedQuery = clean(rawQuery);
+  if (normalizedQuery.length < 2 || !Array.isArray(catalogue) || !catalogue.length) {
+    return { alternatives: [], confidence: 0, reason: 'INSUFFICIENT_QUERY_OR_CATALOGUE' };
+  }
+
+  const queryStrengths = [...normalizedQuery.matchAll(/\b(\d+(?:\.\d+)?)\s*(mg|mcg|g|ml|iu|%)\b/gi)]
+    .map(match => String(Number(match[1])) + match[2].toLowerCase());
+  const queryForms = FORM_TERMS.filter(form => new RegExp('\\b' + form + '\\b', 'i').test(normalizedQuery));
+  const queryTokens = normalizedQuery.split(/\s+/).filter(token => token.length > 1);
+  const unique = new Set();
+
+  const ranked = catalogue.filter(item => item && typeof item === 'object').map(product => {
+    const identity = String(product.productId || product._id || product.medicineId || product.sku || [
+      product.name, product.strength, product.dosageForm || product.form
+    ].join('|'));
+    if (unique.has(identity)) return null;
+    unique.add(identity);
+
+    const nameFields = [product.name, product.productName, product.brandName, product.brand]
+      .filter(value => typeof value === 'string' && value.trim());
+    const genericFields = [product.genericName, product.composition]
+      .filter(value => typeof value === 'string' && value.trim());
+    const candidateName = nameFields[0] || genericFields[0] || '';
+    const identityFields = [...nameFields, ...genericFields];
+    const candidateIdentity = clean(identityFields.join(' '));
+    const candidateText = clean([
+      ...identityFields, product.strength, product.dosageForm, product.form,
+      product.manufacturer, product.packSize, product.pack
+    ].filter(Boolean).join(' '));
+
+    const nameScore = Math.max(0, ...identityFields.map(field => {
+      const target = clean(field);
+      const exact = target === normalizedQuery ? 1 : 0;
+      const contains = target.includes(normalizedQuery) || normalizedQuery.includes(target) ? 0.94 : 0;
+      const tokenSet = new Set(target.split(/\s+/).filter(Boolean));
+      const overlap = queryTokens.length
+        ? queryTokens.filter(token => tokenSet.has(token)).length / queryTokens.length
+        : 0;
+      return Math.max(exact, contains, overlap,
+        calculateEnsembleSimilarity(normalizedQuery, target),
+        calculateJaroWinklerSimilarity(normalizedQuery, target),
+        calculateDamerauLevenshteinSimilarity(normalizedQuery, target));
+    }));
+
+    const candidateStrengths = [...candidateText.matchAll(/\b(\d+(?:\.\d+)?)\s*(mg|mcg|g|ml|iu|%)\b/gi)]
+      .map(match => String(Number(match[1])) + match[2].toLowerCase());
+    const strengthConflict = queryStrengths.length > 0 && candidateStrengths.length > 0
+      && !queryStrengths.every(value => candidateStrengths.includes(value));
+    const strengthUnknown = queryStrengths.length > 0 && candidateStrengths.length === 0;
+    const candidateForm = clean(product.dosageForm || product.form);
+    const formConflict = queryForms.length > 0 && candidateForm
+      && !queryForms.some(form => candidateForm.includes(form) || form.includes(candidateForm));
+    const formUnknown = queryForms.length > 0 && !candidateForm;
+
+    const queryKey = normalizeText(normalizedQuery);
+    const candidateKey = normalizeText(candidateIdentity);
+    const phonetic = queryKey.length >= 4 && getPhoneticKey(queryKey) === getPhoneticKey(candidateKey) ? 1 : 0;
+    const genericEvidence = genericFields.length
+      ? Math.max(0, ...genericFields.map(value => calculateEnsembleSimilarity(normalizedQuery, value)))
+      : 0;
+    let score = (nameScore * 0.72) + (genericEvidence * 0.18) + (phonetic * 0.10);
+    if (strengthConflict || formConflict) score = 0;
+    else {
+      if (strengthUnknown) score *= 0.88;
+      if (formUnknown) score *= 0.92;
+    }
+    const reasons = [];
+    if (strengthConflict) reasons.push('Strength conflict');
+    else if (strengthUnknown) reasons.push('Strength not listed');
+    if (formConflict) reasons.push('Dosage-form conflict');
+    else if (formUnknown) reasons.push('Dosage form not listed');
+    if (genericEvidence > 0.7) reasons.push('Generic/composition similarity');
+    if (phonetic) reasons.push('Phonetic similarity');
+    return {
+      product, name: candidateName, score: Math.round(Math.min(1, score) * 100),
+      rawScore: score, reasons, strengthConflict, formConflict,
+      reviewRequired: strengthUnknown || formUnknown || score < 0.86
+    };
+  }).filter(Boolean)
+    .filter(match => match.rawScore >= minimumScore && !match.strengthConflict && !match.formConflict)
+    .sort((a, b) => b.rawScore - a.rawScore || String(a.name).localeCompare(String(b.name)));
+
+  return {
+    alternatives: ranked.slice(0, Math.max(1, limit)),
+    confidence: ranked[0]?.score || 0,
+    reason: !ranked.length ? 'NO_COMPATIBLE_CATALOGUE_MATCH' : 'SUGGESTIONS_REQUIRE_USER_REVIEW'
+  };
+}
