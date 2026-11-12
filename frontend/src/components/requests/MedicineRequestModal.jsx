@@ -322,8 +322,8 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
             frequency: medicine.frequency?.raw || medicine.frequency?.normalized || '',
             duration,
             instructions: String(instructions || ''),
-            source: 'PRESCRIPTION_OCR',
-            validationStatus: 'OCR_REVIEW',
+            source: 'PRESCRIPTION_EXTRACTED',
+            validationStatus: 'REVIEW_REQUIRED',
             confidence: Number(medicine.confidence) || 0,
             requiresReview: true
           });
@@ -422,8 +422,8 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
       dosageForm: product.dosageForm || product.form || 'Other',
       brand: product.brandName || product.brand || product.manufacturer || '',
       quantity: productScanCandidates[0]?.exact ? (extractMedicineLabelDetails(productScanText).packSize || 1) : 1,
-      source: 'PRODUCT_SCAN',
-      validationStatus: candidate.exact ? 'CATALOGUE_MATCH_REVIEW' : 'CATALOGUE_CANDIDATE_REVIEW',
+      source: 'MANUAL',
+      validationStatus: 'REVIEW_REQUIRED',
       confidence: Number(candidate.score || 0) / 100,
       requiresReview: true
     });
