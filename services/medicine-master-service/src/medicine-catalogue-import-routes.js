@@ -6,7 +6,7 @@ import { invalidateMedicineMasterVersionCache, MedicineMatchReference, mapMedici
 import { requireServiceScope } from './service-auth.js';
 import { config } from './config.js';
 import { scoreMedicineMatch } from './medicine-match-scoring.js';
-import { buildNameNgramIdf } from '@pharma/algorithm-kernel';
+import { buildNameNgramIdf, CharacterNgramCandidateIndex } from '@pharma/algorithm-kernel';
 export { scoreMedicineMatch };
 
 const router = express.Router();
@@ -52,15 +52,18 @@ async function reconcileCatalogueRecordsAgainstMaster(records) {
   const ids = [...new Set(records.flatMap(item => [item.medicineId, item.reconciliationMatch?.targetMedicineId].filter(Boolean)))];
   const canonicalKeys = [...new Set(records.map(item => item.canonicalKey).filter(Boolean))];
   const names = [...new Set(records.filter(item => item.safeNameMatch).map(item => item.brandName).filter(Boolean))];
-  const allPrefixes = [...new Set(records.map(item => key(item.brandName).slice(0, 2)).filter(value => value.length === 2))];
+  const searchTerms = [...new Set(records.flatMap(item => CharacterNgramCandidateIndex.searchTerms(item.brandName)))];
+  const escapedTerms = searchTerms.map(term => term.replace(/[.*+?^${}()|[\]\\]/g, '\\  const allPrefixes = [...new Set(records.map(item => key(item.brandName).slice(0, 2)).filter(value => value.length === 2))];
   const prefixes = allPrefixes.slice(0, 120);
   const scannedPrefixes = new Set(prefixes);
-  const prefixScanTruncated = allPrefixes.length > prefixes.length;
+  const prefixScanTruncated = allPrefixes.length > prefixes.length;'));
+  const candidateTerms = escapedTerms.slice(0, 600);
+  const candidateTermScanTruncated = escapedTerms.length > candidateTerms.length;
   const clauses = [
     ...(ids.length ? [{ medicineId: { $in: ids } }] : []),
     ...(canonicalKeys.length ? [{ canonicalKey: { $in: canonicalKeys } }] : []),
     ...(names.length ? [{ brandName: { $in: names } }] : []),
-    ...prefixes.map(prefix => ({ brandName: { $regex: '^' + prefix, $options: 'i' } }))
+    ...candidateTerms.map(term => ({ brandName: { $regex: term, $options: 'i' } }))
   ];
   const [candidates, archivedIdentityRows] = await Promise.all([
     clauses.length ? MedicineMaster.find({ $or: clauses, isArchived: { $ne: true } }, {
@@ -71,20 +74,19 @@ async function reconcileCatalogueRecordsAgainstMaster(records) {
   ]);
   const archivedIds = new Set(archivedIdentityRows.map(item => item.medicineId));
   const candidateLimitTruncated = candidates.length > 5000;
-  const scanTruncated = candidateLimitTruncated || prefixScanTruncated;
+  const scanTruncated = candidateLimitTruncated || candidateTermScanTruncated;
   const activeCandidates = candidates.slice(0, 5000);
   const byId = new Map(activeCandidates.map(item => [item.medicineId, item]));
-  const keyGroups = new Map(), nameGroups = new Map(), prefixGroups = new Map();
+  const keyGroups = new Map(), nameGroups = new Map();
   for (const candidate of activeCandidates) {
     if (candidate.canonicalKey) keyGroups.set(candidate.canonicalKey, [...(keyGroups.get(candidate.canonicalKey) || []), candidate]);
     const nameKey = key(candidate.brandName);
     nameGroups.set(nameKey, [...(nameGroups.get(nameKey) || []), candidate]);
-    const prefix = nameKey.slice(0, 2);
-    if (prefix.length === 2) prefixGroups.set(prefix, [...(prefixGroups.get(prefix) || []), candidate]);
   }
   const unique = groups => new Map([...groups.entries()].filter(([, group]) => group.length === 1).map(([identity, group]) => [identity, group[0]]));
   const byKey = unique(keyGroups), byName = unique(nameGroups);
   const nameNgramIdf = buildNameNgramIdf(activeCandidates);
+  const candidateIndex = new CharacterNgramCandidateIndex(activeCandidates);
   const plans = [];
   const blockers = [];
   for (const item of records) {
@@ -118,18 +120,20 @@ async function reconcileCatalogueRecordsAgainstMaster(records) {
     } else {
       let best = null;
       let tiedBest = false;
-      const prefix = key(item.brandName).slice(0, 2);
-      if (!scannedPrefixes.has(prefix)) {
-        plan = { decision: 'MANUAL_REVIEW', targetMedicineId: '', method: 'FUZZY_CANDIDATE_PREFIX_NOT_SCANNED', score: 0, warnings: ['CANDIDATE_SCAN_PREFIX_LIMIT_REACHED'] };
+      const retrieved = candidateIndex.search(item.brandName, { limit: 1000 });
+      if (!retrieved.matchedGrams) {
+        plan = { decision: 'MANUAL_REVIEW', targetMedicineId: '', method: 'FUZZY_CANDIDATE_NAME_TOO_SHORT', score: 0, warnings: ['INSUFFICIENT_NAME_FOR_FUZZY_RETRIEVAL'] };
+      } else if (retrieved.truncated) {
+        plan = { decision: 'MANUAL_REVIEW', targetMedicineId: '', method: 'FUZZY_CANDIDATE_RETRIEVAL_TRUNCATED', score: 0, warnings: ['CANDIDATE_RETRIEVAL_LIMIT_REACHED'] };
       } else {
-        for (const candidate of prefixGroups.get(prefix) || []) {
-          const scored = scoreMedicineMatch(item, candidate, { nameNgramIdf });
-          if (!best || scored.score > best.score) { best = { candidate, ...scored }; tiedBest = false; }
+        for (const entry of retrieved.candidates) {
+          const scored = scoreMedicineMatch(item, entry.record, { nameNgramIdf });
+          if (!best || scored.score > best.score) { best = { candidate: entry.record, ...scored }; tiedBest = false; }
           else if (scored.score === best.score) tiedBest = true;
         }
       }
       if (plan) {
-        // Candidate prefix was not scanned; keep this row out of automatic insert/update.
+        // Candidate retrieval was insufficient or truncated; never infer a safe insert.
       } else if (best && tiedBest) {
         plan = { decision: 'MANUAL_REVIEW', targetMedicineId: '', method: 'AMBIGUOUS_TOP_MATCHES', score: best.score, warnings: ['MULTIPLE_CANDIDATES_SHARE_TOP_SCORE'] };
       } else if (best && best.decision === 'AUTO_MERGE') {
