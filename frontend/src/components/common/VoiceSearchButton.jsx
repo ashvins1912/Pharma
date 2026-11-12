@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { calculateJaroWinklerSimilarity, normalizeText } from '../../utils/similarity';
+import { useApp } from '../../context/AppContext';
 
 /**
  * Clean up common spoken prefixes in voice search
@@ -33,7 +35,7 @@ function speakText(text) {
 const POPULAR_VOICE_MEDICINES = [
     'Dolo 650',
     'Paracetamol 500mg',
-    'Augmentin 625',
+    'Augmentin 625 Duo',
     'Montair-LC',
     'Pan-40',
     'Azithromycin 500mg',
@@ -41,11 +43,81 @@ const POPULAR_VOICE_MEDICINES = [
     'Allegra 120mg'
 ];
 
+/**
+ * Refine spoken voice transcript against catalog using Jaro-Winkler Fuzzy Matching
+ */
+export function refineSpokenQueryWithFuzzyMatch(rawTranscript, catalog = []) {
+    const cleaned = cleanSpokenQuery(rawTranscript);
+    if (!cleaned || cleaned.length < 2) {
+        return { originalText: cleaned, refinedText: cleaned, confidence: 0, alternatives: [], isRefined: false };
+    }
+
+    const candidates = new Map();
+    // 1. Load actual inventory catalog names
+    if (Array.isArray(catalog)) {
+        catalog.forEach(item => {
+            const name = item.name || item.brandName || item.brand;
+            if (name) candidates.set(name.toLowerCase(), name);
+        });
+    }
+    // 2. Load popular known voice medicines
+    POPULAR_VOICE_MEDICINES.forEach(med => {
+        if (!candidates.has(med.toLowerCase())) candidates.set(med.toLowerCase(), med);
+    });
+
+    const queryNorm = normalizeText(cleaned);
+    let bestMatch = cleaned;
+    let maxScore = 0;
+    const scoredList = [];
+
+    for (const [normKey, displayName] of candidates.entries()) {
+        const candidateNorm = normalizeText(normKey);
+        let score = calculateJaroWinklerSimilarity(queryNorm, candidateNorm);
+
+        // Boost score if one string contains the other
+        if (candidateNorm.includes(queryNorm) || queryNorm.includes(candidateNorm)) {
+            score = Math.max(score, 0.82);
+        }
+
+        if (score >= 0.45) {
+            scoredList.push({ name: displayName, score: Math.round(score * 100) });
+        }
+
+        if (score > maxScore) {
+            maxScore = score;
+            bestMatch = displayName;
+        }
+    }
+
+    scoredList.sort((a, b) => b.score - a.score);
+    const confidence = Math.round(maxScore * 100);
+    const isRefined = maxScore >= 0.65 && bestMatch.toLowerCase() !== cleaned.toLowerCase();
+    const refinedText = isRefined ? bestMatch : cleaned;
+    const alternatives = scoredList.filter(item => item.name.toLowerCase() !== refinedText.toLowerCase()).slice(0, 3);
+
+    return {
+        originalText: cleaned,
+        refinedText,
+        confidence,
+        isRefined,
+        alternatives
+    };
+}
+
 export default function VoiceSearchButton({ onTranscript, onError, onListeningChange, currentQuery = '', className = '' }) {
+    let medicines = [];
+    try {
+        const app = useApp();
+        medicines = app?.medicines || [];
+    } catch {
+        // Safe fallback if rendered outside AppProvider scope
+    }
+
     const [isListening, setIsListening] = useState(false);
     const [isOpen, setIsOpen] = useState(false);
     const [interimTranscript, setInterimTranscript] = useState('');
     const [finalText, setFinalText] = useState('');
+    const [fuzzyMatchInfo, setFuzzyMatchInfo] = useState(null);
     const [errorState, setErrorState] = useState(null);
     const [isSupported, setIsSupported] = useState(true);
     const [showHelpGuide, setShowHelpGuide] = useState(false);
@@ -102,9 +174,20 @@ export default function VoiceSearchButton({ onTranscript, onError, onListeningCh
                 if (latestFinal) {
                     const cleaned = cleanSpokenQuery(latestFinal);
                     if (cleaned) {
-                        setFinalText(cleaned);
-                        if (onTranscript) onTranscript(cleaned);
-                        if (ttsEnabled) speakText(`Searching for ${cleaned}`);
+                        const matchResult = refineSpokenQueryWithFuzzyMatch(cleaned, medicines);
+                        setFuzzyMatchInfo(matchResult);
+                        const queryToUse = matchResult.refinedText;
+
+                        setFinalText(queryToUse);
+                        if (onTranscript) onTranscript(queryToUse);
+
+                        if (ttsEnabled) {
+                            if (matchResult.isRefined) {
+                                speakText(`Refined to ${queryToUse}`);
+                            } else {
+                                speakText(`Searching for ${queryToUse}`);
+                            }
+                        }
                         setInterimTranscript('');
                     }
                 }
@@ -154,12 +237,16 @@ export default function VoiceSearchButton({ onTranscript, onError, onListeningCh
             }
             if (autoDismissTimerRef.current) clearTimeout(autoDismissTimerRef.current);
         };
-    }, [onTranscript, onError, ttsEnabled]);
+    }, [onTranscript, onError, ttsEnabled, medicines]);
 
     const handleSelectMedicine = (medName) => {
-        setFinalText(medName);
-        if (onTranscript) onTranscript(medName);
-        if (ttsEnabled) speakText(`Searching for ${medName}`);
+        const matchResult = refineSpokenQueryWithFuzzyMatch(medName, medicines);
+        setFuzzyMatchInfo(matchResult);
+        const queryToUse = matchResult.refinedText || medName;
+
+        setFinalText(queryToUse);
+        if (onTranscript) onTranscript(queryToUse);
+        if (ttsEnabled) speakText(`Searching for ${queryToUse}`);
         setErrorState(null);
     };
 
@@ -168,6 +255,7 @@ export default function VoiceSearchButton({ onTranscript, onError, onListeningCh
         setErrorState(null);
         setInterimTranscript('');
         setFinalText('');
+        setFuzzyMatchInfo(null);
 
         if (!isSupported || !recognitionRef.current) {
             const errObj = {
@@ -296,8 +384,8 @@ export default function VoiceSearchButton({ onTranscript, onError, onListeningCh
                                 "{interimTranscript}"
                             </p>
                         ) : finalText ? (
-                            <div className="space-y-0.5">
-                                <span className="text-[9px] uppercase tracking-wider font-bold text-slate-400">Recognized Query</span>
+                            <div className="space-y-0.5 w-full">
+                                <span className="text-[9px] uppercase tracking-wider font-bold text-slate-400">Active Query</span>
                                 <p className="text-xs font-black text-emerald-400">"{finalText}"</p>
                             </div>
                         ) : (
@@ -306,6 +394,43 @@ export default function VoiceSearchButton({ onTranscript, onError, onListeningCh
                             </p>
                         )}
                     </div>
+
+                    {/* Fuzzy Match Refinement Indicator */}
+                    {fuzzyMatchInfo && (
+                        <div className="bg-slate-800/90 border border-indigo-500/40 p-2.5 rounded-xl space-y-1.5 text-xs text-left">
+                            <div className="flex items-center justify-between text-[10px] font-bold text-slate-400">
+                                <span className="truncate max-w-[65%]">🎙️ Spoken: "{fuzzyMatchInfo.originalText}"</span>
+                                <span className="text-emerald-400 font-mono shrink-0">{fuzzyMatchInfo.confidence}% Match</span>
+                            </div>
+                            {fuzzyMatchInfo.isRefined && (
+                                <div className="flex items-center gap-1.5 text-[11px] font-black text-emerald-300">
+                                    <span>✨ Fuzzy Refined:</span>
+                                    <span className="bg-emerald-500/20 text-emerald-200 px-2 py-0.5 rounded-md border border-emerald-500/30 truncate">
+                                        "{fuzzyMatchInfo.refinedText}"
+                                    </span>
+                                </div>
+                            )}
+                            {fuzzyMatchInfo.alternatives?.length > 0 && (
+                                <div className="pt-1 border-t border-slate-700/60 space-y-1">
+                                    <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block">
+                                        Similar Catalog Matches:
+                                    </span>
+                                    <div className="flex flex-wrap gap-1">
+                                        {fuzzyMatchInfo.alternatives.map((alt) => (
+                                            <button
+                                                key={alt.name}
+                                                type="button"
+                                                onClick={() => handleSelectMedicine(alt.name)}
+                                                className="px-2 py-0.5 bg-slate-700 hover:bg-indigo-600 text-indigo-200 hover:text-white rounded-md text-[10px] font-bold transition cursor-pointer"
+                                            >
+                                                {alt.name} ({alt.score}%)
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
 
                     {/* Status / Error Message Banner */}
                     {errorState && (
