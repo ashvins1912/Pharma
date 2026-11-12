@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { getReadableErrorMessage } from '../../utils/errorMessage';
 import apiClient from '../../api/apiClient';
 import { useAuth } from '../../context/AuthContext';
 import { ComponentLoader, CardSkeleton, EmptyState, ErrorState } from '../common/ComponentLoader';
@@ -119,7 +120,7 @@ export default function LiveTelemetryTab() {
       const message = statusCode === 401 || statusCode === 403
         ? 'Access denied. This telemetry view requires an authorized administrator session.'
         : requestError?.response?.data?.error?.message || requestError?.message || 'Telemetry could not be loaded.';
-      setError(message);
+      setError(getReadableErrorMessage(message, 'Live telemetry request failed.'));
       setEvents(current => [{
         id: `telemetry-error-${Date.now()}`,
         time: new Date().toISOString(),
