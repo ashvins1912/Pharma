@@ -6,13 +6,13 @@ export function normalizeText(value) {
   if (value === null || value === undefined) return '';
   return String(value)
     .toLowerCase()
-    .replace(/[^a-z0-9\\s]/gi, '')
-    .replace(/\\b(tab|tbl|tabs|tablets)\\b/gi, 'tablet')
-    .replace(/\\b(cap|caps|capsules)\\b/gi, 'capsule')
-    .replace(/\\b(syr|syrup)\\b/gi, 'syrup')
-    .replace(/\\b(inj|injection)\\b/gi, 'injection')
-    .replace(/\\b(\\d+)\\s*(mg|g|ml|mcg|iu)\\b/gi, '$1$2')
-    .replace(/\\s+/g, ' ')
+    .replace(/[^a-z0-9\s]/gi, '')
+    .replace(/\b(tab|tbl|tabs|tablets)\b/gi, 'tablet')
+    .replace(/\b(cap|caps|capsules)\b/gi, 'capsule')
+    .replace(/\b(syr|syrup)\b/gi, 'syrup')
+    .replace(/\b(inj|injection)\b/gi, 'injection')
+    .replace(/\b(\d+)\s*(mg|g|ml|mcg|iu)\b/gi, '$1$2')
+    .replace(/\s+/g, ' ')
     .trim();
 }
 
