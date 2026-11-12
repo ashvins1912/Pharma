@@ -83,7 +83,9 @@ app.use((error, req, res, _next) => {
 await mongoose.connect(config.mongoUri, {
   dbName: config.dbName,
   serverSelectionTimeoutMS: 5000,
-  maxPoolSize: 20
+  maxPoolSize: config.mongoMaxPoolSize,
+  minPoolSize: 0,
+  maxIdleTimeMS: 30_000
 });
 await Promise.all([
   Product.init(),
