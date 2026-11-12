@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { getReadableErrorMessage } from '../../utils/errorMessage';
 import apiClient from '../../api/apiClient';
 import { useToast } from '../../context/ToastContext';
 import { useTenant } from '../../context/TenantContext';
@@ -31,7 +32,7 @@ export default function AdminRouteOptimizer({ onRefresh }) {
       })
       .catch((err) => {
         if (isCurrentRequest) {
-          setRidersError(err.response?.data?.message || err.message || 'Could not load onboarded riders.');
+          setRidersError(getReadableErrorMessage(err, 'Could not load onboarded riders.'));
           setRiders([]);
         }
       })
