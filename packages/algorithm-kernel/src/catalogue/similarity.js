@@ -78,6 +78,7 @@ export function charNgramDice(left, right) {
   const a = normalizeSimilarityText(left).replace(/\\s+/g, ' ');
   const b = normalizeSimilarityText(right).replace(/\\s+/g, ' ');
   if (!a || !b) return a === b ? 100 : 0;
+  if (a === b) return 100;
   const n = Math.min(3, Math.max(2, Math.min(a.length, b.length)));
   const grams = value => {
     const result = new Map();
