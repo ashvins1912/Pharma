@@ -2,12 +2,31 @@ import React, { createContext, useContext, useState, useCallback } from 'react';
 
 const ToastContext = createContext(null);
 
+// API and browser errors can be objects. React text children must be renderable primitives.
+export function normalizeToastMessage(value) {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (value == null) return '';
+  if (value instanceof Error) return value.message || 'Something went wrong.';
+  if (typeof value === 'object') {
+    if (typeof value.message === 'string' && value.message.trim()) return value.message;
+    if (typeof value.error === 'string' && value.error.trim()) return value.error;
+    if (value.message && typeof value.message === 'object') {
+      const nested = normalizeToastMessage(value.message);
+      if (nested) return nested;
+    }
+    if (typeof value.code === 'string' && value.code.trim()) return value.code;
+    try { return JSON.stringify(value); } catch { return 'Something went wrong.'; }
+  }
+  return String(value);
+}
+
 export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([]);
 
   const addToast = useCallback((message, type = 'success', duration = 5000) => {
     const id = `toast-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
-    setToasts((prev) => [...prev, { id, message, type }]);
+    setToasts((prev) => [...prev, { id, message: normalizeToastMessage(message), type }]);
 
     if (duration > 0) {
       setTimeout(() => {
@@ -49,7 +68,7 @@ export function ToastProvider({ children }) {
                 {toast.type === 'warning' && '⚠'}
                 {toast.type === 'info' && 'ℹ'}
               </span>
-              <p className="leading-snug">{toast.message}</p>
+              <p className="leading-snug">{normalizeToastMessage(toast.message)}</p>
             </div>
             <button
               onClick={() => removeToast(toast.id)}
