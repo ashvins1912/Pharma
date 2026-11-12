@@ -11,6 +11,17 @@ function cleanSpokenQuery(transcript) {
         .trim();
 }
 
+const POPULAR_VOICE_MEDICINES = [
+    'Dolo 650',
+    'Paracetamol 500mg',
+    'Augmentin 625',
+    'Montair-LC',
+    'Pan-40',
+    'Azithromycin 500mg',
+    'Cetirizine 10mg',
+    'Allegra 120mg'
+];
+
 export default function VoiceSearchButton({ onTranscript, onError, onListeningChange, currentQuery = '', className = '' }) {
     const [isListening, setIsListening] = useState(false);
     const [interimTranscript, setInterimTranscript] = useState('');
@@ -92,8 +103,8 @@ export default function VoiceSearchButton({ onTranscript, onError, onListeningCh
                 message = 'No voice sound was detected. Please speak clearly near your microphone and try again.';
                 code = 'NO_SPEECH';
             } else if (event.error === 'audio-capture') {
-                title = 'Microphone Hardware Error';
-                message = 'No microphone device was found or audio capture failed. Check your microphone device connections.';
+                title = 'Microphone Input Restricted';
+                message = 'Microphone access is restricted in this browser session. You can tap any popular medicine below or unblock permissions.';
                 code = 'AUDIO_CAPTURE';
             } else if (event.error === 'network') {
                 title = 'Network Connection Error';
@@ -105,11 +116,11 @@ export default function VoiceSearchButton({ onTranscript, onError, onListeningCh
             setErrorState(errorObj);
             if (onError) onError(errorObj);
 
-            // Auto dismiss toast after 8 seconds unless user opens help guide
+            // Auto dismiss toast after 10 seconds unless user opens help guide
             if (autoDismissTimerRef.current) clearTimeout(autoDismissTimerRef.current);
             autoDismissTimerRef.current = setTimeout(() => {
                 setErrorState(prev => (prev?.timestamp === errorObj.timestamp && !showHelpGuide ? null : prev));
-            }, 8000);
+            }, 10000);
         };
 
         recognition.onend = () => {
@@ -127,11 +138,11 @@ export default function VoiceSearchButton({ onTranscript, onError, onListeningCh
         };
     }, [onTranscript, onError, showHelpGuide]);
 
-    const toggleListening = () => {
+    const toggleListening = async () => {
         if (!isSupported) {
             const errorObj = {
                 title: 'Voice Search Unsupported',
-                message: 'Voice-to-text search is not supported in this browser version. Please type your search query or use Chrome, Edge, or Safari.',
+                message: 'Voice-to-text search is not supported in this browser version. Please type your search query or select quick voice shortcuts.',
                 code: 'UNSUPPORTED',
                 timestamp: Date.now()
             };
@@ -149,14 +160,25 @@ export default function VoiceSearchButton({ onTranscript, onError, onListeningCh
         } else {
             setErrorState(null);
             setShowHelpGuide(false);
+
+            // Pre-flight permission prompt via getUserMedia
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    stream.getTracks().forEach(track => track.stop());
+                } catch (err) {
+                    console.warn('[VoiceSearch] getUserMedia permission check notice:', err);
+                }
+            }
+
             if (recognitionRef.current) {
                 try {
                     recognitionRef.current.start();
                 } catch (err) {
                     console.warn('[VoiceSearch] Start error:', err);
                     setErrorState({
-                        title: 'Voice Search Error',
-                        message: 'Could not activate microphone listener. Try again.',
+                        title: 'Microphone Restricted',
+                        message: 'Browser restricted direct audio capture. Select quick voice shortcuts below or unblock permissions.',
                         code: 'START_ERROR',
                         timestamp: Date.now()
                     });
@@ -229,10 +251,10 @@ export default function VoiceSearchButton({ onTranscript, onError, onListeningCh
 
             {/* User-Facing Error State Toast / Inline Alert Card */}
             {errorState && !isListening && (
-                <div className="absolute top-full right-0 mt-2 z-50 w-72 sm:w-80 bg-white border border-rose-200 rounded-2xl shadow-2xl p-3.5 text-xs text-slate-800 space-y-2 animate-fade-in">
+                <div className="absolute top-full right-0 mt-2 z-50 w-72 sm:w-80 bg-white border border-rose-200 rounded-2xl shadow-2xl p-3.5 text-xs text-slate-800 space-y-2.5 animate-fade-in">
                     <div className="flex items-start justify-between gap-2">
                         <div className="flex items-center gap-2">
-                            <span className="p-1.5 bg-rose-100 text-rose-700 rounded-lg text-sm shrink-0">⚠️</span>
+                            <span className="p-1.5 bg-rose-100 text-rose-700 rounded-lg text-sm shrink-0">🎙️⚠️</span>
                             <div>
                                 <h5 className="font-extrabold text-slate-900 text-xs">{errorState.title}</h5>
                                 <span className="text-[9px] font-mono font-bold text-rose-600 uppercase tracking-wider">{errorState.code}</span>
@@ -252,17 +274,35 @@ export default function VoiceSearchButton({ onTranscript, onError, onListeningCh
                         {errorState.message}
                     </p>
 
-                    {/* Permission Instructions / Action Buttons */}
+                    {/* Quick Spoken Medicine Term Shortcuts */}
+                    <div className="pt-1.5 border-t border-slate-100 space-y-1">
+                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Quick Voice Term Shortcuts:</span>
+                        <div className="flex flex-wrap gap-1">
+                            {POPULAR_VOICE_MEDICINES.map((med) => (
+                                <button
+                                    key={med}
+                                    type="button"
+                                    onClick={() => {
+                                        if (onTranscript) onTranscript(med);
+                                        setErrorState(null);
+                                    }}
+                                    className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-extrabold text-[10px] rounded-lg transition cursor-pointer"
+                                >
+                                    + {med}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Permission Instructions / Retry Button */}
                     <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
-                        {errorState.code === 'NOT_ALLOWED' && (
-                            <button
-                                type="button"
-                                onClick={() => setShowHelpGuide(!showHelpGuide)}
-                                className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 underline cursor-pointer"
-                            >
-                                {showHelpGuide ? 'Hide Permission Steps' : 'How to Unblock Mic?'}
-                            </button>
-                        )}
+                        <button
+                            type="button"
+                            onClick={() => setShowHelpGuide(!showHelpGuide)}
+                            className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 underline cursor-pointer"
+                        >
+                            {showHelpGuide ? 'Hide Permission Steps' : 'How to Unblock Mic?'}
+                        </button>
                         <button
                             type="button"
                             onClick={toggleListening}
