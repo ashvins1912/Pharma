@@ -7,8 +7,27 @@ import React, { useState, useEffect, useRef } from 'react';
 function cleanSpokenQuery(transcript) {
     if (!transcript) return '';
     return transcript
-        .replace(/^(search for|search|find me|look up|get me|where is|buy|order)\s+/i, '')
+        .replace(/^(search for|search|find me|look up|get me|where is|buy|order|show me|find)\s+/i, '')
         .trim();
+}
+
+/**
+ * Text-To-Speech (TTS) Feedback Helper
+ */
+function speakText(text) {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        try {
+            window.speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.rate = 1.0;
+            utterance.pitch = 1.0;
+            utterance.volume = 1.0;
+            utterance.lang = 'en-US';
+            window.speechSynthesis.speak(utterance);
+        } catch (e) {
+            console.warn('[VoiceSearch] Speech synthesis failed:', e);
+        }
+    }
 }
 
 const POPULAR_VOICE_MEDICINES = [
@@ -24,10 +43,13 @@ const POPULAR_VOICE_MEDICINES = [
 
 export default function VoiceSearchButton({ onTranscript, onError, onListeningChange, currentQuery = '', className = '' }) {
     const [isListening, setIsListening] = useState(false);
+    const [isOpen, setIsOpen] = useState(false);
     const [interimTranscript, setInterimTranscript] = useState('');
-    const [errorState, setErrorState] = useState(null); // { title, message, code, showHelp }
+    const [finalText, setFinalText] = useState('');
+    const [errorState, setErrorState] = useState(null);
     const [isSupported, setIsSupported] = useState(true);
     const [showHelpGuide, setShowHelpGuide] = useState(false);
+    const [ttsEnabled, setTtsEnabled] = useState(true);
 
     const recognitionRef = useRef(null);
     const autoDismissTimerRef = useRef(null);
@@ -39,101 +61,92 @@ export default function VoiceSearchButton({ onTranscript, onError, onListeningCh
     }, [isListening, onListeningChange]);
 
     useEffect(() => {
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        const SpeechRecognition = typeof window !== 'undefined'
+            ? (window.SpeechRecognition || window.webkitSpeechRecognition)
+            : null;
+
         if (!SpeechRecognition) {
             setIsSupported(false);
             return;
         }
 
-        const recognition = new SpeechRecognition();
-        recognition.continuous = false;
-        recognition.interimResults = true;
-        recognition.lang = 'en-US';
+        try {
+            const recognition = new SpeechRecognition();
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            recognition.lang = typeof navigator !== 'undefined' && navigator.language ? navigator.language : 'en-US';
 
-        recognition.onstart = () => {
-            setIsListening(true);
-            setErrorState(null);
-            setShowHelpGuide(false);
-            setInterimTranscript('');
-            if (autoDismissTimerRef.current) clearTimeout(autoDismissTimerRef.current);
-        };
-
-        recognition.onresult = (event) => {
-            let currentInterim = '';
-            let finalTranscript = '';
-
-            for (let i = event.resultIndex; i < event.results.length; i++) {
-                const transcriptText = event.results[i][0].transcript;
-                if (event.results[i].isFinal) {
-                    finalTranscript += transcriptText;
-                } else {
-                    currentInterim += transcriptText;
-                }
-            }
-
-            if (currentInterim) {
-                setInterimTranscript(currentInterim);
-            }
-
-            if (finalTranscript) {
-                const cleaned = cleanSpokenQuery(finalTranscript);
-                if (cleaned && onTranscript) {
-                    onTranscript(cleaned);
-                }
-                setIsListening(false);
+            recognition.onstart = () => {
+                setIsListening(true);
+                setErrorState(null);
                 setInterimTranscript('');
-            }
-        };
+            };
 
-        recognition.onerror = (event) => {
-            console.warn('[VoiceSearch] Speech Recognition Error:', event.error);
-            setIsListening(false);
-            setInterimTranscript('');
+            recognition.onresult = (event) => {
+                let currentInterim = '';
+                let latestFinal = '';
 
-            // 'aborted' occurs when user cancels or toggles rapidly. Ignore silently without error toast.
-            if (event.error === 'aborted') {
-                return;
-            }
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    const transcriptText = event.results[i][0].transcript;
+                    if (event.results[i].isFinal) {
+                        latestFinal += transcriptText;
+                    } else {
+                        currentInterim += transcriptText;
+                    }
+                }
 
-            let title = 'Voice Input Error';
-            let message = 'Could not process audio input. Please try again.';
-            let code = event.error || 'unknown';
+                if (currentInterim) {
+                    setInterimTranscript(currentInterim);
+                }
 
-            if (event.error === 'not-allowed' || event.error === 'permission-denied') {
-                title = 'Microphone Access Denied';
-                message = 'Browser microphone permission is blocked. Click the lock/settings icon in your browser URL bar to allow microphone access.';
-                code = 'NOT_ALLOWED';
-            } else if (event.error === 'no-speech') {
-                title = 'No Speech Detected';
-                message = 'No voice sound was detected. Please speak clearly near your microphone and try again.';
-                code = 'NO_SPEECH';
-            } else if (event.error === 'audio-capture') {
-                title = 'Microphone Input Restricted';
-                message = 'Microphone access is restricted in this browser session. You can tap any popular medicine below or unblock permissions.';
-                code = 'AUDIO_CAPTURE';
-            } else if (event.error === 'network') {
-                title = 'Network Connection Error';
-                message = 'Voice recognition network service unavailable. Check your internet connection.';
-                code = 'NETWORK';
-            }
+                if (latestFinal) {
+                    const cleaned = cleanSpokenQuery(latestFinal);
+                    if (cleaned) {
+                        setFinalText(cleaned);
+                        if (onTranscript) onTranscript(cleaned);
+                        if (ttsEnabled) speakText(`Searching for ${cleaned}`);
+                        setInterimTranscript('');
+                    }
+                }
+            };
 
-            const errorObj = { title, message, code, timestamp: Date.now() };
-            setErrorState(errorObj);
-            if (onError) onError(errorObj);
+            recognition.onerror = (event) => {
+                console.warn('[VoiceSearch] Speech Recognition Error:', event.error);
+                setIsListening(false);
 
-            // Auto dismiss toast after 10 seconds unless user opens help guide
-            if (autoDismissTimerRef.current) clearTimeout(autoDismissTimerRef.current);
-            autoDismissTimerRef.current = setTimeout(() => {
-                setErrorState(prev => (prev?.timestamp === errorObj.timestamp && !showHelpGuide ? null : prev));
-            }, 10000);
-        };
+                if (event.error === 'aborted') return;
 
-        recognition.onend = () => {
-            setIsListening(false);
-            setInterimTranscript('');
-        };
+                let title = 'Voice Input Notice';
+                let message = 'Microphone input ended. Select a quick voice shortcut below or try speaking again.';
+                let code = event.error || 'UNKNOWN';
 
-        recognitionRef.current = recognition;
+                if (event.error === 'not-allowed' || event.error === 'permission-denied') {
+                    title = 'Microphone Access Blocked';
+                    message = 'Browser permission is blocked in this window. Allow microphone access in site settings or select quick voice shortcuts.';
+                    code = 'NOT_ALLOWED';
+                } else if (event.error === 'no-speech') {
+                    title = 'No Speech Heard';
+                    message = 'No spoken sound detected. Speak clearly into your mic or tap a medicine shortcut below.';
+                    code = 'NO_SPEECH';
+                } else if (event.error === 'network') {
+                    title = 'Voice Network Error';
+                    message = 'Voice recognition service unreachable. You can select a quick voice shortcut below.';
+                    code = 'NETWORK';
+                }
+
+                setErrorState({ title, message, code, timestamp: Date.now() });
+                if (onError) onError({ title, message, code });
+            };
+
+            recognition.onend = () => {
+                setIsListening(false);
+            };
+
+            recognitionRef.current = recognition;
+        } catch (err) {
+            console.warn('[VoiceSearch] Failed to instantiate SpeechRecognition:', err);
+            setIsSupported(false);
+        }
 
         return () => {
             if (recognitionRef.current) {
@@ -141,46 +154,61 @@ export default function VoiceSearchButton({ onTranscript, onError, onListeningCh
             }
             if (autoDismissTimerRef.current) clearTimeout(autoDismissTimerRef.current);
         };
-    }, [onTranscript, onError, showHelpGuide]);
+    }, [onTranscript, onError, ttsEnabled]);
 
-    const toggleListening = () => {
-        if (!isSupported) {
-            const errorObj = {
+    const handleSelectMedicine = (medName) => {
+        setFinalText(medName);
+        if (onTranscript) onTranscript(medName);
+        if (ttsEnabled) speakText(`Searching for ${medName}`);
+        setErrorState(null);
+    };
+
+    const startListening = () => {
+        setIsOpen(true);
+        setErrorState(null);
+        setInterimTranscript('');
+        setFinalText('');
+
+        if (!isSupported || !recognitionRef.current) {
+            const errObj = {
                 title: 'Voice Search Unsupported',
-                message: 'Voice-to-text search is not supported in this browser version. Please type your search query or select quick voice shortcuts.',
-                code: 'UNSUPPORTED',
-                timestamp: Date.now()
+                message: 'Web Speech API is not enabled in this browser. Use quick voice shortcuts below.',
+                code: 'UNSUPPORTED'
             };
-            setErrorState(errorObj);
-            if (onError) onError(errorObj);
+            setErrorState(errObj);
+            if (onError) onError(errObj);
+            if (ttsEnabled) speakText('Select a medicine shortcut');
             return;
         }
 
-        if (isListening) {
-            if (recognitionRef.current) {
-                try { recognitionRef.current.stop(); } catch {}
+        try {
+            recognitionRef.current.start();
+            if (ttsEnabled) speakText('Listening, speak medicine name');
+        } catch (err) {
+            console.warn('[VoiceSearch] Start error:', err);
+            if (err.name !== 'InvalidStateError') {
+                setErrorState({
+                    title: 'Microphone Restricted',
+                    message: 'Browser restricted direct microphone access. Select quick voice shortcuts below.',
+                    code: 'START_ERROR'
+                });
             }
-            setIsListening(false);
-            setInterimTranscript('');
-        } else {
-            setErrorState(null);
-            setShowHelpGuide(false);
+        }
+    };
 
-            if (recognitionRef.current) {
-                try {
-                    recognitionRef.current.start();
-                } catch (err) {
-                    console.warn('[VoiceSearch] Start error:', err);
-                    if (err.name !== 'InvalidStateError') {
-                        setErrorState({
-                            title: 'Microphone Restricted',
-                            message: 'Browser restricted direct audio capture. Select quick voice shortcuts below or unblock permissions.',
-                            code: 'START_ERROR',
-                            timestamp: Date.now()
-                        });
-                    }
-                }
-            }
+    const stopListening = () => {
+        if (recognitionRef.current) {
+            try { recognitionRef.current.stop(); } catch {}
+        }
+        setIsListening(false);
+    };
+
+    const toggleVoiceAssistant = () => {
+        if (isOpen) {
+            stopListening();
+            setIsOpen(false);
+        } else {
+            startListening();
         }
     };
 
@@ -188,102 +216,139 @@ export default function VoiceSearchButton({ onTranscript, onError, onListeningCh
         <div className={`relative inline-flex items-center ${className}`}>
             <button
                 type="button"
-                onClick={toggleListening}
+                onClick={toggleVoiceAssistant}
                 aria-label={isListening ? "Stop voice search listening" : "Search medicine by voice input"}
                 aria-pressed={isListening}
-                title={isSupported ? "Click to speak medicine name (Voice Search)" : "Voice search not supported in this browser"}
+                title="Click for Voice Search & Audio Assistant"
                 className={`relative group inline-flex items-center justify-center min-w-[38px] min-h-[38px] sm:min-w-[42px] sm:min-h-[42px] p-2 rounded-xl transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                     isListening
                         ? 'bg-rose-600 text-white shadow-lg scale-105 animate-pulse'
-                        : isSupported
-                        ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 border border-slate-200'
-                        : 'bg-slate-100 text-slate-400 opacity-70'
+                        : isOpen
+                        ? 'bg-blue-600 text-white shadow-md'
+                        : 'bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 border border-slate-200'
                 }`}
             >
-                {/* Visual Mic Symbol / Ripple Waveform */}
                 <span className="text-sm sm:text-base select-none">
                     {isListening ? '🎙️' : '🎤'}
                 </span>
-
-                {/* Animated Pulsing Ring when Active Listening */}
                 {isListening && (
                     <span className="absolute -inset-1 rounded-xl bg-rose-500/30 animate-ping pointer-events-none" />
                 )}
             </button>
 
-            {/* Accessibility Screen Reader Announcer for Listening & Error States */}
+            {/* Screen Reader Live Announcements */}
             <div aria-live="assertive" aria-atomic="true" className="sr-only">
                 {isListening
-                    ? `Listening for medicine search input. ${interimTranscript}`
+                    ? `Listening for medicine name. ${interimTranscript}`
                     : errorState
-                    ? `Microphone Alert: ${errorState.title}. ${errorState.message}`
+                    ? `Voice Alert: ${errorState.title}`
                     : ''}
             </div>
 
-            {/* Floating Listening Feedback Tooltip / Interim Text */}
-            {isListening && (
-                <div className="absolute top-full right-0 mt-2 z-50 min-w-[220px] max-w-xs bg-slate-900 text-white p-3 rounded-2xl shadow-xl text-xs space-y-1.5 animate-fade-in border border-slate-700">
-                    <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-1.5 text-emerald-400 font-bold text-[11px]">
-                            <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping shrink-0" />
-                            <span>Listening... Speak medicine name</span>
-                        </div>
-                        <button
-                            type="button"
-                            onClick={toggleListening}
-                            className="text-slate-400 hover:text-white text-xs px-1"
-                        >
-                            Cancel
-                        </button>
-                    </div>
-                    {interimTranscript ? (
-                        <p className="text-[11px] font-mono text-slate-200 italic bg-slate-800/80 p-2 rounded-xl border border-slate-700">
-                            "{interimTranscript}"
-                        </p>
-                    ) : (
-                        <p className="text-[10px] text-slate-400">e.g. Say "Paracetamol", "Dolo 650", or "Augmentin"</p>
-                    )}
-                </div>
-            )}
-
-            {/* User-Facing Error State Toast / Inline Alert Card */}
-            {errorState && !isListening && (
-                <div className="absolute top-full right-0 mt-2 z-50 w-72 sm:w-80 bg-white border border-rose-200 rounded-2xl shadow-2xl p-3.5 text-xs text-slate-800 space-y-2.5 animate-fade-in">
-                    <div className="flex items-start justify-between gap-2">
+            {/* Floating Voice Search & Audio Assistant Panel */}
+            {isOpen && (
+                <div className="absolute top-full right-0 mt-2 z-[1200] w-72 sm:w-80 bg-slate-900 text-white p-4 rounded-2xl shadow-2xl border border-slate-700 space-y-3 animate-fade-in">
+                    {/* Header Controls */}
+                    <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
                         <div className="flex items-center gap-2">
-                            <span className="p-1.5 bg-rose-100 text-rose-700 rounded-lg text-sm shrink-0">🎙️⚠️</span>
-                            <div>
-                                <h5 className="font-extrabold text-slate-900 text-xs">{errorState.title}</h5>
-                                <span className="text-[9px] font-mono font-bold text-rose-600 uppercase tracking-wider">{errorState.code}</span>
-                            </div>
+                            <span className={`w-2.5 h-2.5 rounded-full ${isListening ? 'bg-rose-500 animate-ping' : 'bg-emerald-400'}`} />
+                            <span className="font-extrabold text-xs text-white">
+                                {isListening ? 'Listening... Speak Now' : 'Voice Assistant Ready'}
+                            </span>
                         </div>
-                        <button
-                            type="button"
-                            onClick={() => setErrorState(null)}
-                            className="text-slate-400 hover:text-slate-700 text-xs p-1 rounded-full hover:bg-slate-100"
-                            aria-label="Close error toast"
-                        >
-                            ✕
-                        </button>
+                        <div className="flex items-center gap-1">
+                            <button
+                                type="button"
+                                onClick={() => setTtsEnabled(!ttsEnabled)}
+                                title={ttsEnabled ? "Voice Feedback Enabled (Click to Mute)" : "Voice Feedback Muted (Click to Enable)"}
+                                className={`px-2 py-1 text-[10px] font-bold rounded-lg border transition ${
+                                    ttsEnabled ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' : 'bg-slate-800 text-slate-400 border-slate-700'
+                                }`}
+                            >
+                                {ttsEnabled ? '🔊 Audio ON' : '🔇 Audio OFF'}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => { stopListening(); setIsOpen(false); }}
+                                className="text-slate-400 hover:text-white text-xs p-1 rounded-lg"
+                                aria-label="Close voice panel"
+                            >
+                                ✕
+                            </button>
+                        </div>
                     </div>
 
-                    <p className="text-[11px] text-slate-600 leading-snug">
-                        {errorState.message}
-                    </p>
+                    {/* Live Audio Visualizer Wave */}
+                    {isListening && (
+                        <div className="flex items-center justify-center gap-1 py-1">
+                            <span className="w-1.5 h-4 bg-rose-500 rounded-full animate-pulse" />
+                            <span className="w-1.5 h-7 bg-rose-400 rounded-full animate-bounce" />
+                            <span className="w-1.5 h-9 bg-rose-500 rounded-full animate-pulse" />
+                            <span className="w-1.5 h-6 bg-rose-300 rounded-full animate-bounce" />
+                            <span className="w-1.5 h-3 bg-rose-500 rounded-full animate-pulse" />
+                        </div>
+                    )}
 
-                    {/* Quick Spoken Medicine Term Shortcuts */}
-                    <div className="pt-1.5 border-t border-slate-100 space-y-1">
-                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Quick Voice Term Shortcuts:</span>
+                    {/* Live Transcript / Result Display */}
+                    <div className="bg-slate-800/90 border border-slate-700 p-3 rounded-xl min-h-[50px] flex items-center justify-center text-center">
+                        {interimTranscript ? (
+                            <p className="text-xs font-mono text-emerald-300 italic animate-pulse">
+                                "{interimTranscript}"
+                            </p>
+                        ) : finalText ? (
+                            <div className="space-y-0.5">
+                                <span className="text-[9px] uppercase tracking-wider font-bold text-slate-400">Recognized Query</span>
+                                <p className="text-xs font-black text-emerald-400">"{finalText}"</p>
+                            </div>
+                        ) : (
+                            <p className="text-[11px] text-slate-400">
+                                {isListening ? 'Speak medicine name clearly (e.g., "Dolo 650", "Paracetamol")' : 'Tap mic to speak or select a quick voice shortcut below'}
+                            </p>
+                        )}
+                    </div>
+
+                    {/* Status / Error Message Banner */}
+                    {errorState && (
+                        <div className="bg-rose-950/60 border border-rose-800 p-2.5 rounded-xl text-[11px] text-rose-200 space-y-1">
+                            <div className="flex items-center justify-between font-bold">
+                                <span>🎙️ {errorState.title}</span>
+                                <span className="text-[9px] font-mono text-rose-400">{errorState.code}</span>
+                            </div>
+                            <p className="text-[10px] text-rose-300 leading-snug">{errorState.message}</p>
+                        </div>
+                    )}
+
+                    {/* Action Controls */}
+                    <div className="flex items-center justify-between gap-2">
+                        {isListening ? (
+                            <button
+                                type="button"
+                                onClick={stopListening}
+                                className="w-full py-2 bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs rounded-xl transition shadow-sm cursor-pointer"
+                            >
+                                ⏹️ Stop Listening
+                            </button>
+                        ) : (
+                            <button
+                                type="button"
+                                onClick={startListening}
+                                className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs rounded-xl transition shadow-sm cursor-pointer flex items-center justify-center gap-1.5"
+                            >
+                                🎙️ Tap to Speak
+                            </button>
+                        )}
+                    </div>
+
+                    {/* Popular Voice Medicine Shortcuts */}
+                    <div className="pt-2 border-t border-slate-800 space-y-1.5">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Quick Voice Shortcuts:</span>
                         <div className="flex flex-wrap gap-1">
                             {POPULAR_VOICE_MEDICINES.map((med) => (
                                 <button
                                     key={med}
                                     type="button"
-                                    onClick={() => {
-                                        if (onTranscript) onTranscript(med);
-                                        setErrorState(null);
-                                    }}
-                                    className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-extrabold text-[10px] rounded-lg transition cursor-pointer"
+                                    onClick={() => handleSelectMedicine(med)}
+                                    className="px-2 py-1 bg-slate-800 hover:bg-blue-600/40 text-blue-300 hover:text-white border border-slate-700 hover:border-blue-500 font-extrabold text-[10px] rounded-lg transition cursor-pointer"
                                 >
                                     + {med}
                                 </button>
@@ -291,33 +356,24 @@ export default function VoiceSearchButton({ onTranscript, onError, onListeningCh
                         </div>
                     </div>
 
-                    {/* Permission Instructions / Retry Button */}
-                    <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
+                    {/* Unblock Mic Instructions Toggle */}
+                    <div className="pt-1 text-center">
                         <button
                             type="button"
                             onClick={() => setShowHelpGuide(!showHelpGuide)}
-                            className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 underline cursor-pointer"
+                            className="text-[10px] font-bold text-blue-400 hover:text-blue-300 underline cursor-pointer"
                         >
-                            {showHelpGuide ? 'Hide Permission Steps' : 'How to Unblock Mic?'}
-                        </button>
-                        <button
-                            type="button"
-                            onClick={toggleListening}
-                            className="ml-auto px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-[10px] rounded-xl transition shadow-xs cursor-pointer shrink-0"
-                        >
-                            Retry Voice Input 🎙️
+                            {showHelpGuide ? 'Hide Permission Help' : 'How to allow mic access in browser?'}
                         </button>
                     </div>
 
-                    {/* Step-by-Step Permission Instruction Guide */}
                     {showHelpGuide && (
-                        <div className="mt-2 p-2.5 bg-slate-50 border border-slate-200 rounded-xl space-y-1 text-[10px] text-slate-700 font-medium">
-                            <p className="font-bold text-slate-900">How to grant microphone access:</p>
-                            <ol className="list-decimal list-inside space-y-0.5 text-[10px] text-slate-600">
-                                <li>Click the 🔒 lock or settings icon beside the website address URL.</li>
-                                <li>Find <strong className="text-slate-800">Microphone</strong> in site permissions.</li>
-                                <li>Switch permission to <strong className="text-emerald-700">Allow</strong>.</li>
-                                <li>Click "Retry Voice Input" button above.</li>
+                        <div className="p-2.5 bg-slate-800 border border-slate-700 rounded-xl space-y-1 text-[10px] text-slate-300 font-medium">
+                            <p className="font-bold text-white">Browser Microphone Access:</p>
+                            <ol className="list-decimal list-inside space-y-0.5 text-[10px] text-slate-300">
+                                <li>Click the 🔒 icon beside the browser URL bar.</li>
+                                <li>Set <strong className="text-white">Microphone</strong> permission to <strong className="text-emerald-400">Allow</strong>.</li>
+                                <li>Tap "Tap to Speak" above.</li>
                             </ol>
                         </div>
                     )}

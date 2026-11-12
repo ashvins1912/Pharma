@@ -2,23 +2,28 @@ import { config } from './config.js';
 import app from './server.js';
 
 let retries = 0;
-const maxRetries = 30;
 
 const startServer = () => {
   const server = app.listen(config.port, '0.0.0.0', () => {
+    retries = 0;
     console.info(`API Gateway listening on port ${config.port}`);
     app.locals.healthMonitor?.start?.();
   });
 
   server.on('error', (err) => {
     try { server.close(); } catch {}
-    if (err.code === 'EADDRINUSE' && retries < maxRetries) {
+    if (err.code === 'EADDRINUSE') {
       retries++;
-      console.warn(`API Gateway port ${config.port} busy, retrying in 1000ms (${retries}/${maxRetries})...`);
-      setTimeout(startServer, 1000);
+      const delay = Math.min(500 * Math.pow(1.2, Math.min(retries, 10)), 3000);
+      console.warn(`API Gateway port ${config.port} busy (EADDRINUSE), retrying in ${Math.round(delay)}ms (attempt ${retries})...`);
+      setTimeout(startServer, delay);
     } else {
       console.error('API Gateway server error:', err);
-      process.exit(1);
+      if (process.env.NODE_ENV === 'production') {
+        process.exit(1);
+      } else {
+        setTimeout(startServer, 2000);
+      }
     }
   });
 

@@ -3,22 +3,27 @@ import { env } from './config/env.js';
 import { refreshStockWaitlistCases } from './services/intelligentFulfillment/waitlistMonitor.js';
 
 let retries = 0;
-const maxRetries = 30;
 
 const startServer = () => {
   const server = app.listen(env.PORT, '0.0.0.0', () => {
+    retries = 0;
     console.info(`Ashvin Pharmacy API listening on port ${env.PORT}`);
   });
 
   server.on('error', (err) => {
     try { server.close(); } catch {}
-    if (err.code === 'EADDRINUSE' && retries < maxRetries) {
+    if (err.code === 'EADDRINUSE') {
       retries++;
-      console.warn(`Backend API port ${env.PORT} busy, retrying in 1000ms (${retries}/${maxRetries})...`);
-      setTimeout(startServer, 1000);
+      const delay = Math.min(500 * Math.pow(1.2, Math.min(retries, 10)), 3000);
+      console.warn(`Backend API port ${env.PORT} busy (EADDRINUSE), retrying in ${Math.round(delay)}ms (attempt ${retries})...`);
+      setTimeout(startServer, delay);
     } else {
       console.error('Backend API server error:', err);
-      process.exit(1);
+      if (process.env.NODE_ENV === 'production') {
+        process.exit(1);
+      } else {
+        setTimeout(startServer, 2000);
+      }
     }
   });
 
