@@ -36,3 +36,32 @@ def test_explicit_course_quantity_is_preserved():
     item = _parse_medicine_line("Amoxicillin 500mg 1 tablet TDS for 5 days Qty 15 tablets")
     assert item["course"]["value"] == 15
     assert item["course"]["calculatedQuantity"] == 15
+
+
+def test_ocr_candidate_ranking_prefers_high_confidence_readable_medical_text():
+    from app.services.pipeline import _ocr_candidate_score, _select_ocr_candidate
+
+    candidates = [
+        {"text": "Amox1c1llin 5O0mg ???", "confidence": 0.41, "variant": "original"},
+        {"text": "Amoxicillin 500mg 1 tablet BD", "confidence": 0.91, "variant": "clahe"},
+    ]
+    selected = _select_ocr_candidate(candidates)
+    assert selected["variant"] == "clahe"
+    assert _ocr_candidate_score(selected["text"], selected["confidence"]) > 0.75
+
+
+def test_ocr_candidate_selection_never_joins_conflicting_hypotheses():
+    from app.services.pipeline import _select_ocr_candidate
+
+    selected = _select_ocr_candidate([
+        {"text": "Dolo 650mg", "confidence": 0.82, "variant": "original"},
+        {"text": "Dolo 500mg", "confidence": 0.78, "variant": "threshold"},
+    ])
+    assert selected["text"] in {"Dolo 650mg", "Dolo 500mg"}
+    assert "650mg" not in selected["text"] or "500mg" not in selected["text"]
+
+
+def test_empty_ocr_candidates_are_rejected():
+    from app.services.pipeline import _select_ocr_candidate
+
+    assert _select_ocr_candidate([{"text": "", "confidence": 0.99}]) is None
