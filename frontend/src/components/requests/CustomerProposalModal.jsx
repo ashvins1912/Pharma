@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { getReadableErrorMessage } from '../../utils/errorMessage';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
@@ -64,7 +65,7 @@ export default function CustomerProposalModal({ request, isOpen, onClose, onOrde
     previewMedicineRequestFulfillment(request._id)
       .then(plan => { if (active) setAvailabilityPlan(plan); })
       .catch(error => {
-        if (active) setAvailabilityError(error.response?.data?.message || error.message || 'Could not check live stock.');
+        if (active) setAvailabilityError(getReadableErrorMessage(error, 'Could not check live stock.'));
       })
       .finally(() => { if (active) setAvailabilityLoading(false); });
     return () => { active = false; };
