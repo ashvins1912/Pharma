@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { getReadableErrorMessage } from '../../utils/errorMessage';
 import apiClient from '../../api/apiClient';
 
 const title = s => s.split('.').map(x => x.charAt(0).toUpperCase()+x.slice(1)).join(' ');
@@ -34,7 +35,7 @@ export default function PlatformAccessControl(){
       const list = Array.isArray(raw) ? raw : (raw?.users || raw?.items || []);
       setUsers(Array.isArray(list) ? list : []);
     } catch (e) {
-      setMessage(e.message || 'Unable to load platform users.');
+      setMessage(getReadableErrorMessage(e, 'Unable to load platform users.'));
       setUsers([]);
     } finally {
       setLoading(false);
@@ -77,7 +78,7 @@ export default function PlatformAccessControl(){
       setUsers(xs => xs.map(x => x.id === selected.id ? { ...x, ...u } : x));
       setMessage('Security assignment saved. Access changes apply on the next authenticated token refresh.');
     } catch (e) {
-      setMessage(e.message || 'Could not save security assignment.');
+      setMessage(getReadableErrorMessage(e, 'Could not save security assignment.'));
     } finally {
       setSaving(false);
     }
