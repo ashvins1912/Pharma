@@ -541,7 +541,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
                   </p>
                 </div>
                 {importJob.errorMessage && (
-                  <p className="text-xs font-semibold text-rose-800">{importJob.errorMessage}</p>
+                  <p className="text-xs font-semibold text-rose-800">{getReadableErrorMessage(importJob.errorMessage, '')}</p>
                 )}
                 {pollError && (
                   <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-rose-800">
