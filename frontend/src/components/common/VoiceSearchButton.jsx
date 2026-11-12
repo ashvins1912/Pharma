@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { rankVoiceMedicineMatches } from '../../utils/similarity';
+import { normalizeText, rankVoiceMedicineMatches } from '../../utils/similarity';
 import { useApp } from '../../context/AppContext';
 
 /**
