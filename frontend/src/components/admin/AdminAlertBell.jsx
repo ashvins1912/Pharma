@@ -1,0 +1,210 @@
+import React, { useState } from 'react';
+import { useApp } from '../../context/AppContext';
+import { useLanguage } from '../../context/LanguageContext';
+
+export default function AdminAlertBell({
+  onOpenAlerts,
+  canViewInventoryAlerts = true,
+  canReadWhatsApp = true,
+  canManageWhatsApp = false
+}) {
+  const { t } = useLanguage();
+  const { inventoryAlerts = {}, inventoryAlertsStatus = {}, loadInventoryAlerts, whatsappStatus = {}, setWhatsappModalOpen } = useApp();
+  const [isOpen, setIsOpen] = useState(false);
+
+  const alerts = inventoryAlerts || {};
+  const expired = Array.isArray(alerts.expired) ? alerts.expired : [];
+  const expiringSoon = Array.isArray(alerts.expiringSoon) ? alerts.expiringSoon : [];
+  const lowStock = Array.isArray(alerts.lowStock) ? alerts.lowStock : [];
+  const alertLoading = Boolean(inventoryAlertsStatus.loading);
+  const alertError = String(inventoryAlertsStatus.error || '');
+
+  const total = (canViewInventoryAlerts ? Number(alerts.totalAlerts || 0) : 0)
+    + (canReadWhatsApp && !whatsappStatus?.isConnected ? 1 : 0);
+  const displayTotal = canViewInventoryAlerts && alertError ? '—' : total;
+
+  return (
+    <div className="relative flex-shrink-0">
+      <button
+        onClick={() => {
+          setIsOpen(!isOpen);
+          if (onOpenAlerts) onOpenAlerts();
+        }}
+        className="relative w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-800 transition cursor-pointer flex items-center justify-center flex-shrink-0"
+        aria-label={`${t("authorizedPharmacyAlerts")} (${displayTotal})`}
+      >
+        <span className="text-sm sm:text-base select-none" aria-hidden="true">⚠️</span>
+        {total > 0 && (
+          <span className="absolute -top-1.5 -right-1.5 z-10 inline-flex min-w-[1.15rem] sm:min-w-[1.3rem] h-[1.15rem] sm:h-[1.3rem] max-w-[2.6rem] items-center justify-center rounded-full border-2 border-white bg-rose-600 px-1 text-[9px] sm:text-[10px] font-black leading-none tabular-nums shadow-md whitespace-nowrap">
+            {total}
+          </span>
+        )}
+      </button>
+
+      {isOpen && (
+        <>
+          <div
+            onClick={() => setIsOpen(false)}
+            className="fixed inset-0 z-40 bg-slate-900/30 backdrop-blur-xs sm:bg-transparent"
+          />
+          <div className="fixed inset-x-3 top-16 sm:absolute sm:inset-auto sm:right-0 sm:top-full sm:mt-2 w-auto sm:w-96 max-w-md bg-white border border-slate-200 rounded-3xl shadow-2xl z-50 p-4 sm:p-5 space-y-4 animate-fade-in">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+              <div>
+                <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                  {t('dispensaryAlerts')} ({displayTotal})
+                </h4>
+                <p className="text-[10px] text-slate-400">{t('safetyThresholdMonitor')}</p>
+                <p className={`text-[10px] mt-1 ${alertError ? 'text-rose-600' : 'text-slate-400'}`} role="status" aria-live="polite">
+                  {alertLoading ? 'Checking live inventory…' : alertError ? `Inventory alerts unavailable: ${alertError}` : 'Live safety checks · refreshes every minute'}
+                </p>
+              </div>
+              {canViewInventoryAlerts && (
+                <button
+                  type="button"
+                  onClick={() => { if (loadInventoryAlerts) void loadInventoryAlerts(); }}
+                  disabled={alertLoading}
+                  className="text-[10px] font-bold rounded-lg border border-slate-200 px-2.5 py-1.5 text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                >
+                  {alertLoading ? 'Checking…' : 'Refresh'}
+                </button>
+              )}
+              <button
+                onClick={() => setIsOpen(false)}
+                className="text-slate-400 hover:text-slate-700 text-xs font-bold p-1 rounded-full hover:bg-slate-100"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3 max-h-64 sm:max-h-80 overflow-y-auto">
+              
+              {/* WhatsApp Gateway Status Card */}
+              {canReadWhatsApp && (
+              <div className={`p-3 rounded-2xl border transition ${
+                whatsappStatus?.isConnected
+                  ? 'bg-emerald-50 border-emerald-200'
+                  : 'bg-amber-50 border-amber-300'
+              }`}>
+                <div className="flex items-center justify-between">
+                  <span className={`text-xs font-black flex items-center gap-1.5 ${
+                    whatsappStatus?.isConnected ? 'text-emerald-900' : 'text-amber-950'
+                  }`}>
+                    <span>📲</span> {t('whatsappDispatchGateway')}
+                  </span>
+                  <span className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded uppercase ${
+                    whatsappStatus?.isConnected ? 'bg-emerald-200 text-emerald-800' : 'bg-rose-200 text-rose-800'
+                  }`}>
+                    {whatsappStatus?.isConnected ? t('connected') : t('offline')}
+                  </span>
+                </div>
+                <p className={`text-[11px] mt-1 leading-snug ${
+                  whatsappStatus?.isConnected ? 'text-emerald-700' : 'text-amber-800'
+                }`}>
+                  {whatsappStatus?.isConnected
+                    ? t('whatsappLinkedMessage').replace('{phone}', whatsappStatus.phone || t('primaryPhone'))
+                    : t('whatsappOfflineMessage')}
+                </p>
+                {!whatsappStatus?.isConnected && canManageWhatsApp && (
+                  <button
+                    onClick={() => {
+                      setIsOpen(false);
+                      setWhatsappModalOpen(true);
+                    }}
+                    className="mt-2 w-full bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-[11px] py-1.5 rounded-xl cursor-pointer shadow-xs transition"
+                  >
+                    {t('scanQrConnectWhatsApp')}
+                  </button>
+                )}
+              </div>
+
+              )}
+
+              {canViewInventoryAlerts && (
+                <>
+              {/* Expired Category */}
+              <div className="p-3 bg-red-50 border border-red-200 rounded-2xl space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black text-red-900 flex items-center gap-1.5">
+                    <span>🔴</span> {t('expiredMedicines')} ({alerts.expiredCount || expired.length})
+                  </span>
+                  <span className="text-[10px] bg-red-200 text-red-800 font-extrabold px-1.5 py-0.5 rounded">
+                    {t('blocked')}
+                  </span>
+                </div>
+                {expired.length === 0 ? (
+                  <p className="text-[11px] text-slate-500">{alertLoading ? 'Checking expiry batches…' : alertError ? 'Unable to verify expiry status. Refresh to retry.' : t('noExpiredPharmaceuticals')}</p>
+                ) : (
+                  <div className="space-y-1">
+                    {expired.map(m => (
+                      <div key={m._id || m.id} className="text-[11px] text-red-700 flex justify-between">
+                        <span className="truncate max-w-[170px]">• {m.name}</span>
+                        <span className="font-bold">{t('daysAgo').replace('{days}', Math.abs(m.daysLeft || 0))}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Expiring ≤ 30 Days */}
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black text-amber-900 flex items-center gap-1.5">
+                    <span>🟠</span> {t('expiringIn30Days')} ({alerts.expiringSoonCount || expiringSoon.length})
+                  </span>
+                  <span className="text-[10px] bg-amber-200 text-amber-900 font-extrabold px-1.5 py-0.5 rounded">
+                    {t('urgent')}
+                  </span>
+                </div>
+                {expiringSoon.length === 0 ? (
+                  <p className="text-[11px] text-slate-500">{alertLoading ? 'Checking upcoming expiry dates…' : alertError ? 'Unable to verify expiry status. Refresh to retry.' : t('noMedicinesNearExpiry')}</p>
+                ) : (
+                  <div className="space-y-1">
+                    {expiringSoon.map(m => (
+                      <div key={m._id || m.id} className="text-[11px] text-amber-800 flex justify-between">
+                        <span className="truncate max-w-[170px]">• {m.name}</span>
+                        <span className="font-bold">{t('daysLeft').replace('{days}', m.daysLeft || 0)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Low Stock (≤ 3) */}
+              <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-2xl space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black text-yellow-900 flex items-center gap-1.5">
+                    <span>🟡</span> {t('lowStock')} ({alerts.lowStockCount || lowStock.length})
+                  </span>
+                  <span className="text-[10px] bg-yellow-200 text-yellow-900 font-extrabold px-1.5 py-0.5 rounded">
+                    {t('restock')}
+                  </span>
+                </div>
+                {lowStock.length === 0 ? (
+                  <p className="text-[11px] text-slate-500">{alertLoading ? 'Checking branch stock levels…' : alertError ? 'Unable to verify stock levels. Refresh to retry.' : t('adequateInventory')}</p>
+                ) : (
+                  <div className="space-y-1">
+                    {lowStock.map(m => (
+                      <div key={m._id || m.id} className="text-[11px] text-yellow-800 flex justify-between">
+                        <span className="truncate max-w-[170px]">• {m.name}</span>
+                        <span className="font-bold">{t('itemsLeft').replace('{count}', m.stock || 0)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+                </>
+              )}
+
+            </div>
+
+            <div className="pt-2 border-t border-slate-100 text-center">
+              <span className="text-[10px] text-slate-400">
+                {t('dispensarySafetyActive')}
+              </span>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}

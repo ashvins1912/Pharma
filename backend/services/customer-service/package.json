@@ -1,0 +1,14 @@
+{
+  "name": "@ashvin/customer-service",
+  "private": true,
+  "type": "module",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "mongoose": "^9.10.4"
+  }
+}

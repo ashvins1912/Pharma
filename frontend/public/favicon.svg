@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">QuickMeds Rx</title>
+  <rect width="64" height="64" rx="16" fill="#0f172a"/>
+  <path d="M26 12h12v14h14v12H38v14H26V38H12V26h14z" fill="#ffffff"/>
+  <g transform="rotate(-42 46 46)">
+    <rect x="39" y="35" width="14" height="26" rx="7" fill="#22d3ee" stroke="#0f172a" stroke-width="2"/>
+    <path d="M39 48h14" stroke="#0f172a" stroke-width="1.5"/>
+  </g>
+</svg>

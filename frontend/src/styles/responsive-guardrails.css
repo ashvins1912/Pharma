@@ -1,0 +1,77 @@
+/*
+ * Responsive guardrails for the Pharma application.
+ *
+ * These rules intentionally constrain intrinsic sizing and overflow only.
+ * They do not rewrite explicit Tailwind grid/flex utilities or force every
+ * admin grid into the same column count; each screen owns its layout.
+ */
+
+.pharma-responsive-scope,
+.pharma-responsive-scope * {
+  min-width: 0;
+}
+
+.pharma-responsive-scope {
+  width: 100%;
+  max-width: 100%;
+}
+
+.pharma-responsive-scope :where(img, video, canvas, iframe, svg) {
+  max-width: 100%;
+}
+
+.pharma-responsive-scope :where(input, select, textarea) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.pharma-responsive-scope :where(.overflow-x-auto, [data-table-scroll="true"]) {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.pharma-responsive-scope :where(.grid, .flex, .inline-flex) > * {
+  min-width: 0;
+}
+
+.admin-screen {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.admin-screen :where(.overflow-x-auto, [data-table-scroll="true"]) {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.admin-screen :where(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+@media (max-width: 639px) {
+  .pharma-responsive-scope :where(button, [role="button"]) {
+    min-height: 40px;
+  }
+
+  .admin-screen :where(button, [role="button"]) {
+    min-height: 40px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pharma-responsive-scope *,
+  .admin-screen * {
+    scroll-behavior: auto;
+    animation-duration: 0.01ms;
+    animation-iteration-count: 1;
+    transition-duration: 0.01ms;
+  }
+}

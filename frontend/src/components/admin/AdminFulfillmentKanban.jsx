@@ -1,0 +1,1814 @@
+import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { useLanguage } from '../../context/LanguageContext';
+import apiClient from '../../api/apiClient';
+import { useActionLoading, LOADING_ACTIONS } from '../../context/LoadingContext';
+import { useToast } from '../../context/ToastContext';
+import { normalizePrescriptionBlob } from '../../utils/prescriptionFile';
+import Pagination from '../common/Pagination';
+import FulfillmentTabs from './FulfillmentTabs';
+
+const getDistanceToPickup = (rider, order) => {
+  const riderCoordinates = rider.currentLocation?.coordinates;
+  const pickupCoordinates = order.location?.coordinates
+    || (order.coordinates?.lng != null && order.coordinates?.lat != null
+      ? [order.coordinates.lng, order.coordinates.lat]
+      : null);
+
+  if (!riderCoordinates || riderCoordinates.length !== 2 || !pickupCoordinates || pickupCoordinates.length !== 2) {
+    return null;
+  }
+
+  const toRadians = (degrees) => (degrees * Math.PI) / 180;
+  const [riderLng, riderLat] = riderCoordinates.map(Number);
+  const [pickupLng, pickupLat] = pickupCoordinates.map(Number);
+  if (![riderLng, riderLat, pickupLng, pickupLat].every(Number.isFinite)) return null;
+
+  const latitudeDelta = toRadians(pickupLat - riderLat);
+  const longitudeDelta = toRadians(pickupLng - riderLng);
+  const a = Math.sin(latitudeDelta / 2) ** 2
+    + Math.cos(toRadians(riderLat)) * Math.cos(toRadians(pickupLat))
+    * Math.sin(longitudeDelta / 2) ** 2;
+  return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+
+const getCustomerMobile = (order) => order?.customerMobile || order?.addressDetails?.mobile || order?.addressDetails?.phone || order?.customerPhone || '';
+
+const formatDistance = (distanceInKm) => {
+  if (distanceInKm == null) return 'Distance unavailable';
+  if (distanceInKm < 1) return `${Math.round(distanceInKm * 1000)} m to pickup`;
+  return `${distanceInKm.toFixed(1)} km to pickup`;
+};
+
+const getLocalDayRange = () => {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+  return { startDate: start.toISOString(), endDate: end.toISOString() };
+};
+
+const isCreatedToday = (order) => {
+  if (!order?.createdAt) return false;
+  const created = new Date(order.createdAt);
+  const now = new Date();
+  return Number.isFinite(created.getTime())
+    && created.getFullYear() === now.getFullYear()
+    && created.getMonth() === now.getMonth()
+    && created.getDate() === now.getDate();
+};
+
+const getPageWindow = (currentPage, totalPages) => {
+  const visibleCount = Math.min(totalPages, 7);
+  const firstPage = Math.max(1, Math.min(currentPage - 3, totalPages - visibleCount + 1));
+  return Array.from({ length: visibleCount }, (_, index) => firstPage + index);
+};
+
+const COLUMNS = [
+  { id: 'Pending_Review', title: 'Pending Review', color: 'border-amber-500 text-amber-800 bg-amber-50' },
+  { id: 'Approved', title: 'Approved', color: 'border-teal-500 text-teal-800 bg-teal-50' },
+  { id: 'Rejected', title: 'Rejected', color: 'border-rose-500 text-rose-800 bg-rose-50' },
+  { id: 'Processing Order', title: 'Processing Order', color: 'border-amber-500 text-amber-800 bg-amber-50' },
+  { id: 'Ready to Dispatch', title: 'Ready to Dispatch', color: 'border-blue-500 text-blue-800 bg-blue-50' },
+  { id: 'Dispatched', title: 'Out for Delivery', color: 'border-blue-500 text-blue-800 bg-blue-50' },
+  { id: 'Delivered', title: 'Delivered', color: 'border-emerald-500 text-emerald-800 bg-emerald-50' },
+  { id: 'Cancelled', title: 'Cancelled', color: 'border-slate-500 text-slate-800 bg-slate-100' }
+];
+
+const normalizeOrderStatus = (order) => {
+  if (!order) return '';
+  const rawStatuses = [order.orderStatus, order.status]
+    .map(value => String(value ?? '').trim())
+    .filter(Boolean);
+  const deliveredStatus = rawStatuses.find(value =>
+    ['delivered', 'completed', 'delivered_order', 'deliveredorder'].includes(value.toLowerCase())
+  );
+  if (deliveredStatus) return 'Delivered';
+  const cancelledStatus = rawStatuses.find(value =>
+    ['cancelled', 'cancelled_order'].includes(value.toLowerCase())
+  );
+  if (cancelledStatus) return 'Cancelled';
+  const s = rawStatuses[0] || '';
+  if (['Pending_Review', 'pending', 'Pending'].includes(s)) return 'Pending_Review';
+  if (['Approved', 'accepted', 'approved'].includes(s)) return 'Approved';
+  if (['Processing Order', 'processing', 'Processing', 'Processing_Order', 'ProcessingOrder'].includes(s)) return 'Processing Order';
+  if (['Ready to Dispatch', 'ready_to_dispatch', 'Ready_To_Dispatch', 'ready', 'Ready'].includes(s)) return 'Ready to Dispatch';
+  if (['Dispatched', 'out_for_delivery', 'dispatched', 'Dispatched_Order'].includes(s)) return 'Dispatched';
+  if (['Delivered', 'delivered', 'completed', 'Delivered_Order'].includes(s)) return 'Delivered';
+  if (['Cancelled', 'cancelled'].includes(s)) return 'Cancelled';
+  if (['Rejected', 'rejected'].includes(s)) return 'Rejected';
+  return s || 'Pending_Review';
+};
+
+export default function AdminFulfillmentKanban({ orders, onRefresh, dateRange = {} }) {
+  const { t } = useLanguage();
+  const getColumnTitle = (id) => t(({ Pending_Review: 'awaitingPharmacist', Approved: 'proposalApprovedTitle', Rejected: 'rejected', 'Processing Order': 'processingOrderStage', 'Ready to Dispatch': 'readyToDispatch', Dispatched: 'outForDelivery', Delivered: 'delivered', Cancelled: 'cancelled' })[id] || id);
+  const { addToast } = useToast();
+  const { runAction, isActionLoading } = useActionLoading();
+  const [updatingId, setUpdatingId] = useState(null);
+  const [assignRiderModal, setAssignRiderModal] = useState(null);
+  const [availableRiders, setAvailableRiders] = useState([]);
+  const [loadingAvailableRiders, setLoadingAvailableRiders] = useState(false);
+  const [availableRidersError, setAvailableRidersError] = useState(null);
+  const [selectedRiderId, setSelectedRiderId] = useState('');
+  const [riderSearch, setRiderSearch] = useState('');
+  const [verifiedOrderIds, setVerifiedOrderIds] = useState([]);
+  const [prescriptionPreview, setPrescriptionPreview] = useState(null);
+  const [prescriptionModalOrder, setPrescriptionModalOrder] = useState(null);
+  const [prescriptionPreviewLoading, setPrescriptionPreviewLoading] = useState(false);
+  const [prescriptionPreviewError, setPrescriptionPreviewError] = useState('');
+  const [imageZoom, setImageZoom] = useState(1);
+  const [viewingPrescriptionOrderId, setViewingPrescriptionOrderId] = useState(null);
+  const [deliveredPage, setDeliveredPage] = useState(1);
+  const [deliveredOrders, setDeliveredOrders] = useState([]);
+  const [deliveredPagination, setDeliveredPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false });
+  const [deliveredLoading, setDeliveredLoading] = useState(true);
+  const [deliveredError, setDeliveredError] = useState('');
+  const [deliveredRetryKey, setDeliveredRetryKey] = useState(0);
+  const [expandedDeliveredOrderId, setExpandedDeliveredOrderId] = useState(null);
+  const [cancelledPage, setCancelledPage] = useState(1);
+  const [cancelledOrders, setCancelledOrders] = useState([]);
+  const [cancelledPagination, setCancelledPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false });
+  const [cancelledLoading, setCancelledLoading] = useState(true);
+  const [cancelledError, setCancelledError] = useState('');
+  const [cancelledRetryKey, setCancelledRetryKey] = useState(0);
+  const [searchInput, setSearchInput] = useState('');
+  const [appliedSearch, setAppliedSearch] = useState('');
+  const [searchOrders, setSearchOrders] = useState([]);
+  const [searchPagination, setSearchPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false });
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState('');
+  const [searchRetryKey, setSearchRetryKey] = useState(0);
+  const [approvalReason, setApprovalReason] = useState('');
+  const [collapsedOrderIds, setCollapsedOrderIds] = useState([]);
+  const [deliveryOtps, setDeliveryOtps] = useState({});
+  const [revealedOtpOrderIds, setRevealedOtpOrderIds] = useState([]);
+  const [viewMode, setViewMode] = useState('tabbed'); // 'tabbed' or 'all'
+  const [activeTabId, setActiveTabId] = useState('Pending_Review');
+  const [layoutDirection, setLayoutDirection] = useState('vertical'); // 'vertical' or 'horizontal'
+
+  const columnCounts = useMemo(() => {
+    const counts = {};
+    COLUMNS.forEach(col => {
+      counts[col.id] = appliedSearch
+        ? searchOrders.filter(order => normalizeOrderStatus(order) === col.id).length
+        : col.id === 'Delivered'
+          ? (deliveredPagination.total || deliveredOrders.length)
+          : col.id === 'Cancelled'
+            ? (cancelledPagination.total || cancelledOrders.length)
+            : (orders || []).filter(o => normalizeOrderStatus(o) === col.id).length;
+    });
+    return counts;
+  }, [appliedSearch, searchOrders, deliveredPagination.total, deliveredOrders.length, cancelledPagination.total, cancelledOrders.length, orders]);
+
+  // Keep derived state below its source state declarations to avoid a
+  // production-build temporal-dead-zone crash in minified bundles.
+  const isProcessing = Boolean(updatingId || viewingPrescriptionOrderId)
+    || Boolean(
+      isActionLoading(LOADING_ACTIONS.APPROVE_PRESCRIPTION)
+      || isActionLoading(LOADING_ACTIONS.REJECT_PRESCRIPTION)
+    );
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && prescriptionModalOrder) {
+        closePrescriptionPreview();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [prescriptionModalOrder, prescriptionPreview]);
+
+  useEffect(() => {
+    if (prescriptionModalOrder) {
+      document.body.style.overflow = 'hidden';
+      return () => { document.body.style.overflow = ''; };
+    }
+  }, [prescriptionModalOrder]);
+
+  useEffect(() => {
+    let isCurrentRequest = true;
+    setDeliveredLoading(true);
+    setDeliveredError('');
+    apiClient.get('/api/orders/admin/all', {
+      params: { status: 'Delivered', page: deliveredPage, limit: 10, ...dateRange }
+    }).then(response => {
+      if (!isCurrentRequest) return;
+      const data = response.data || {};
+      setDeliveredOrders(Array.isArray(data.items) ? data.items : []);
+      setDeliveredPagination(data.pagination || { page: deliveredPage, limit: 10, total: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false });
+    }).catch(error => {
+      if (isCurrentRequest) {
+        setDeliveredOrders([]);
+        setDeliveredError(error.response?.data?.message || error.message || 'Unable to load delivered orders. Please try again.');
+      }
+    }).finally(() => {
+      if (isCurrentRequest) setDeliveredLoading(false);
+    });
+    return () => { isCurrentRequest = false; };
+  }, [deliveredPage, deliveredRetryKey, dateRange.startDate, dateRange.endDate]);
+
+  useEffect(() => {
+    let isCurrentRequest = true;
+    setCancelledLoading(true);
+    setCancelledError('');
+    apiClient.get('/api/orders/admin/all', { params: { status: 'Cancelled', page: cancelledPage, limit: 10, ...dateRange } })
+      .then(response => {
+        if (!isCurrentRequest) return;
+        const data = response.data || {};
+        setCancelledOrders(Array.isArray(data.items) ? data.items : []);
+        setCancelledPagination(data.pagination || { page: cancelledPage, limit: 10, total: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false });
+      }).catch(error => {
+        if (isCurrentRequest) {
+          setCancelledOrders([]);
+          setCancelledError(error.response?.data?.message || error.message || 'Unable to load cancelled order history.');
+        }
+      }).finally(() => { if (isCurrentRequest) setCancelledLoading(false); });
+    return () => { isCurrentRequest = false; };
+  }, [cancelledPage, cancelledRetryKey, dateRange.startDate, dateRange.endDate]);
+
+  useEffect(() => {
+    if (!appliedSearch) return undefined;
+    let isCurrentRequest = true;
+    setSearchLoading(true);
+    setSearchError('');
+    apiClient.get('/api/orders/admin/all', {
+      params: { search: appliedSearch, page: searchPagination.page, limit: 10, ...dateRange }
+    }).then(response => {
+      if (!isCurrentRequest) return;
+      const data = response.data || {};
+      setSearchOrders(Array.isArray(data.items) ? data.items : []);
+      setSearchPagination(data.pagination || { page: 1, limit: 10, total: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false });
+    }).catch(error => {
+      if (isCurrentRequest) {
+        setSearchOrders([]);
+        setSearchError(error.message || 'Unable to search orders. Please try again.');
+      }
+    }).finally(() => {
+      if (isCurrentRequest) setSearchLoading(false);
+    });
+    return () => { isCurrentRequest = false; };
+  }, [appliedSearch, searchPagination.page, searchRetryKey, dateRange.startDate, dateRange.endDate]);
+
+  const refreshBoard = () => {
+    onRefresh?.();
+    setDeliveredRetryKey(value => value + 1);
+    setCancelledRetryKey(value => value + 1);
+  };
+
+  const changeDeliveredPage = (page) => {
+    if (page < 1 || page > deliveredPagination.totalPages || page === deliveredPage) return;
+    setDeliveredLoading(true);
+    setDeliveredPage(page);
+  };
+
+  const submitSearch = (event) => {
+    event.preventDefault();
+    if (searchLoading) return;
+    const query = searchInput.trim();
+    if (!query) {
+      setSearchError(t('enterOrderSearch'));
+      return;
+    }
+    setSearchPagination(current => ({ ...current, page: 1 }));
+    setSearchError('');
+    setSearchLoading(true);
+    setSearchPagination(current => ({ ...current, page: 1 }));
+    setAppliedSearch(query);
+    setSearchRetryKey(value => value + 1);
+  };
+
+  const clearSearch = () => {
+    setSearchInput('');
+    setAppliedSearch('');
+    setSearchOrders([]);
+    setSearchError('');
+    setSearchPagination({ page: 1, limit: 10, total: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false });
+  };
+
+  const changeSearchPage = (page) => {
+    if (page < 1 || page > searchPagination.totalPages || page === searchPagination.page) return;
+    setSearchLoading(true);
+    setSearchPagination(current => ({ ...current, page }));
+  };
+
+  const retrySearch = () => {
+    setSearchLoading(true);
+    setSearchRetryKey(value => value + 1);
+  };
+
+  useEffect(() => {
+    if (!assignRiderModal) return undefined;
+
+    let isCurrentRequest = true;
+    setAvailableRiders([]);
+    setSelectedRiderId('');
+    setRiderSearch('');
+    setLoadingAvailableRiders(true);
+    setAvailableRidersError(null);
+
+    apiClient.get('/api/admin/riders', { params: { status: 'Available' } })
+      .then((res) => {
+        if (isCurrentRequest) setAvailableRiders(res.data || []);
+      })
+      .catch((err) => {
+        if (isCurrentRequest) {
+          setAvailableRidersError(err.response?.data?.message || err.message || t('couldNotLoadRiders'));
+        }
+      })
+      .finally(() => {
+        if (isCurrentRequest) setLoadingAvailableRiders(false);
+      });
+
+    return () => {
+      isCurrentRequest = false;
+    };
+  }, [assignRiderModal]);
+
+  const filteredAvailableRiders = useMemo(() => {
+    const search = riderSearch.trim().toLowerCase();
+    if (!search) return availableRiders;
+    return availableRiders.filter((rider) =>
+      rider.name.toLowerCase().includes(search) ||
+      rider.mobile.toLowerCase().includes(search)
+    );
+  }, [availableRiders, riderSearch]);
+
+  const handleTransition = async (orderId, newStatus, riderInfo = null) => {
+    try {
+      setUpdatingId(orderId);
+      const res = await apiClient.post('/api/orders/admin/transition', {
+        orderId,
+        newStatus,
+        riderInfo
+      });
+      addToast(res.data.message || t('orderShifted').replace('{status}', newStatus), 'success');
+      refreshBoard();
+    } catch (err) {
+      addToast(err.response?.data?.message || err.message || 'State transition failed', 'error');
+    } finally {
+      setUpdatingId(null);
+      setAssignRiderModal(null);
+    }
+  };
+
+  const reviewOrder = async (order, status) => {
+    const orderId = String(order._id);
+    const isMatched = order.prescriptionVerification?.status === 'MATCHED' || order.prescriptionVerification?.manualApproval === true;
+    if (status === 'Approved' && order.prescriptionRequired && !isMatched && !order.prescriptionUrl && !order.prescriptionId) {
+      addToast('This order requires a prescription verification or approval before approving.', 'warning');
+      return;
+    }
+    if (status === 'Approved' && order.prescriptionRequired && !isMatched && order.prescriptionUrl && !verifiedOrderIds.includes(orderId)) {
+      addToast('Open the attached prescription before approving this order.', 'warning');
+      return;
+    }
+    try {
+      setUpdatingId(order._id);
+      const res = await apiClient.put(`/api/orders/${encodeURIComponent(order._id)}/review`, {
+        status,
+        prescriptionVerified: status === 'Approved'
+      });
+      addToast(res.data.message || t('orderShifted').replace('{status}', status.toLowerCase()), 'success');
+      setVerifiedOrderIds(prev => prev.filter(id => id !== orderId));
+      refreshBoard();
+    } catch (err) {
+      addToast(err.message || t('orderReviewFailed'), 'error');
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const dispatchApprovedOrder = async (orderId, riderInfo) => {
+    try {
+      setUpdatingId(orderId);
+      const res = await apiClient.put(`/api/orders/${encodeURIComponent(orderId)}/dispatch`, { riderInfo });
+      addToast(res.data.message || t('orderDispatched'), 'success');
+      refreshBoard();
+    } catch (err) {
+      addToast(err.message || t('orderDispatchFailed'), 'error');
+    } finally {
+      setUpdatingId(null);
+      setAssignRiderModal(null);
+    }
+  };
+
+  const reinitiatePrescriptionVerification = async (order) => {
+    try {
+      setUpdatingId(order._id);
+      const res = await apiClient.post(`/api/orders/admin/${encodeURIComponent(order._id)}/prescription/reinitiate`);
+      addToast(res.data.message || t('prescriptionVerificationRestarted'), 'success');
+      if (res.data?.order && prescriptionModalOrder && String(prescriptionModalOrder._id) === String(order._id)) {
+        setPrescriptionModalOrder(res.data.order);
+      } else if (res.data?.verification && prescriptionModalOrder && String(prescriptionModalOrder._id) === String(order._id)) {
+        setPrescriptionModalOrder(prev => prev ? {
+          ...prev,
+          prescriptionVerification: res.data.verification
+        } : null);
+      }
+      refreshBoard();
+    } catch (err) {
+      addToast(err.response?.data?.message || err.message || t('prescriptionVerificationRestartFailed'), 'error');
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const manualApprovePrescription = async (order, scope = 'order', itemIndex = null, customReason = null) => {
+    const orderId = String(order?._id || '');
+    let reason = customReason;
+    if (reason === null || reason === undefined) {
+      reason = window.prompt(
+        scope === 'order'
+          ? 'Reason for manual order-level prescription approval (optional):'
+          : 'Reason for manual medicine approval (optional):',
+        'Pharmacist clinical review approved'
+      );
+      if (reason === null) return;
+    }
+
+    try {
+      setUpdatingId(order._id);
+      const res = await apiClient.post(
+        `/api/orders/admin/${encodeURIComponent(order._id)}/prescription/manual-approve`,
+        {
+          scope,
+          itemIndex,
+          reason: String(reason || 'Pharmacist clinical review approved').trim()
+        }
+      );
+      addToast(res.data.message || 'Manual prescription approval saved.', 'success');
+      setVerifiedOrderIds(prev => prev.includes(orderId) ? prev : [...prev, orderId]);
+      if (res.data?.order) {
+        if (prescriptionModalOrder && String(prescriptionModalOrder._id) === orderId) {
+          setPrescriptionModalOrder(res.data.order);
+        }
+      } else if (prescriptionModalOrder && String(prescriptionModalOrder._id) === orderId) {
+        setPrescriptionModalOrder(prev => {
+          if (!prev) return null;
+          const prevMed = Array.isArray(prev.prescriptionVerification?.medicines) ? [...prev.prescriptionVerification.medicines] : [];
+          if (scope === 'medicine' && itemIndex !== null && prevMed[itemIndex]) {
+            prevMed[itemIndex] = {
+              ...prevMed[itemIndex],
+              status: 'MATCHED',
+              manualApproved: true,
+              manualApprovedBy: 'Pharmacist'
+            };
+          }
+          return {
+            ...prev,
+            prescriptionVerification: {
+              ...(prev.prescriptionVerification || {}),
+              status: scope === 'order' ? 'MATCHED' : (prev.prescriptionVerification?.status || 'MATCHED'),
+              manualApproval: true,
+              manualApprovedBy: 'Pharmacist',
+              medicines: scope === 'order'
+                ? prevMed.map(m => ({ ...m, status: 'MATCHED', manualApproved: true, manualApprovedBy: 'Pharmacist' }))
+                : prevMed
+            }
+          };
+        });
+      }
+      refreshBoard();
+    } catch (err) {
+      addToast(err.response?.data?.message || err.message || 'Manual prescription approval failed.', 'error');
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const viewPrescription = async (order) => {
+    if (!order) return;
+    setPrescriptionModalOrder(order);
+    const orderId = String(order._id);
+    setVerifiedOrderIds(prev => prev.filter(id => id !== orderId));
+    setPrescriptionPreview(null);
+    setPrescriptionPreviewError('');
+    setPrescriptionPreviewLoading(true);
+    setApprovalReason('');
+    setImageZoom(1);
+
+    const targetUrl = order.prescriptionUrl
+      || (order.prescriptionId ? `/api/v1/prescriptions/${encodeURIComponent(order.prescriptionId)}/document` : null)
+      || (order.prescriptionId ? `/api/orders/prescriptions/${encodeURIComponent(order.prescriptionId)}` : null);
+
+    console.log('[PrescriptionLifecycle] Initiating fetch for order/request:', {
+      orderId,
+      prescriptionId: order.prescriptionId,
+      prescriptionUrl: order.prescriptionUrl,
+      targetUrl
+    });
+
+    if (!targetUrl) {
+      console.warn('[PrescriptionLifecycle] No targetUrl resolved for order:', orderId);
+      setPrescriptionPreview(null);
+      setPrescriptionPreviewError(t('noPrescriptionBinary'));
+      setPrescriptionPreviewLoading(false);
+      return;
+    }
+
+    if (targetUrl.startsWith('data:') || targetUrl.startsWith('blob:')) {
+      console.log('[PrescriptionLifecycle] Using direct data/blob URL for preview:', targetUrl);
+      const isPdf = targetUrl.toLowerCase().includes('application/pdf');
+      setPrescriptionPreview({
+        url: targetUrl,
+        type: isPdf ? 'application/pdf' : 'image/jpeg'
+      });
+      setPrescriptionPreviewLoading(false);
+      setPrescriptionPreviewError('');
+      return;
+    }
+
+    setPrescriptionPreviewLoading(true);
+    setPrescriptionPreviewError('');
+
+    await runAction(LOADING_ACTIONS.VIEW_PRESCRIPTION, async () => {
+      try {
+        setViewingPrescriptionOrderId(orderId);
+        const res = await apiClient.get(targetUrl, {
+          responseType: 'blob',
+          headers: { Accept: 'application/pdf,image/*' }
+        });
+        const contentType = String(
+          res.headers?.['content-type'] || res.data?.type || ''
+        ).toLowerCase();
+        if (!contentType.includes('application/pdf') && !contentType.startsWith('image/')) {
+          throw new Error('The authenticated endpoint did not return a PDF or image prescription document.');
+        }
+
+        console.log('[PrescriptionLifecycle] Response received:', {
+          status: res.status,
+          contentType,
+          blobSize: res.data?.size
+        });
+
+        let blob;
+        try {
+          blob = await normalizePrescriptionBlob(res.data, contentType);
+        } catch (normErr) {
+          console.warn('[PrescriptionLifecycle] Blob normalization failed or fallback triggered:', normErr);
+          if (res.data instanceof Blob && res.data.size > 0) {
+            blob = res.data;
+          } else if (res.data) {
+            blob = new Blob([res.data], { type: contentType || 'application/octet-stream' });
+          } else {
+            throw new Error(t('prescriptionFileEmpty'));
+          }
+        }
+
+        const url = URL.createObjectURL(blob);
+        if (prescriptionPreview?.url && prescriptionPreview.url.startsWith('blob:')) {
+          URL.revokeObjectURL(prescriptionPreview.url);
+        }
+        console.log('[PrescriptionLifecycle] Successfully mapped state for prescription preview:', { url, type: blob.type || contentType });
+        setPrescriptionPreview({
+          url,
+          type: blob.type || contentType
+        });
+      } catch (loadError) {
+        console.error('[PrescriptionLifecycle] Prescription fetch error encountered:', loadError);
+        setPrescriptionPreview(null);
+        setPrescriptionPreviewError(t('prescriptionDocumentLoadFailed'));
+      } finally {
+        setPrescriptionPreviewLoading(false);
+        setViewingPrescriptionOrderId(null);
+      }
+    });
+  };
+
+  const reviewPrescription = async (order, decision, customReason = null) => {
+    if (!order?.prescriptionId) return;
+    await runAction(decision === 'approve' ? LOADING_ACTIONS.APPROVE_PRESCRIPTION : LOADING_ACTIONS.REJECT_PRESCRIPTION, async () => {
+      try {
+        const current = await apiClient.get(`/api/v1/prescriptions/${encodeURIComponent(order.prescriptionId)}`);
+        const version = current.data?.version || current.data?.data?.version || 1;
+        const form = new FormData();
+        form.append('expected_version', String(version));
+        if (decision === 'reject') {
+          let reason = customReason;
+          if (reason === null || reason === undefined) {
+            reason = window.prompt(t('prescriptionRejectReason'), t('prescriptionUnreadable'));
+            if (reason === null) return;
+          }
+          form.append('reason', String(reason).trim());
+        }
+        const endpoint = decision === 'approve' ? 'approve' : 'reject';
+        await apiClient.post(`/api/v1/prescriptions/${encodeURIComponent(order.prescriptionId)}/review/${endpoint}`, form);
+        if (decision === 'approve' && order._id) {
+          const conversionForm = new FormData();
+          conversionForm.append('order_id', String(order._id));
+          await apiClient.post(`/api/v1/prescriptions/${encodeURIComponent(order.prescriptionId)}/convert-to-order`, conversionForm);
+        }
+        addToast(decision === 'approve' ? t('prescriptionApprovedOrder') : t('prescriptionRejected'), decision === 'approve' ? 'success' : 'info');
+        if (prescriptionModalOrder && String(prescriptionModalOrder._id) === String(order._id)) {
+          setPrescriptionModalOrder(prev => prev ? {
+            ...prev,
+            prescriptionVerification: {
+              ...(prev.prescriptionVerification || {}),
+              status: decision === 'approve' ? 'MATCHED' : 'REJECTED'
+            }
+          } : null);
+        }
+        await onRefresh();
+      } catch (error) {
+        addToast(error.message || `Could not ${decision} prescription.`, 'error');
+      }
+    });
+  };
+
+  const closePrescriptionPreview = () => {
+    if (prescriptionPreview?.url && prescriptionPreview.url.startsWith('blob:')) {
+      URL.revokeObjectURL(prescriptionPreview.url);
+    }
+    setPrescriptionPreview(null);
+    setPrescriptionModalOrder(null);
+    setPrescriptionPreviewError('');
+    setImageZoom(1);
+  };
+
+  return (
+    <div className="admin-screen admin-screen--fulfillment-board admin-fulfillment-workspace min-w-0 space-y-4">
+      <header className="fulfillment-hero flex min-w-0 flex-col gap-4 rounded-2xl border border-blue-100 bg-gradient-to-r from-blue-50 via-white to-cyan-50 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+        <div className="min-w-0">
+          <span className="mb-2 inline-flex items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-[11px] font-extrabold uppercase tracking-wider text-emerald-700">
+            <span className="h-2 w-2 rounded-full bg-emerald-500" />
+            Pharmacy Operations
+          </span>
+          <h1 className="text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">Order Fulfillment Pipeline</h1>
+          <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-600">Track prescription review, packing, courier assignment and delivery from one operational workspace.</p>
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <span className="rounded-xl border border-white/80 bg-white/80 px-3 py-2 text-xs font-bold text-slate-600">Live order board</span>
+          <button
+            type="button"
+            onClick={refreshBoard}
+            className="min-h-11 rounded-xl bg-blue-600 px-4 py-2 text-xs font-extrabold text-white shadow-sm shadow-blue-600/20 transition hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+          >
+            ↻ Refresh Board
+          </button>
+        </div>
+      </header>
+
+      <section className="fulfillment-overview grid grid-cols-2 gap-3 xl:grid-cols-4" aria-label="Fulfillment overview">
+        {[
+          { label: 'Total orders', value: Object.values(columnCounts).reduce((sum, count) => sum + Number(count || 0), 0), note: 'Across all stages', tone: 'blue' },
+          { label: 'Needs review', value: columnCounts.Pending_Review || 0, note: 'Pharmacist action', tone: 'amber' },
+          { label: 'In preparation', value: (columnCounts.Approved || 0) + (columnCounts['Processing Order'] || 0), note: 'Approved and packing', tone: 'violet' },
+          { label: 'Out for delivery', value: columnCounts.Dispatched || 0, note: 'With a courier', tone: 'emerald' }
+        ].map((metric) => (
+          <article key={metric.label} className={`fulfillment-metric fulfillment-metric--${metric.tone} rounded-2xl border bg-white p-4`}>
+            <p className="text-xs font-bold text-slate-500">{metric.label}</p>
+            <p className="mt-2 text-2xl font-black tracking-tight text-slate-900 tabular-nums">{metric.value.toLocaleString()}</p>
+            <p className="mt-1 text-[11px] text-slate-400">{metric.note}</p>
+          </article>
+        ))}
+      </section>
+
+      <form onSubmit={submitSearch} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm" role="search">
+        <label htmlFor="fulfillment-order-search" className="mb-2 block text-xs font-black text-slate-800">{t('searchOrders')}</label>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <input
+            id="fulfillment-order-search"
+            type="search"
+            value={searchInput}
+            onChange={event => setSearchInput(event.target.value)}
+            placeholder={t("orderSearchPlaceholder")}
+            className="min-h-11 min-w-0 flex-1 rounded-xl border border-slate-300 px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+          />
+          <button type="submit" disabled={searchLoading} className="min-h-11 rounded-xl bg-blue-600 px-5 text-xs font-black text-white disabled:opacity-50">{searchLoading ? t('processing') : t('search')}</button>
+          {appliedSearch && <button type="button" onClick={clearSearch} className="min-h-11 rounded-xl border border-slate-300 px-4 text-xs font-bold text-slate-700">{t('clearSearch')}</button>}
+        </div>
+        <p className="mt-2 text-[11px] text-slate-500">{t('fulfillmentSearchHelp')}</p>
+        {appliedSearch && !searchLoading && !searchError && (
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3 text-xs text-slate-600">
+            <span>{searchPagination.total === 0 ? t('noOrdersFound') : t('ordersFoundFor').replace('{count}', searchPagination.total).replace('{query}', appliedSearch)}</span>
+            <Pagination
+              page={searchPagination.page}
+              totalPages={searchPagination.totalPages}
+              total={searchPagination.total}
+              pageSize={10}
+              onPageChange={changeSearchPage}
+              loading={searchLoading}
+              label="matching orders"
+            />
+          </div>
+        )}
+        {searchLoading && <p className="mt-3 text-xs text-slate-500" role="status">{t('searchingOrders')}</p>}
+        {searchError && <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-rose-700" role="alert"><span>{searchError}</span><button type="button" onClick={retrySearch} disabled={searchLoading} className="font-bold underline">{t('tryAgain')}</button></div>}
+      </form>
+
+      {/* UX Optimization Toolbar: Tabbed Stage View vs All Columns */}
+      <FulfillmentTabs
+        viewMode={viewMode}
+        setViewMode={setViewMode}
+        activeTabId={activeTabId}
+        setActiveTabId={setActiveTabId}
+        layoutDirection={layoutDirection}
+        setLayoutDirection={setLayoutDirection}
+        columns={COLUMNS.map((column) => ({ ...column, title: getColumnTitle(column.id) }))}
+        counts={columnCounts}
+      />
+
+      {/* Columns Container */}
+      <div className={`fulfillment-board-columns min-w-0 ${viewMode === 'tabbed' ? 'w-full' : layoutDirection === 'horizontal' ? 'flex overflow-x-auto gap-4 pb-4 snap-x' : 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4'}`}>
+        {(viewMode === 'tabbed' ? COLUMNS.filter(c => c.id === activeTabId) : COLUMNS).map((col) => {
+          const searchMode = Boolean(appliedSearch);
+          const rawColOrders = searchMode
+            ? searchOrders.filter(order => normalizeOrderStatus(order) === col.id)
+            : col.id === 'Delivered'
+              ? deliveredOrders
+              : col.id === 'Cancelled'
+                ? cancelledOrders
+                : (orders || []).filter(o => normalizeOrderStatus(o) === col.id);
+          const colOrders = rawColOrders.filter(order => normalizeOrderStatus(order) === col.id);
+
+          return (
+            <div key={col.id} className={`min-w-0 bg-slate-100/70 border border-slate-200 rounded-3xl p-3 sm:p-4 flex flex-col min-h-[500px] ${viewMode === 'all' && layoutDirection === 'horizontal' ? 'w-80 shrink-0 snap-start' : 'w-full'}`}>
+              
+              {/* Column Header */}
+              <div className="flex justify-between items-center pb-3 border-b border-slate-200 mb-3">
+                <span className={`min-w-0 text-xs font-black px-2.5 py-1 rounded-xl uppercase tracking-wider break-words ${col.color}`}>
+                  {col.title}
+                </span>
+                <span className="text-xs font-black text-slate-500 bg-white border border-slate-200 min-w-6 h-6 px-1 rounded-full flex items-center justify-center">
+                  {col.id === 'Delivered' ? (deliveredPagination.total || deliveredOrders.length) : col.id === 'Cancelled' ? (cancelledPagination.total || cancelledOrders.length) : colOrders.length}
+                </span>
+              </div>
+
+              {/* Cards Container */}
+              <div className="min-w-0 space-y-3 flex-1">
+                {searchMode && searchLoading ? (
+                  <div className="h-40 flex items-center justify-center text-slate-500 text-xs" role="status">{t('searchingOrders')}</div>
+                ) : searchMode && searchError ? (
+                  <div className="h-40 flex items-center justify-center text-slate-400 text-xs">{t('searchResultsUnavailable')}</div>
+                ) : col.id === 'Delivered' && deliveredLoading && !searchMode ? (
+                  <div className="h-40 flex items-center justify-center text-slate-500 text-xs" role="status">{t('loadingDeliveredOrders')}</div>
+                ) : col.id === 'Delivered' && deliveredError && !searchMode ? (
+                  <div className="min-h-40 flex flex-col items-center justify-center gap-2 text-center text-xs text-rose-700" role="alert">
+                    <p>{deliveredError}</p>
+                    <button type="button" onClick={() => setDeliveredRetryKey(value => value + 1)} className="font-bold underline">{t('tryAgain')}</button>
+                  </div>
+                ) : searchMode && !searchLoading && !searchError && searchPagination.total === 0 ? (
+                  <div className="h-40 flex items-center justify-center text-slate-400 text-xs italic">{t('noOrdersFound')}</div>
+                ) : col.id === 'Delivered' && deliveredPagination.total === 0 && !searchMode ? (
+                  <div className="h-40 flex items-center justify-center text-slate-400 text-xs italic">{t('noDeliveredOrders')}</div>
+                ) : col.id === 'Cancelled' && cancelledLoading && !searchMode ? (
+                  <div className="h-40 flex items-center justify-center text-slate-500 text-xs" role="status">{t('loadingCancelledHistory')}</div>
+                ) : col.id === 'Cancelled' && cancelledError && !searchMode ? (
+                  <div className="min-h-40 flex flex-col items-center justify-center gap-2 text-center text-xs text-rose-700" role="alert"><p>{cancelledError}</p><button type="button" onClick={() => setCancelledRetryKey(value => value + 1)} className="font-bold underline">Try again</button></div>
+                ) : col.id === 'Cancelled' && cancelledPagination.total === 0 && !searchMode ? (
+                  <div className="h-40 flex items-center justify-center text-slate-400 text-xs italic">{t('noCancelledOrders')}</div>
+                ) : colOrders.length === 0 ? (
+                  <div className="h-40 flex items-center justify-center text-slate-400 text-xs italic">
+                    No orders in this stage
+                  </div>
+                ) : (
+                  colOrders.map((order) => {
+                    const orderId = col.id === 'Delivered'
+                      ? String(order._id || order.orderNumber || 'Unknown order')
+                      : String(order.orderNumber || order._id || 'Unknown order').slice(-6).toUpperCase();
+                    const isProcessing = updatingId === order._id;
+
+                    if (col.id === 'Cancelled') {
+                      const customerName = order.customerName || order.addressDetails?.fullName || t('customer');
+                      const cancelledAt = (order.statusHistory || []).filter(entry => ['Cancelled', 'cancelled'].includes(String(entry.newStatus || ''))).sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0))[0]?.timestamp || order.updatedAt || order.createdAt;
+                      return (
+                        <section key={order._id} className="min-w-0 overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
+                          <div className="space-y-2 p-3">
+                            <div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="font-black text-xs text-slate-900">#{orderId}</p><p className="mt-1 truncate text-xs font-semibold text-slate-600">{customerName}</p></div><span className="shrink-0 rounded-full border border-slate-300 bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-700">{t('cancelled')}</span></div>
+                            <p className="text-[11px] text-slate-600"><span className="font-bold">{t('cancelledLabel')}</span> {new Date(cancelledAt).toLocaleString()}</p>
+                            <p className="text-xs font-bold text-slate-800">₹{order.finalTotal ?? order.totalAmount ?? 0}</p>
+                            <p className="text-[11px] text-slate-500 break-words">{(order.items || order.medicineItems || []).map(item => `${item.productName || item.name || item.genericName || t('medicine')} × ${item.quantity || 1}`).join(', ') || t('itemDetailsUnavailable')}</p>
+                            {order.statusHistory?.length > 0 && <details className="border-t border-slate-100 pt-2 text-[11px] text-slate-600"><summary className="cursor-pointer font-bold">{t('viewOrderTimeline')}</summary><div className="mt-2 space-y-1">{order.statusHistory.slice().sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0)).map((entry, index) => <p key={index}>{entry.newStatus || entry.previousStatus || t('refresh')} · {entry.timestamp ? new Date(entry.timestamp).toLocaleString() : t('timeUnavailable')}{entry.notes ? ` — ${entry.notes}` : ''}</p>)}</div></details>}
+                          </div>
+                        </section>
+                      );
+                    }
+
+                    if (col.id === 'Delivered') {
+                      const isExpanded = String(expandedDeliveredOrderId) === String(order._id);
+                      const customerName = order.customerName || order.addressDetails?.fullName || 'Customer';
+                      return (
+                        <section key={order._id} className="min-w-0 overflow-hidden rounded-2xl border border-emerald-200 bg-white shadow-sm">
+                          <button
+                            type="button"
+                            aria-expanded={isExpanded}
+                            aria-controls={`delivered-order-${order._id}`}
+                            onClick={() => setExpandedDeliveredOrderId(current => current === String(order._id) ? null : String(order._id))}
+                            className="flex min-h-14 w-full min-w-0 items-center justify-between gap-2 p-3 text-left hover:bg-emerald-50/60"
+                          >
+                            <span className="min-w-0 flex-1">
+                              <span className="flex flex-wrap items-center gap-2">
+                                <span className="font-black text-xs text-slate-900">#{orderId}</span>
+                                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-black text-emerald-800">{t('delivered')}</span>
+                              </span>
+                              <span className="mt-1 block truncate text-xs font-semibold text-slate-600">{customerName}</span>
+                            </span>
+                            <span aria-hidden="true" className="shrink-0 text-slate-500">{isExpanded ? '−' : '+'}</span>
+                          </button>
+                          {isExpanded && (
+                            <div id={`delivered-order-${order._id}`} className="space-y-2 border-t border-slate-100 p-3 text-xs text-slate-600">
+                              <p className="break-all"><span className="font-bold">{t('orderId')}:</span> {order._id || order.orderNumber}</p>
+                              {order.orderNumber && <p className="break-all"><span className="font-bold">{t('orderNumber')}:</span> {order.orderNumber}</p>}
+                              <p><span className="font-bold">{t('customer')}:</span> {customerName}</p>
+                              <p><span className="font-bold">{t('mobile')}:</span> {getCustomerMobile(order) || t('noPhone')}</p>
+                              {order.deliveryAddress && <p><span className="font-bold">{t('address')}:</span> {order.deliveryAddress}</p>}
+                              <p><span className="font-bold">{t('total')}:</span> ₹{order.finalTotal} COD</p>
+                              {order.outForDeliveryAt && <p><span className="font-bold">Out for delivery:</span> {new Date(order.outForDeliveryAt).toLocaleString()}</p>}
+                              {order.deliveredAt && <p><span className="font-bold">Delivered:</span> {new Date(order.deliveredAt).toLocaleString()}</p>}
+                              {order.rider && <p><span className="font-bold">{t('rider')}:</span> {order.rider.riderName || 'Assigned rider'}{order.rider.riderMobile ? ` · ${order.rider.riderMobile}` : ''}</p>}
+                              <div className="border-t border-slate-100 pt-2">
+                                <p className="mb-1 font-bold">{t('itemsLabel')}</p>
+                                {(order.items || []).map((item, index) => (
+                                  <p key={`${item.name || 'item'}-${index}`}>{item.name || 'Item'} × {item.quantity || 1}</p>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </section>
+                      );
+                    }
+
+                    return (
+                      <div
+                        key={order._id}
+                        className="min-w-0 bg-white border border-slate-200 rounded-2xl p-3 sm:p-4 shadow-sm hover:shadow-md transition space-y-3 relative"
+                      >
+                        {/* Accordion Toggle Header */}
+                        <div className="flex min-w-0 justify-between items-start gap-2">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-black text-slate-900 text-xs">#{orderId}</span>
+                              <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200/50">
+                                {col.title}
+                              </span>
+                            </div>
+                            <p className="text-xs font-bold text-slate-800 mt-0.5 truncate">{order.customerName || order.addressDetails?.fullName || 'Customer'}</p>
+                            <span className="text-[11px] text-slate-400 block">
+                              {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="shrink-0 font-black text-emerald-700 text-xs bg-emerald-50 px-2.5 py-1 rounded-xl border border-emerald-100">
+                              ₹{order.finalTotal || order.totalAmount || 0} COD
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setCollapsedOrderIds(prev => prev.includes(String(order._id)) ? prev.filter(id => id !== String(order._id)) : [...prev, String(order._id)])}
+                              className="h-7 w-7 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 flex items-center justify-center font-bold text-xs transition cursor-pointer"
+                              aria-label="Toggle accordion collapse"
+                            >
+                              {collapsedOrderIds.includes(String(order._id)) ? '+' : '−'}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Accordion Body */}
+                        {!collapsedOrderIds.includes(String(order._id)) && (
+                          <div className="space-y-3 animate-fade-in pt-1">
+
+                        {/* Customer & Address */}
+                        <div className="min-w-0 text-xs text-slate-600 space-y-0.5 border-t border-slate-100 pt-2">
+                          <p className="font-bold text-slate-800 break-words">{order.customerName || 'Customer'}</p>
+                          <p className="text-slate-500 break-words">{getCustomerMobile(order) || 'No phone'}</p>
+                          <p className="text-slate-600 mt-1 break-words">📍 {order.deliveryAddress}</p>
+                        </div>
+
+                        {/* Items list preview */}
+                        <div className="min-w-0 bg-slate-50 p-2 rounded-xl text-xs text-slate-600 space-y-1">
+                          {(order.items || order.medicineItems || []).map((i, idx) => (
+                            <div key={idx} className="flex items-start justify-between gap-2">
+                              <span className="min-w-0 flex-1 whitespace-normal break-words" title={i.productName || i.name || i.genericName || 'Medicine'}>
+                                • {i.productName || i.name || i.genericName || 'Medicine'}
+                              </span>
+                              <span className="shrink-0 font-bold text-slate-700">x{i.quantity || 1}</span>
+                            </div>
+                          ))}
+                          {(order.items || order.medicineItems || []).length === 0 && (
+                            <p className="text-[11px] text-slate-400 italic">{t('noMedicinesFound')}</p>
+                          )}
+                        </div>
+
+                        {/* Rider details if assigned */}
+                        {order.rider && (
+                          <div className="bg-blue-50 p-2 rounded-xl text-xs text-blue-900">
+                            <span className="font-bold break-words">🛵 Rider: {order.rider.riderName}</span>
+                            <p className="text-blue-700 break-words">{order.rider.riderMobile}</p>
+                          </div>
+                        )}
+
+                        {col.id === 'Pending_Review' && (
+                          <div className="space-y-2 border-t border-slate-100 pt-2">
+                            {order.prescriptionRequired && Boolean(order.prescriptionUrl || order.prescriptionId) && (
+                              <div className="rounded-xl bg-rose-50 p-2.5 text-xs text-rose-800 space-y-2">
+                                <div className="flex items-center justify-between gap-1">
+                                  <p className="font-bold">{order.prescriptionRequired ? t('prescriptionRequired') : t('prescriptionAttached')}</p>
+                                  <span className={`text-[10px] font-black px-1.5 py-0.5 rounded ${
+                                    order.prescriptionVerification?.status === 'MATCHED' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                                  }`}>
+                                    {order.prescriptionVerification?.status || 'REVIEW_REQUIRED'}
+                                  </span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => viewPrescription(order)}
+                                  disabled={viewingPrescriptionOrderId === String(order._id) || isActionLoading(LOADING_ACTIONS.VIEW_PRESCRIPTION)}
+                                  className="min-h-9 w-full rounded-lg bg-white border border-rose-200 text-rose-900 font-bold text-xs hover:bg-rose-100/50 flex items-center justify-center gap-1.5 transition shadow-sm"
+                                >
+                                  <span>🩺</span>
+                                  <span>{viewingPrescriptionOrderId === String(order._id) ? t('loading') : t('viewPrescriptionReview')}</span>
+                                </button>
+                                <p className="text-[11px] font-semibold text-rose-800">
+                                  {verifiedOrderIds.includes(String(order._id)) || order.prescriptionVerification?.status === 'MATCHED'
+                                    ? '✓ Prescription verified. Approval enabled.'
+                                    : 'Open prescription to inspect and approve.'}
+                                </p>
+                              </div>
+                            )}
+                            {order.prescriptionRequired && !order.prescriptionUrl && !order.prescriptionId && (
+                              <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[11px] text-amber-900">
+                                Prescription upload is required before approval. No prescription service request, document-view icon, or manual prescription-review action is available until a document is attached.
+                              </div>
+                            )}
+                            {order.prescriptionRequired && Boolean(order.prescriptionUrl || order.prescriptionId) && (
+                              <div className="rounded-xl border border-amber-200 bg-amber-50 p-2 space-y-2">
+                                <div className="flex flex-wrap gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => reinitiatePrescriptionVerification(order)}
+                                    disabled={isProcessing}
+                                    className="min-h-9 rounded-lg border border-amber-300 bg-white px-3 text-[11px] font-extrabold text-amber-800 hover:bg-amber-100 disabled:opacity-50"
+                                  >
+                                    🔄 Re-initiate Verification
+                                  </button>
+                                  {order.prescriptionId && (
+                                    <>
+                                      <button type="button" onClick={() => reviewPrescription(order, 'approve')}
+                                        disabled={isActionLoading(LOADING_ACTIONS.APPROVE_PRESCRIPTION) || isActionLoading(LOADING_ACTIONS.REJECT_PRESCRIPTION)}
+                                        className="min-h-9 rounded-lg bg-emerald-600 px-3 text-[11px] font-extrabold text-white disabled:opacity-50">
+                                        {isActionLoading(LOADING_ACTIONS.APPROVE_PRESCRIPTION) ? 'Approving…' : '✓ Approve Prescription'}
+                                      </button>
+                                      <button type="button" onClick={() => reviewPrescription(order, 'reject')}
+                                        disabled={isActionLoading(LOADING_ACTIONS.APPROVE_PRESCRIPTION) || isActionLoading(LOADING_ACTIONS.REJECT_PRESCRIPTION)}
+                                        className="min-h-9 rounded-lg bg-rose-50 px-3 text-[11px] font-extrabold text-rose-700 disabled:opacity-50">
+                                        {isActionLoading(LOADING_ACTIONS.REJECT_PRESCRIPTION) ? 'Rejecting…' : '✕ Reject Prescription'}
+                                      </button>
+                                    </>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => manualApprovePrescription(order, 'order')}
+                                    disabled={isProcessing}
+                                    className="min-h-9 rounded-lg bg-amber-600 px-3 text-[11px] font-extrabold text-white hover:bg-amber-700 disabled:opacity-50"
+                                  >
+                                    ✓ Manual Approve Order
+                                  </button>
+                                </div>
+                                <div className="space-y-1.5">
+                                  {(order.items || order.medicineItems || []).map((item, index) => (
+                                    <div key={`${item.productId || item.medicineId || item.name || 'medicine'}-${index}`} className="flex items-center justify-between gap-2 rounded-lg bg-white/80 px-2 py-1.5">
+                                      <span className="min-w-0 flex-1 truncate text-[11px] font-bold text-slate-700">
+                                        {index + 1}. {item.productName || item.name || item.genericName || 'Medicine'}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => manualApprovePrescription(order, 'medicine', index)}
+                                        disabled={isProcessing}
+                                        className="shrink-0 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-extrabold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+                                      >
+                                        Approve medicine
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                                <p className="text-[10px] text-amber-800">
+                                  Use manual approval only after reviewing the uploaded prescription. Order fulfillment remains blocked until every required medicine is approved.
+                                </p>
+                              </div>
+                            )}
+
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => reviewOrder(order, 'Approved')}
+                                disabled={isProcessing || (order.prescriptionRequired && !order.prescriptionUrl) || (Boolean(order.prescriptionUrl) && !verifiedOrderIds.includes(String(order._id)))}
+                                className="min-h-11 flex-1 rounded-xl bg-emerald-600 px-2 py-2 text-xs font-extrabold text-white disabled:opacity-50"
+                              >
+                                Approve
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => reviewOrder(order, 'Rejected')}
+                                disabled={isProcessing}
+                                className="min-h-11 flex-1 rounded-xl bg-rose-600 px-2 py-2 text-xs font-extrabold text-white disabled:opacity-50"
+                              >
+                                Reject & Release Stock
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {col.id === 'Approved' && (
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setAssignRiderModal(order)}
+                              disabled={isProcessing}
+                              className="min-h-11 flex-1 rounded-xl bg-blue-600 px-2 py-2 text-xs font-extrabold text-white disabled:opacity-50"
+                            >
+                              Assign Rider
+                            </button>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                try {
+                                  setUpdatingId(order._id);
+                                  const res = await apiClient.post(`/api/orders/admin/${order._id}/auto-assign`);
+                                  addToast(res.data?.message || 'Rider auto-assigned successfully!', 'success');
+                                  if (typeof onRefresh === 'function') onRefresh();
+                                  else window.location.reload();
+                                } catch (err) {
+                                  addToast(err.response?.data?.message || err.message || 'Auto-assignment failed.', 'error');
+                                } finally {
+                                  setUpdatingId(null);
+                                }
+                              }}
+                              disabled={isProcessing}
+                              className="min-h-11 flex-1 rounded-xl bg-teal-600 hover:bg-teal-700 px-2 py-2 text-xs font-extrabold text-white disabled:opacity-50"
+                            >
+                              🤖 Auto Assign
+                            </button>
+                          </div>
+                        )}
+
+                        {(order.outForDeliveryAt || order.deliveredAt) && (
+                          <div className="bg-slate-50 p-2 rounded-xl text-xs text-slate-600 space-y-1 break-words">
+                            {order.outForDeliveryAt && (
+                              <p>
+                                <span className="font-bold">Out for delivery:</span>{' '}
+                                {new Date(order.outForDeliveryAt).toLocaleString()}
+                              </p>
+                            )}
+                            {order.deliveredAt && (
+                              <p>
+                                <span className="font-bold">Delivered:</span>{' '}
+                                {new Date(order.deliveredAt).toLocaleString()}
+                              </p>
+                            )}
+                          </div>
+                        )}
+
+                        {col.id === 'Processing Order' && order.prescriptionRequired && Boolean(order.prescriptionUrl || order.prescriptionId) && (
+                          <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-2">
+                            <p className="text-xs font-extrabold text-amber-900">{t('prescriptionReviewBlocking')}</p>
+                            <p className="text-[11px] text-amber-800">Status: <strong>{order.prescriptionVerification?.status || 'REVIEW_REQUIRED'}</strong>. {t('prescriptionReviewInstructions')}</p>
+                            <button
+                              type="button"
+                              onClick={() => viewPrescription(order)}
+                              disabled={isProcessing}
+                              className="min-h-10 w-full rounded-lg bg-amber-600 px-3 py-2 text-xs font-extrabold text-white hover:bg-amber-700 disabled:opacity-50"
+                            >
+                              👁️ Open centered prescription review
+                            </button>
+                          </div>
+                        )}
+
+                        {col.id === 'Processing Order' && order.prescriptionRequired && !order.prescriptionUrl && !order.prescriptionId && (
+                          <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[11px] text-amber-900">
+                            Prescription upload is required before dispatch. No prescription service call or manual-review action is available until a document is uploaded.
+                          </div>
+                        )}
+
+                        {col.id !== 'Pending_Review' && col.id !== 'Processing Order' && order.prescriptionRequired && Boolean(order.prescriptionUrl || order.prescriptionId) && (
+                          <div className="flex items-center justify-between text-[11px] bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5">
+                            <span className="font-semibold text-slate-600">
+                              📄 Prescription:{' '}
+                              <strong className={order.prescriptionVerification?.status === 'MATCHED' ? 'text-emerald-700' : 'text-amber-700'}>
+                                {order.prescriptionVerification?.status || 'Attached'}
+                              </strong>
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => viewPrescription(order)}
+                              className="font-bold text-blue-600 hover:text-blue-800 underline"
+                            >
+                              View
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Action Buttons according to allowed state transitions */}
+                        <div className="pt-2 border-t border-slate-100">
+                          {col.id === 'Processing Order' && (
+                            <div className="space-y-1">
+                              <button
+                                onClick={() => handleTransition(order._id, 'Ready to Dispatch')}
+                                disabled={isProcessing || (order.prescriptionRequired && order.prescriptionVerification?.status !== 'MATCHED')}
+                                className="min-h-11 w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs px-2 py-2 rounded-xl transition cursor-pointer shadow-sm shadow-blue-600/20 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                {isProcessing ? 'Verifying...' : '🔬 Verify & Pack → Ready'}
+                              </button>
+                              {order.prescriptionRequired && !order.prescriptionUrl && !order.prescriptionId && (
+                                <p className="text-[10px] text-center text-amber-800 font-bold">
+                                  Upload a prescription before dispatch; no prescription review service is needed yet.
+                                </p>
+                              )}
+                              {order.prescriptionRequired && (order.prescriptionUrl || order.prescriptionId) && order.prescriptionVerification?.status !== 'MATCHED' && (
+                                <p className="text-[10px] text-center text-amber-800 font-bold">
+                                  Uploaded prescription must be verified before dispatch
+                                </p>
+                              )}
+                            </div>
+                          )}
+
+                          {col.id === 'Ready to Dispatch' && (
+                            order.rider?.riderId ? (
+                              <button
+                                onClick={() => handleTransition(order._id, 'Dispatched', {
+                                  riderId: order.rider.riderId,
+                                  riderName: order.rider.riderName,
+                                  riderMobile: order.rider.riderMobile
+                                })}
+                                disabled={isProcessing}
+                                className="min-h-11 w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs px-2 py-2 rounded-xl transition cursor-pointer shadow-sm shadow-blue-600/20"
+                              >
+                                🛵 Dispatch Assigned Rider
+                              </button>
+                            ) : (
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => setAssignRiderModal(order)}
+                                  disabled={isProcessing}
+                                  className="min-h-11 flex-1 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs px-2 py-2 rounded-xl transition cursor-pointer shadow-sm shadow-blue-600/20"
+                                >
+                                  Assign Rider
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    try {
+                                      setUpdatingId(order._id);
+                                      const res = await apiClient.post(`/api/orders/admin/${order._id}/auto-assign`);
+                                      addToast(res.data?.message || 'Rider auto-assigned successfully!', 'success');
+                                      if (typeof onRefresh === 'function') onRefresh();
+                                      else window.location.reload();
+                                    } catch (err) {
+                                      addToast(err.response?.data?.message || err.message || 'Auto-assignment failed.', 'error');
+                                    } finally {
+                                      setUpdatingId(null);
+                                    }
+                                  }}
+                                  disabled={isProcessing}
+                                  className="min-h-11 flex-1 rounded-xl bg-teal-600 hover:bg-teal-700 px-2 py-2 text-xs font-extrabold text-white disabled:opacity-50"
+                                >
+                                  🤖 Auto Assign
+                                </button>
+                              </div>
+                            )
+                          )}
+
+                          {col.id === 'Dispatched' && (
+                            <div className="space-y-2 border-t border-slate-100 pt-3">
+                              {!revealedOtpOrderIds.includes(String(order._id)) ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setRevealedOtpOrderIds(prev => [...prev, String(order._id)])}
+                                  className="min-h-11 w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs px-3 py-2 rounded-xl transition cursor-pointer shadow-sm shadow-blue-600/20 flex items-center justify-center gap-1.5"
+                                >
+                                  <span>🏁</span>
+                                  <span>{t('markAsDelivered')}</span>
+                                </button>
+                              ) : (
+                                <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 space-y-2.5 animate-fade-in">
+                                  <div className="flex justify-between items-center">
+                                    <label className="text-[11px] font-black uppercase text-slate-700 tracking-wider">
+                                      Customer Verification OTP
+                                    </label>
+                                    <button
+                                      type="button"
+                                      onClick={async () => {
+                                         try {
+                                           const res = await apiClient.get(`/api/orders/${order._id}/reveal-otp`);
+                                           const otp = res.data?.otp;
+                                           if (!/^\\d{4}$/.test(String(otp || ''))) {
+                                             throw new Error('The server did not return a valid delivery OTP.');
+                                           }
+                                           setDeliveryOtps(prev => ({ ...prev, [order._id]: otp }));
+                                           addToast(`Revealed Customer OTP (Cached 24h): ${otp}`, 'info');
+                                         } catch (err) {
+                                           addToast(err.response?.data?.message || err.message || t('otpFromCacheFailed'), 'error');
+                                         }
+                                       }}
+                                      className="text-[10px] font-black text-amber-800 bg-amber-100 px-2.5 py-0.5 rounded-lg hover:bg-amber-200 transition cursor-pointer"
+                                    >
+                                      🔑 Reveal OTP
+                                    </button>
+                                  </div>
+                                  <div className="flex gap-2">
+                                    <input
+                                      type="text"
+                                      maxLength={4}
+                                      placeholder="4-digit"
+                                      value={deliveryOtps[order._id] || ''}
+                                      onChange={(e) => setDeliveryOtps(prev => ({ ...prev, [order._id]: e.target.value.replace(/\D/g, '') }))}
+                                      className="w-24 bg-white border border-slate-300 rounded-xl px-2 py-1.5 text-center font-mono font-black text-sm text-slate-900 focus:outline-none focus:border-blue-600"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={async () => {
+                                        const code = deliveryOtps[order._id];
+                                        if (!code || code.length !== 4) {
+                                          addToast(t('validFourDigitCode'), 'warning');
+                                          return;
+                                        }
+                                        try {
+                                           setUpdatingId(order._id);
+                                           await apiClient.post('/api/orders/' + order._id + '/verify-delivery', {
+                                             otp: code,
+                                             riderId: order.rider?.riderId || order.riderId || order.assignedRiderId || null
+                                           });
+                                           // The server has already marked this order delivered. Do not
+                                           // update the removed closedOrderIds state: it was never declared
+                                           // and caused a ReferenceError after a successful OTP response.
+                                           setDeliveryOtps(prev => {
+                                             const next = { ...prev };
+                                             delete next[order._id];
+                                             return next;
+                                           });
+                                           addToast('Delivery verified successfully by server!', 'success');
+                                           refreshBoard();
+                                         } catch (err) {
+                                           addToast(err.response?.data?.message || err.message || 'OTP verification failed.', 'error');
+                                         } finally {
+                                           setUpdatingId(null);
+                                         }
+                                      }}
+                                      disabled={isProcessing}
+                                      className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs px-3 py-2 rounded-xl transition cursor-pointer shadow-sm"
+                                    >
+                                      {isProcessing ? 'Verifying...' : 'Validate & Close'}
+                                    </button>
+                                  </div>
+                                  <div className="flex justify-between items-center pt-0.5">
+                                    <span className="text-[10px] text-slate-500">Server validated</span>
+                                    <button
+                                      type="button"
+                                      onClick={async () => {
+                                         try {
+                                           const res = await apiClient.post('/api/orders/' + order._id + '/resend-otp');
+                                           if (res.data?.otp) {
+                                             setDeliveryOtps(prev => ({ ...prev, [order._id]: res.data.otp }));
+                                           }
+                                           addToast('New delivery OTP generated, cached for 24h, and sent to customer!', 'success');
+                                         } catch (err) {
+                                           addToast(err.response?.data?.message || err.message || 'Could not resend OTP.', 'error');
+                                         }
+                                       }}
+                                      className="text-[10px] font-extrabold text-blue-600 hover:underline cursor-pointer"
+                                    >
+                                      Resend OTP
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {col.id === 'Delivered' && (
+                            <div className="text-center text-[10px] font-extrabold text-emerald-700 bg-emerald-50 py-1.5 rounded-xl border border-emerald-100">
+                              ✓ Completed & Finalized
+                            </div>
+                          )}
+                        </div>
+                          </div>
+                        )}
+
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {col.id === 'Delivered' && !searchMode && !deliveredLoading && !deliveredError && (
+                <Pagination
+                  page={deliveredPagination.page || deliveredPage}
+                  totalPages={deliveredPagination.totalPages}
+                  total={deliveredPagination.total}
+                  pageSize={10}
+                  onPageChange={(page) => changeDeliveredPage(page)}
+                  loading={deliveredLoading}
+                  label="delivered orders"
+                />
+              )}
+              {col.id === 'Cancelled' && !searchMode && !cancelledLoading && !cancelledError && (
+                <Pagination
+                  page={cancelledPagination.page || cancelledPage}
+                  totalPages={cancelledPagination.totalPages}
+                  total={cancelledPagination.total}
+                  pageSize={10}
+                  onPageChange={page => {
+                    if (page >= 1 && page <= cancelledPagination.totalPages && page !== cancelledPage) {
+                      setCancelledPage(page);
+                    }
+                  }}
+                  loading={cancelledLoading}
+                  label="cancelled orders"
+                />
+              )}
+
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Assign Rider Modal */}
+      {assignRiderModal && typeof document !== 'undefined' && createPortal(
+        <div className="pharma-rider-assignment-overlay fixed inset-0 z-[10000] flex items-center justify-center p-3 sm:p-4 bg-black/45 backdrop-blur-[2px] animate-fade-in overscroll-none" role="presentation">
+          <div role="dialog" aria-modal="true" aria-labelledby="assign-rider-title" className="pharma-rider-assignment-dialog flex flex-col w-full max-w-md max-h-[88dvh] min-h-0 bg-white border border-slate-200 rounded-3xl shadow-2xl relative overflow-hidden">
+            <div className="shrink-0 p-4 sm:p-5 border-b border-slate-100 flex justify-between items-center bg-white">
+              <div>
+                <h4 id="assign-rider-title" className="text-sm font-black text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                  <span>🛵</span>
+                  <span>{t('assignDeliveryPartner')}</span>
+                </h4>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Order #{(assignRiderModal._id || '').slice(-6).toUpperCase()}
+                </p>
+              </div>
+              <button
+                onClick={() => setAssignRiderModal(null)}
+                aria-label={t('close')}
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 sm:p-5 space-y-4">
+              <div className="space-y-3">
+                <p className="text-[11px] font-bold text-slate-500">{t('availableDeliveryPartners')}</p>
+                {loadingAvailableRiders && (
+                  <p className="rounded-xl bg-slate-50 p-3 text-xs text-slate-500">{t('loading')}</p>
+                )}
+                {availableRidersError && (
+                  <p role="alert" className="rounded-xl bg-rose-50 p-3 text-xs text-rose-700">{availableRidersError}</p>
+                )}
+                {!loadingAvailableRiders && !availableRidersError && availableRiders.length === 0 && (
+                  <p className="rounded-xl bg-amber-50 p-3 text-xs text-amber-800">{t('noRidersAvailable')}</p>
+                )}
+                {!loadingAvailableRiders && availableRiders.length > 0 && (
+                  <div className="space-y-2">
+                    <label htmlFor="fulfillment-rider-search" className="sr-only">{t("searchDeliveryPartner")}</label>
+                    <input
+                      id="fulfillment-rider-search"
+                      type="search"
+                      value={riderSearch}
+                      onChange={(event) => setRiderSearch(event.target.value)}
+                      placeholder={t('searchDeliveryPartner')}
+                      className="min-h-11 w-full min-w-0 rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                    />
+                    <div className="space-y-2">
+                    {filteredAvailableRiders.map((rider) => {
+                      const distance = getDistanceToPickup(rider, assignRiderModal);
+                      return (
+                        <label
+                          key={rider.id}
+                          className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition ${
+                            selectedRiderId === rider.id
+                              ? 'border-blue-500 bg-blue-50/80 shadow-xs'
+                              : 'border-slate-200 hover:border-slate-300 bg-white'
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="delivery-rider"
+                            value={rider.id}
+                            checked={selectedRiderId === rider.id}
+                            onChange={() => setSelectedRiderId(rider.id)}
+                            className="mt-1 accent-blue-600"
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-xs font-bold text-slate-800">{rider.name}</span>
+                            <span className="mt-0.5 block text-[11px] text-slate-500">
+                              {rider.mobile}{rider.vehicleType ? ` • ${rider.vehicleType}` : ''}
+                            </span>
+                            <span className="mt-1 block text-[10px] font-semibold text-blue-700">
+                              {formatDistance(distance)}
+                            </span>
+                          </span>
+                        </label>
+                      );
+                    })}
+                    {filteredAvailableRiders.length === 0 && (
+                      <p className="rounded-xl bg-slate-50 p-3 text-xs text-slate-500">No available riders match that search.</p>
+                    )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="shrink-0 p-4 sm:p-5 border-t border-slate-100 bg-slate-50/80 flex flex-col-reverse sm:flex-row gap-2">
+              <button
+                type="button"
+                onClick={() => setAssignRiderModal(null)}
+                className="min-h-11 w-full sm:w-1/2 bg-slate-100 hover:bg-slate-200 text-xs text-slate-700 font-bold py-2 rounded-xl transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={loadingAvailableRiders || !selectedRiderId || Boolean(availableRidersError)}
+                onClick={() => {
+                  const rider = availableRiders.find((candidate) => candidate.id === selectedRiderId);
+                  if (!rider) return;
+                  const riderInfo = {
+                    riderId: rider.id,
+                    riderName: rider.name,
+                    riderMobile: rider.mobile
+                  };
+                  if (assignRiderModal.orderStatus === 'Approved') {
+                    dispatchApprovedOrder(assignRiderModal._id, riderInfo);
+                  } else {
+                    handleTransition(assignRiderModal._id, 'Dispatched', riderInfo);
+                  }
+                }}
+                className="min-h-11 w-full sm:w-1/2 bg-blue-600 hover:bg-blue-700 text-white font-extrabold py-2 rounded-xl text-xs shadow-md shadow-blue-600/25 disabled:cursor-not-allowed disabled:opacity-50 transition cursor-pointer"
+              >
+                Dispatch Order
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {prescriptionModalOrder && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center modal-overlay p-2 sm:p-4 animate-fade-in"
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="prescription-review-modal-title"
+            className="pharma-modal-surface relative flex h-[92dvh] w-full max-w-6xl min-h-0 flex-col overflow-hidden rounded-3xl bg-white shadow-2xl border border-slate-200"
+          >
+            {/* Modal Header */}
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-slate-50/90 px-4 py-3 sm:px-6 pr-14">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-blue-100 text-blue-700 font-bold text-lg">
+                  🩺
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 id="prescription-review-modal-title" className="text-sm sm:text-base font-black text-slate-900 truncate">
+                      Prescription Review & Verification
+                    </h4>
+                    <span className="rounded-lg bg-blue-50 px-2 py-0.5 text-xs font-black text-blue-700 border border-blue-200 font-mono">
+                      #{String(prescriptionModalOrder._id).slice(-6).toUpperCase()}
+                    </span>
+                    <span className={`rounded-lg px-2 py-0.5 text-xs font-black border ${
+                      prescriptionModalOrder.prescriptionVerification?.status === 'MATCHED'
+                        ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                        : prescriptionModalOrder.prescriptionVerification?.status === 'REJECTED'
+                        ? 'bg-rose-50 text-rose-800 border-rose-200'
+                        : 'bg-amber-50 text-amber-800 border-amber-200'
+                    }`}>
+                      {prescriptionModalOrder.prescriptionVerification?.status || 'REVIEW_REQUIRED'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] sm:text-xs text-slate-500 truncate">
+                    {t('status')} : <strong className="text-slate-700">{prescriptionModalOrder.orderStatus}</strong> • {t('customer')} : <span className="font-semibold text-slate-700">{prescriptionModalOrder.customerName || prescriptionModalOrder.addressDetails?.fullName || 'Customer'}</span>
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                {prescriptionPreview?.url && (
+                  <a
+                    href={prescriptionPreview.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hidden sm:inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition shadow-sm"
+                  >
+                    <span>⬇</span>
+                    <span>{t('openSeparately')}</span>
+                  </a>
+                )}
+                <button
+                  type="button"
+                  onClick={closePrescriptionPreview}
+                  aria-label={t('close')}
+                  className="absolute top-4 right-4 flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition cursor-pointer z-20"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body - 2 Columns */}
+            <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-12 overflow-hidden bg-slate-100/50">
+              {/* Left Column: Prescription Document Viewer */}
+              <div className="flex min-h-0 flex-col border-b lg:border-b-0 lg:border-r border-slate-200 bg-slate-100 lg:col-span-7">
+                <div className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600">
+                  <span className="flex items-center gap-1.5">
+                    <span>📄</span>
+                    <span>{t('prescriptionDocument')}</span>
+                  </span>
+                  {prescriptionPreview?.type?.startsWith('image/') && (
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setImageZoom(z => Math.max(0.5, Number((z - 0.25).toFixed(2))))}
+                        className="h-7 w-7 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center font-bold text-slate-700 transition"
+                        title="Zoom Out"
+                      >
+                        −
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setImageZoom(1)}
+                        className="px-2 py-0.5 rounded-lg bg-slate-100 hover:bg-slate-200 font-bold text-[11px] text-slate-700 transition"
+                        title="Reset Zoom"
+                      >
+                        {Math.round(imageZoom * 100)}%
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setImageZoom(z => Math.min(3, Number((z + 0.25).toFixed(2))))}
+                        className="h-7 w-7 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center font-bold text-slate-700 transition"
+                        title="Zoom In"
+                      >
+                        +
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex min-h-[320px] flex-1 items-center justify-center overflow-auto p-3 sm:p-4">
+                  {prescriptionPreviewLoading ? (
+                    <div className="flex flex-col items-center gap-3 text-slate-500 py-12" role="status">
+                      <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
+                      <p className="text-xs font-bold">Loading prescription document…</p>
+                    </div>
+                  ) : prescriptionPreview?.url ? (
+                    prescriptionPreview.type?.startsWith('image/') ? (
+                      <div className="flex h-full w-full items-center justify-center overflow-auto rounded-2xl bg-slate-900/10 p-2">
+                        <img
+                          src={prescriptionPreview.url}
+                          alt="Prescription document preview"
+                          style={{
+                            transform: `scale(${imageZoom})`,
+                            transformOrigin: 'center center',
+                            transition: 'transform 0.15s ease-out'
+                          }}
+                          onLoad={() => setVerifiedOrderIds(prev => prev.includes(String(prescriptionModalOrder._id)) ? prev : [...prev, String(prescriptionModalOrder._id)])}
+                          className="max-h-full max-w-full rounded-xl object-contain shadow-lg"
+                        />
+                      </div>
+                    ) : (
+                      <div className="h-full w-full flex flex-col rounded-2xl overflow-hidden border border-slate-200 bg-white">
+                        <iframe
+                          title="Uploaded prescription document"
+                          src={prescriptionPreview.url}
+                          onLoad={() => setVerifiedOrderIds(prev => prev.includes(String(prescriptionModalOrder._id)) ? prev : [...prev, String(prescriptionModalOrder._id)])}
+                          className="h-full w-full min-h-[350px] border-0"
+                        />
+                      </div>
+                    )
+                  ) : (
+                    <div className="flex flex-col items-center justify-center max-w-md p-6 text-center space-y-3 rounded-2xl border border-dashed border-slate-300 bg-white">
+                      <span className="text-3xl">📄</span>
+                      <p className="text-sm font-bold text-slate-800">
+                        {prescriptionPreviewError || 'No binary document preview is linked.'}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        Attach and successfully open the actual prescription before recording an explicit pharmacist decision.
+                      </p>
+                      {prescriptionModalOrder.prescriptionUrl && (
+                        <button
+                          type="button"
+                          onClick={() => viewPrescription(prescriptionModalOrder)}
+                          className="rounded-xl bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-100"
+                        >
+                          🔄 Retry Loading File
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Right Column: Order Details, Diagnostics & Pharmacist Decision */}
+              <div className="flex min-h-0 flex-col overflow-y-auto bg-white lg:col-span-5">
+                {/* 1. Fulfillment Gate Banner */}
+                {prescriptionModalOrder.prescriptionVerification?.status !== 'MATCHED' ? (
+                  <div className="m-3 sm:m-4 mb-2 rounded-2xl border border-amber-300 bg-amber-50 p-3.5 space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-amber-600 font-bold text-sm">⚠️</span>
+                      <span className="text-xs font-black text-amber-900">
+                        Prescription review is blocking fulfillment
+                      </span>
+                    </div>
+                    <p className="text-xs text-amber-800">
+                      Status: <strong>{prescriptionModalOrder.prescriptionVerification?.status || 'REVIEW_REQUIRED'}</strong>.
+                      Verify medicines against prescription, re-queue extraction, or record an explicit pharmacist decision.
+                    </p>
+                    {prescriptionModalOrder.prescriptionVerification?.issues?.length > 0 && (
+                      <ul className="text-[11px] text-amber-800 list-disc list-inside space-y-0.5 pt-1">
+                        {prescriptionModalOrder.prescriptionVerification.issues.map((issue, idx) => (
+                          <li key={idx}>{issue}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                ) : (
+                  <div className="m-3 sm:m-4 mb-2 rounded-2xl border border-emerald-300 bg-emerald-50 p-3.5 space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-emerald-600 font-bold text-sm">✓</span>
+                      <span className="text-xs font-black text-emerald-900">
+                        {t('prescriptionChecked')}
+                      </span>
+                    </div>
+                    <p className="text-xs text-emerald-800">
+                      {t('prescriptionChecked')}.
+                      {prescriptionModalOrder.prescriptionVerification?.manualApproved && (
+                        <span> Manually approved by {prescriptionModalOrder.prescriptionVerification.manualApprovedBy || 'Pharmacist'}.</span>
+                      )}
+                    </p>
+                  </div>
+                )}
+
+                {/* 2. Order & Patient Info Card */}
+                <div className="mx-3 sm:mx-4 my-2 rounded-2xl border border-slate-200 bg-slate-50/70 p-3 sm:p-3.5 space-y-2 text-xs">
+                  <div className="flex justify-between items-center border-b border-slate-200 pb-1.5">
+                    <span className="font-extrabold text-slate-500 uppercase text-[10px] tracking-wider">Order & Customer</span>
+                    <span className="font-mono text-slate-500 text-[11px]">ID: {prescriptionModalOrder._id}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-slate-700">
+                    <div>
+                      <span className="text-slate-400 block text-[10px]">Customer</span>
+                      <span className="font-bold text-slate-900">{prescriptionModalOrder.customerName || prescriptionModalOrder.addressDetails?.fullName || 'Customer'}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[10px]">Phone</span>
+                      <span className="font-bold text-slate-900">{getCustomerMobile(prescriptionModalOrder) || 'No phone'}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[10px]">Total Amount</span>
+                      <span className="font-bold text-emerald-700">₹{prescriptionModalOrder.finalTotal ?? prescriptionModalOrder.totalAmount} COD</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[10px]">Payment Method</span>
+                      <span className="font-bold text-slate-900">{prescriptionModalOrder.paymentMethod || 'Cash on Delivery'}</span>
+                    </div>
+                  </div>
+                  {prescriptionModalOrder.patientPuid && (
+                    <div className="pt-1 border-t border-slate-200">
+                      <span className="text-slate-400 text-[10px] block">Patient Profile</span>
+                      <span className="font-semibold text-blue-700">PUID: {prescriptionModalOrder.patientPuid}</span>
+                    </div>
+                  )}
+                  {prescriptionModalOrder.deliveryAddress && (
+                    <div className="pt-1 border-t border-slate-200">
+                      <span className="text-slate-400 text-[10px] block">Delivery Address</span>
+                      <span className="text-slate-700">📍 {prescriptionModalOrder.deliveryAddress}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* 3. Items & Extraction Matching Table */}
+                <div className="mx-3 sm:mx-4 my-2 flex-1 space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="font-black text-slate-900 text-xs uppercase tracking-wider">
+                      Ordered Medicines ({(prescriptionModalOrder.items || prescriptionModalOrder.medicineItems || []).length})
+                    </span>
+                    <span className="text-[11px] text-slate-500">Cross-reference with document</span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {(prescriptionModalOrder.items || prescriptionModalOrder.medicineItems || []).map((item, index) => {
+                      const medVerification = prescriptionModalOrder.prescriptionVerification?.medicines?.[index];
+                      const isItemMatched = prescriptionModalOrder.prescriptionVerification?.status === 'MATCHED'
+                        || item.manualApproved
+                        || medVerification?.status === 'MATCHED'
+                        || medVerification?.manualApproved;
+                      return (
+                        <div
+                          key={index}
+                          className={`rounded-xl border p-2.5 transition flex items-center justify-between gap-2 ${
+                            isItemMatched ? 'border-emerald-200 bg-emerald-50/50' : 'border-amber-200 bg-amber-50/50'
+                          }`}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-bold text-xs text-slate-800">
+                                {index + 1}. {item.productName || item.name || item.genericName || 'Medicine'}
+                              </span>
+                              <span className="text-xs text-slate-500 font-semibold">×{item.quantity || 1}</span>
+                            </div>
+                            <div className="flex items-center gap-2 mt-0.5 text-[11px]">
+                              <span className={`font-bold ${isItemMatched ? 'text-emerald-700' : 'text-amber-700'}`}>
+                                {isItemMatched ? '✓ MATCHED' : '⚠️ REVIEW REQUIRED'}
+                              </span>
+                              {medVerification?.manualApprovedBy && (
+                                <span className="text-slate-400 text-[10px]">
+                                  Approved by {medVerification.manualApprovedBy}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {!isItemMatched && (
+                            <button
+                              type="button"
+                              onClick={() => manualApprovePrescription(prescriptionModalOrder, 'medicine', index, approvalReason)}
+                              disabled={isProcessing || !verifiedOrderIds.includes(String(prescriptionModalOrder._id)) || !approvalReason.trim()}
+                              className="shrink-0 rounded-lg border border-emerald-300 bg-white px-2.5 py-1 text-xs font-bold text-emerald-800 hover:bg-emerald-50 disabled:opacity-50 transition shadow-sm"
+                            >
+                              Approve
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 4. Pharmacist Decision & Actions */}
+                <div className="p-3 sm:p-4 border-t border-slate-200 bg-slate-50 space-y-2 mt-auto">
+                  <div>
+                    <label htmlFor="modal-approval-reason" className="block text-[11px] font-bold text-slate-700 mb-1">
+                      {t('pharmacistNoteRequired')}:
+                    </label>
+                    <input
+                      id="modal-approval-reason"
+                      type="text"
+                      value={approvalReason}
+                      onChange={e => setApprovalReason(e.target.value)}
+                      placeholder={t('verifyPrescriptionNote')}
+                      className="w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs outline-none focus:border-blue-500"
+                    />
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => manualApprovePrescription(prescriptionModalOrder, 'order', null, approvalReason)}
+                      disabled={isProcessing || !verifiedOrderIds.includes(String(prescriptionModalOrder._id)) || !approvalReason.trim() || !(prescriptionModalOrder.prescriptionUrl || prescriptionModalOrder.prescriptionId)}
+                      className="min-h-10 flex-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs px-3 py-2 transition shadow-md shadow-emerald-600/20 disabled:opacity-50"
+                    >
+                      {updatingId === prescriptionModalOrder._id ? 'Saving…' : t('approvePrescriptionAndOrder')}
+                    </button>
+
+                    {prescriptionModalOrder.prescriptionId && (
+                      <button
+                        type="button"
+                        onClick={() => reviewPrescription(prescriptionModalOrder, 'reject', approvalReason || 'Prescription rejected by pharmacist')}
+                        disabled={isProcessing}
+                        className="min-h-10 rounded-xl border border-rose-300 bg-rose-50 hover:bg-rose-100 text-rose-700 font-extrabold text-xs px-3 py-2 transition disabled:opacity-50"
+                      >
+                        ✕ Reject
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => reinitiatePrescriptionVerification(prescriptionModalOrder)}
+                      disabled={isProcessing}
+                      className="min-h-10 rounded-xl border border-amber-300 bg-white hover:bg-amber-50 text-amber-900 font-extrabold text-xs px-3 py-2 transition disabled:opacity-50"
+                    >
+                      🔄 Re-queue
+                    </button>
+                  </div>
+
+                  {!verifiedOrderIds.includes(String(prescriptionModalOrder._id)) && (prescriptionModalOrder.prescriptionUrl || prescriptionModalOrder.prescriptionId) && <p className="text-[11px] font-semibold text-amber-800">Open and review the prescription document above before recording a manual approval. Approval stays disabled until the document loads successfully.</p>}
+                  {!approvalReason.trim() && <p className="text-[11px] font-semibold text-rose-700">Enter a pharmacist decision note to continue.</p>}
+                  {prescriptionModalOrder.orderStatus === 'Pending_Review' && (
+                    <div className="flex gap-2 pt-1 border-t border-slate-200">
+                      <button
+                        type="button"
+                        onClick={() => { void reviewOrder(prescriptionModalOrder, 'Approved'); }}
+                        disabled={isProcessing}
+                        className="min-h-9 flex-1 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs disabled:opacity-50"
+                      >
+                        Approve Order Stage
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { void reviewOrder(prescriptionModalOrder, 'Rejected'); }}
+                        disabled={isProcessing}
+                        className="min-h-9 flex-1 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs disabled:opacity-50"
+                      >
+                        Reject Order
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
