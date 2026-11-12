@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { getReadableErrorMessage } from '../../utils/errorMessage';
 import * as xlsx from 'xlsx';
 import AdminImportBatchManager from './AdminImportBatchManager';
 import apiClient from '../../api/apiClient';
@@ -66,7 +67,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
       .catch(error => {
         if (!cancelled) {
           setBranchOptions([]);
-          setBranchLoadError(error.response?.data?.error?.message || error.response?.data?.message || 'Could not load branches for this pharmacy.');
+          setBranchLoadError(getReadableErrorMessage(error, 'Could not load branches for this pharmacy.'));
         }
       })
       .finally(() => {
@@ -115,7 +116,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
           );
         }
       } catch (error) {
-        if (!cancelled) setPollError(error.response?.data?.message || t('couldNotRefreshImport'));
+        if (!cancelled) setPollError(getReadableErrorMessage(error, t('couldNotRefreshImport')));
       }
     };
 
