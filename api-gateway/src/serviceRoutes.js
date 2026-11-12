@@ -282,6 +282,7 @@ export function createServiceRouters(gatewayConfig = config) {
     includeCustomerProfile: true
   }, gatewayConfig);
   const prescriptionReview = (req, res, next) => requireAdmin(req, res, next);
+  prescriptionRouter.post('/scan-product-label', prescription('prescription.write'));
   prescriptionRouter.post('/upload', prescription('prescription.write'));
   prescriptionRouter.put('/:prescriptionId/document', prescription('prescription.write'));
   prescriptionRouter.get('/reviews/queue', prescription('prescription.review'));
