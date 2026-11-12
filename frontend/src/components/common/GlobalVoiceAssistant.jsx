@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { calculateEnsembleSimilarity, normalizeText } from '../../utils/similarity';
+import { rankVoiceMedicineMatches } from '../../utils/similarity';
 import { useApp } from '../../context/AppContext';
 import { useToast } from '../../context/ToastContext';
 
@@ -105,31 +105,13 @@ export function parseVoiceCommand(transcript, catalog = []) {
         .trim();
 
     if (cleanSearch) {
-        // Run Fuzzy Matching against Catalog
-        const candidates = new Map();
-        if (Array.isArray(catalog)) {
-            catalog.forEach(item => {
-                const name = item.name || item.brandName || item.brand;
-                if (name) candidates.set(name.toLowerCase(), name);
-            });
-        }
-        ['Dolo 650', 'Paracetamol 500mg', 'Augmentin 625 Duo', 'Montair-LC', 'Pan-40', 'Azithromycin 500mg'].forEach(med => {
-            if (!candidates.has(med.toLowerCase())) candidates.set(med.toLowerCase(), med);
-        });
-
-        let bestMatch = cleanSearch;
-        let maxScore = 0;
-
-        for (const [normKey, displayName] of candidates.entries()) {
-            const score = calculateEnsembleSimilarity(cleanSearch, displayName);
-            if (score > maxScore) {
-                maxScore = score;
-                bestMatch = displayName;
-            }
-        }
-
-        const isRefined = maxScore >= 0.65 && bestMatch.toLowerCase() !== cleanSearch.toLowerCase();
-        const refinedText = isRefined ? bestMatch : cleanSearch;
+        // Refine only against real pharmacy-catalogue entries. If the match is
+        // ambiguous or lacks strength evidence, preserve the customer's query.
+        const ranked = rankVoiceMedicineMatches(cleanSearch, catalog);
+        const isRefined = ranked.isConfident
+            && Boolean(ranked.best?.name)
+            && ranked.best.name.toLowerCase() !== cleanSearch.toLowerCase();
+        const refinedText = isRefined ? ranked.best.name : cleanSearch;
 
         return {
             intent: 'SEARCH',
@@ -137,8 +119,9 @@ export function parseVoiceCommand(transcript, catalog = []) {
             query: refinedText,
             isRefined,
             originalText: cleanSearch,
-            confidence: Math.round(maxScore * 100),
-            spokenResponse: isRefined ? `Refined to ${refinedText}` : `Searching for ${refinedText}`
+            confidence: ranked.confidence,
+            matchReason: ranked.reason,
+            spokenResponse: isRefined ? `Matched ${refinedText}` : `Searching for ${refinedText}`
         };
     }
 
