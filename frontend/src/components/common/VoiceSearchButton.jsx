@@ -289,9 +289,9 @@ export default function VoiceSearchButton({ onTranscript, onError, onListeningCh
                                 <span className="text-emerald-700 font-mono shrink-0">{fuzzyMatchInfo.confidence}% Match</span>
                             </div>
                             {fuzzyMatchInfo.isRefined && (
-                                <div className="flex items-center gap-1.5 text-[11px] font-black text-emerald-300">
+                                <div className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-700">
                                     <span>✨ Fuzzy Refined:</span>
-                                    <span className="bg-emerald-500/20 text-emerald-200 px-2 py-0.5 rounded-md border border-emerald-500/30 truncate">
+                                    <span className="rounded-md border border-emerald-200 bg-white px-2 py-0.5 text-emerald-800 truncate">
                                         "{fuzzyMatchInfo.refinedText}"
                                     </span>
                                 </div>
@@ -353,7 +353,7 @@ export default function VoiceSearchButton({ onTranscript, onError, onListeningCh
                     {/* Popular Voice Medicine Shortcuts */}
                     <div className="px-3.5 pb-3.5 pt-3 space-y-2">
                         <div className="flex items-center justify-between gap-2"><span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Try a medicine search</span><span className="text-[9px] text-slate-400">Examples</span></div>
-                        <div className="flex flex-wrap gap-1">
+                        <div className="flex flex-wrap gap-1.5">
                             {POPULAR_VOICE_MEDICINES.map((med) => (
                                 <button
                                     key={med}
