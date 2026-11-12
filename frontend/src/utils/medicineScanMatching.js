@@ -1,6 +1,7 @@
 import {
   calculateDamerauLevenshteinSimilarity,
   calculateEnsembleSimilarity,
+  getPhoneticKey,
   calculateJaroWinklerSimilarity,
   normalizeText
 } from './similarity.js';
