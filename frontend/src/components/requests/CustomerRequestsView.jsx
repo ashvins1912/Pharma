@@ -252,7 +252,7 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
           </button>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
           {filteredRequests.map((req) => {
             const firstItem = req.requestedItems?.[0] || {};
             const proposal = req.pharmacyProposal;
@@ -262,7 +262,7 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
             return (
               <div
                 key={req._id}
-                className="bg-slate-50/70 hover:bg-slate-50 border border-slate-200 rounded-2xl p-4 sm:p-5 transition space-y-3"
+                className="bg-white hover:border-blue-300 border border-slate-200 rounded-2xl p-3.5 sm:p-4 flex flex-col justify-between transition-all shadow-xs space-y-2.5 h-full"
               >
                 {/* Row Header */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/70 pb-2.5">

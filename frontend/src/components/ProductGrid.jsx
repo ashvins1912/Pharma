@@ -165,8 +165,8 @@ export default function ProductGrid() {
         </div>
       </div>
 
-      {/* Responsive Product Grid: 2 cols on mobile, 4 on desktop */}
-      <div className="pharma-product-grid grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-4">
+      {/* Responsive High-Efficiency Product Grid: 2 cols on mobile, up to 6 on desktop */}
+      <div className="pharma-product-grid grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 sm:gap-3 lg:gap-3.5">
         {medicines.map((med) => (
           <ProductCard key={med._id || med.productId || med.sku} med={med} onSelectMedicine={setSelectedMedicine} />
         ))}

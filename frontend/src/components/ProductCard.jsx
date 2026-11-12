@@ -59,10 +59,10 @@ export default function ProductCard({ med, onSelectMedicine }) {
 
   return (
     <div
-      className={`pharma-product-card group bg-white border rounded-xl sm:rounded-2xl p-2.5 sm:p-4 flex flex-col justify-between transition-all duration-200 h-full focus-within:ring-2 focus-within:ring-blue-500/30 ${
+      className={`pharma-product-card group bg-white border rounded-xl sm:rounded-2xl p-2.5 sm:p-3 flex flex-col justify-between transition-all duration-200 h-full focus-within:ring-2 focus-within:ring-blue-500/30 ${
         isOut
           ? 'border-slate-200 opacity-60 bg-slate-50/50'
-          : 'border-slate-200 hover:border-blue-300 hover:shadow-md hover:-translate-y-0.5'
+          : 'border-slate-200 hover:border-blue-400 hover:shadow-md hover:-translate-y-0.5'
       }`}
     >
       <button
@@ -73,7 +73,7 @@ export default function ProductCard({ med, onSelectMedicine }) {
         className="w-full min-w-0 flex-1 bg-transparent p-0 text-left cursor-pointer rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
       >
         {/* Compact Product Image Container */}
-        <div className="relative w-full h-28 sm:h-36 md:h-40 bg-gradient-to-tr from-slate-100 to-blue-50/40 rounded-lg sm:rounded-xl overflow-hidden mb-2 sm:mb-3 flex items-center justify-center">
+        <div className="relative w-full h-24 sm:h-28 lg:h-32 bg-gradient-to-tr from-slate-100 to-blue-50/40 rounded-lg sm:rounded-xl overflow-hidden mb-2 flex items-center justify-center">
           {displayImage && !imageError ? (
             <img
               src={displayImage}
@@ -85,80 +85,75 @@ export default function ProductCard({ med, onSelectMedicine }) {
                 if (imageIndex + 1 < imageSources.length) setImageIndex(index => index + 1);
                 else setImageError(true);
               }}
-              className="w-full h-full object-contain p-2 transition-transform duration-300 hover:scale-105"
+              className="w-full h-full object-contain p-1.5 transition-transform duration-300 group-hover:scale-105"
             />
           ) : (
-            <div className="flex flex-col items-center justify-center p-3 text-slate-400 select-none">
-              <span className="text-3xl sm:text-4xl mb-1">💊</span>
-              <span className="text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase tracking-wider text-center line-clamp-1">
+            <div className="flex flex-col items-center justify-center p-2 text-slate-400 select-none">
+              <span className="text-2xl sm:text-3xl mb-1">💊</span>
+              <span className="text-[9px] sm:text-[10px] font-bold text-slate-500 uppercase tracking-wider text-center line-clamp-1">
                 {categoryLabels[med.category] || med.category || t('prescriptionDrugs')}
               </span>
             </div>
           )}
 
           {/* Status Badges */}
-          <div className="absolute top-1.5 left-1.5 flex flex-col gap-1">
+          <div className="absolute top-1 left-1 flex flex-col gap-0.5 z-10">
             {(med.isPrescriptionRequired || med.requiresPrescription) && (
-              <span className="bg-rose-600 text-white text-[9px] sm:text-[10px] font-black px-1.5 py-0.5 rounded shadow-xs tracking-wider uppercase">
+              <span className="bg-rose-600 text-white text-[8px] sm:text-[9px] font-black px-1.5 py-0.5 rounded shadow-xs tracking-wider uppercase">
                 {t('rxOnly')}
               </span>
             )}
             {med.isExpired && (
-              <span className="bg-red-600 text-white text-[9px] sm:text-[10px] font-black px-1.5 py-0.5 rounded shadow-xs tracking-wider uppercase">
+              <span className="bg-red-600 text-white text-[8px] sm:text-[9px] font-black px-1.5 py-0.5 rounded shadow-xs tracking-wider uppercase">
                 {t('expiredBadge')}
               </span>
             )}
             {!med.isExpired && isOut && (
-              <span className="bg-slate-700 text-white text-[9px] sm:text-[10px] font-black px-1.5 py-0.5 rounded shadow-xs tracking-wider uppercase">
+              <span className="bg-slate-700 text-white text-[8px] sm:text-[9px] font-black px-1.5 py-0.5 rounded shadow-xs tracking-wider uppercase">
                 {t('soldOutBadge')}
               </span>
             )}
             {!med.isExpired && !isOut && !isLow && (
-              <span className="bg-emerald-600 text-white text-[9px] sm:text-[10px] font-black px-1.5 py-0.5 rounded shadow-xs tracking-wider uppercase">
+              <span className="bg-emerald-600 text-white text-[8px] sm:text-[9px] font-black px-1.5 py-0.5 rounded shadow-xs tracking-wider uppercase">
                 {t('inStockBadge')}
               </span>
             )}
           </div>
 
           {isLow && !med.isExpired && (
-            <span className="absolute bottom-1.5 right-1.5 bg-amber-500 text-white text-[9px] sm:text-[10px] font-extrabold px-1.5 py-0.5 rounded shadow-xs">
+            <span className="absolute bottom-1 right-1 bg-amber-500 text-white text-[8px] sm:text-[9px] font-extrabold px-1.5 py-0.5 rounded shadow-xs z-10">
               Few left
             </span>
           )}
         </div>
 
         {/* Category & Brand */}
-        <div className="flex items-center justify-between text-[9px] sm:text-[11px] text-slate-400 font-semibold mb-0.5">
-          <span className="truncate max-w-[50%]">{categoryLabels[med.category] || med.category || t('otc')}</span>
-          <span className="truncate max-w-[45%] text-right">{med.brand}</span>
+        <div className="flex items-center justify-between text-[9px] sm:text-[10px] text-slate-400 font-semibold mb-0.5">
+          <span className="truncate max-w-[55%]">{categoryLabels[med.category] || med.category || t('otc')}</span>
+          <span className="truncate max-w-[40%] text-right font-medium">{med.brand}</span>
         </div>
 
         {/* Medicine Name */}
-        <h3 className="font-extrabold text-slate-900 text-xs sm:text-sm leading-snug line-clamp-2 mb-1">
+        <h3 className="font-extrabold text-slate-900 text-xs sm:text-xs leading-snug line-clamp-1 mb-0.5 group-hover:text-blue-600 transition-colors">
           {med.name}
         </h3>
 
         {/* Description / Formulation */}
-        <p className="text-[10px] sm:text-[11px] text-slate-500 line-clamp-1 leading-normal mb-1">
+        <p className="text-[10px] text-slate-500 line-clamp-1 leading-normal mb-1">
           {med.composition || med.description || t('activeFormulation')}
         </p>
         {isOut && (
-          <p className="text-[10px] text-amber-700 font-semibold mb-1 leading-tight">
+          <p className="text-[9px] text-amber-700 font-bold mb-1 leading-tight">
             {t('outOfStockArrange')}
-          </p>
-        )}
-        {med.expiryDate && (
-          <p className="mb-2 text-[9px] text-slate-400">
-            {t('expires')} {new Date(med.expiryDate).toLocaleDateString(language)}
           </p>
         )}
       </button>
 
       {/* Card Footer: Always aligned at bottom */}
-      <div className="pt-2 sm:pt-3 border-t border-slate-100 flex items-center justify-between gap-1.5 mt-auto">
+      <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-1 mt-auto">
         <div>
-          <span className="text-[9px] sm:text-[10px] text-slate-400 font-bold uppercase block leading-none">{t('priceLabel')}</span>
-          <span className="text-xs sm:text-base font-black text-emerald-600">
+          <span className="text-[8px] sm:text-[9px] text-slate-400 font-bold uppercase block leading-none">{t('priceLabel')}</span>
+          <span className="text-xs sm:text-sm font-black text-emerald-600 font-mono">
             ₹{med.price}
           </span>
         </div>
@@ -175,29 +170,29 @@ export default function ProductCard({ med, onSelectMedicine }) {
                 originalAvailabilityStatus: 'OUT_OF_STOCK'
               })}
               title={t("outOfStockArrange")}
-              className="bg-amber-500 hover:bg-amber-600 text-slate-900 font-extrabold text-xs px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-lg sm:rounded-xl cursor-pointer transition shadow-xs flex items-center gap-1 min-h-[36px]"
+              className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold text-[10px] sm:text-xs px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-lg cursor-pointer transition shadow-xs flex items-center gap-1 min-h-[30px]"
             >
               <span>📋</span>
               <span className="sm:hidden">{t('request')}</span>
               <span className="hidden sm:inline">{t('requestMedicine')}</span>
             </button>
           ) : cartQty > 0 ? (
-            /* Compact Step Controller with accessible touch sizing */
-            <div className="flex items-center bg-blue-50 border border-blue-200 rounded-lg sm:rounded-xl p-1">
+            /* Compact Step Controller */
+            <div className="flex items-center bg-blue-50 border border-blue-200 rounded-lg p-0.5">
               <button
                 onClick={() => updateQuantity(med._id, -1)}
-                className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center text-blue-700 hover:bg-blue-200 rounded-md font-black text-xs cursor-pointer transition"
+                className="w-5 h-5 sm:w-6 sm:h-6 flex items-center justify-center text-blue-700 hover:bg-blue-200 rounded font-black text-xs cursor-pointer transition"
                 aria-label={t("decreaseQuantity")}
               >
                 −
               </button>
-              <span className="w-6 sm:w-7 text-center font-extrabold text-xs text-blue-900 tabular-nums">
+              <span className="w-5 sm:w-6 text-center font-extrabold text-xs text-blue-900 tabular-nums">
                 {cartQty}
               </span>
               <button
                 onClick={() => updateQuantity(med._id, 1)}
                 disabled={cartQty >= (cartItem?.maxCartQuantity || maxCartQuantity)}
-                className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center text-blue-700 hover:bg-blue-200 disabled:opacity-30 rounded-md font-black text-xs cursor-pointer transition"
+                className="w-5 h-5 sm:w-6 sm:h-6 flex items-center justify-center text-blue-700 hover:bg-blue-200 disabled:opacity-30 rounded font-black text-xs cursor-pointer transition"
                 aria-label={t("increaseQuantity")}
               >
                 +
@@ -206,7 +201,7 @@ export default function ProductCard({ med, onSelectMedicine }) {
           ) : (
             <button
               onClick={() => addToCart(med)}
-              className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg sm:rounded-xl shadow-xs transition cursor-pointer flex items-center gap-1 min-h-[36px]"
+              className="bg-blue-600 hover:bg-blue-700 text-white text-[11px] sm:text-xs font-extrabold px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-lg shadow-xs transition cursor-pointer flex items-center gap-1 min-h-[30px]"
             >
               <span>+</span>
               <span>{t('addToCart')}</span>
