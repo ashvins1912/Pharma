@@ -35,6 +35,7 @@ import TenantSelectorModal from './components/auth/TenantSelectorModal';
 import OfferZoneBanner from './components/OfferZoneBanner';
 import SpendingAnalyticsWidget from './components/SpendingAnalyticsWidget';
 import QuickActionsFAB from './components/QuickActionsFAB';
+import GlobalVoiceAssistant from './components/common/GlobalVoiceAssistant';
 import { useLanguage } from './context/LanguageContext';
 
 function AuthTransitionScreen({ initialLoad = false }) {
@@ -837,6 +838,15 @@ function MainApp() {
       <AdminBulkImportModal
         isOpen={adminBulkImportModalOpen}
         onClose={() => setAdminBulkImportModalOpen(false)}
+      />
+
+      {/* Application Voice Assistant */}
+      <GlobalVoiceAssistant
+        activeTab={activeTab}
+        setActiveTab={handleTabSwitch}
+        onOpenCart={() => setCartOpen(true)}
+        onOpenProfile={() => setProfileOpen(true)}
+        onOpenRequestModal={() => openRequestModal()}
       />
 
       <ModalAccessibilityManager />
