@@ -30,15 +30,36 @@ export default function SearchFilter() {
   const categoryLabels = { All: t('all'), 'Pain & Fever': t('painFever'), Antibiotics: t('antibiotics'), 'Allergy & Cold': t('allergyCold'), 'Vitamins & Supplements': t('vitamins'), 'Digestion & Acidity': t('digestionAcidity'), 'Wellness & First Aid': t('wellnessFirstAid') };
   const isFilterActive = searchQuery || selectedCategory !== 'All' || hideRx || sortOption !== 'default';
 
+  const [micError, setMicError] = useState(null);
+
   const clearAllFilters = () => {
     setSearchQuery('');
     setSelectedCategory('All');
     setHideRx(false);
     setSortOption('default');
+    setMicError(null);
   };
 
   return (
     <div className="pharma-search-panel bg-white border border-slate-200 rounded-2xl sm:rounded-3xl p-3 sm:p-4 shadow-sm space-y-2.5 sm:space-y-3">
+      {/* Inline Voice Search Error Alert Banner */}
+      {micError && (
+        <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl flex items-center justify-between text-xs text-rose-900 animate-fade-in">
+          <div className="flex items-center gap-2">
+            <span>🎙️⚠️</span>
+            <span className="font-bold">{micError.title}:</span>
+            <span className="text-[11px] text-rose-800">{micError.message}</span>
+          </div>
+          <button
+            onClick={() => setMicError(null)}
+            className="text-rose-500 hover:text-rose-800 text-xs font-bold px-1.5"
+            aria-label="Dismiss alert"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Top Bar: Search Input & Sort & Clear */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
         <div className="pharma-search-query relative flex-1 min-w-0 flex items-center gap-1.5">
@@ -63,6 +84,7 @@ export default function SearchFilter() {
           </div>
           <VoiceSearchButton
             onTranscript={(spokenText) => setSearchQuery(spokenText)}
+            onError={(err) => setMicError(err)}
             currentQuery={searchQuery}
           />
         </div>
