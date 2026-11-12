@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { getReadableErrorMessage } from '../utils/errorMessage';
 import apiClient from '../api/apiClient';
 import { useAuth } from '../context/AuthContext';
 import { useTenant } from '../context/TenantContext';
@@ -42,7 +43,7 @@ export function useRiderManagement({ includeDisabled = false } = {}) {
                 : [];
             setRiders(riderArray);
         } catch (err) {
-            setRidersError(err.response?.data?.message || err.message || 'Failed to load riders.');
+            setRidersError(getReadableErrorMessage(err, 'Failed to load riders.'));
         } finally {
             setLoadingRiders(false);
         }
