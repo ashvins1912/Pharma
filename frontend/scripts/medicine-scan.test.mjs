@@ -57,3 +57,13 @@ test('rejects a candidate when one of multiple extracted strengths is missing', 
   assert.equal(result.status, 'NO_MATCH');
   assert.equal(result.best, null);
 });
+
+
+test('uses fuzzy OCR correction while retaining strength and form constraints', () => {
+  const extracted = extractMedicineLabelDetails('Dlo 650\n650 mg Tablet');
+  const result = rankScannedMedicineCandidates(extracted, [
+    { _id: 'dolo', name: 'Dolo 650', genericName: 'Paracetamol', strength: '650 mg', dosageForm: 'Tablet' }
+  ]);
+  assert.equal(result.status, 'MATCHED');
+  assert.equal(result.best._id, 'dolo');
+});
