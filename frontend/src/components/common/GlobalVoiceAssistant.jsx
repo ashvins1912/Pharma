@@ -152,6 +152,7 @@ export default function GlobalVoiceAssistant({
     const recognitionRef = useRef(null);
     const medicinesRef = useRef(medicines);
     const executeVoiceCommandRef = useRef(null);
+    const minimizeTimeoutRef = useRef(null);
     const [recognitionError, setRecognitionError] = useState(null);
     medicinesRef.current = medicines;
 
@@ -199,60 +200,80 @@ export default function GlobalVoiceAssistant({
         return () => { if (recognition) { try { recognition.abort(); } catch {} if (recognitionRef.current === recognition) recognitionRef.current = null; } };
     }, [language]);
 
+    useEffect(() => () => {
+        if (minimizeTimeoutRef.current) window.clearTimeout(minimizeTimeoutRef.current);
+    }, []);
+
     const executeVoiceCommand = (transcript) => {
         const parsed = parseVoiceCommand(transcript, medicinesRef.current, language);
         setRecognitionError(null);
         setLastExecutedCommand(parsed);
 
-        if (ttsEnabled && parsed.spokenResponse) {
-            speakVoiceText(parsed.spokenResponse, language);
-        }
+        if (ttsEnabled && parsed.spokenResponse) speakVoiceText(parsed.spokenResponse, language);
 
+        let actionSucceeded = false;
         switch (parsed.intent) {
             case 'OPEN_ORDERS':
                 setActiveTab?.('orders');
                 addToast('Opened Order History & Tracking workspace', 'info');
+                actionSucceeded = true;
                 break;
             case 'OPEN_REQUESTS':
                 setActiveTab?.('requests');
                 addToast('Opened Medicine Requests & Proposals workspace', 'info');
+                actionSucceeded = true;
                 break;
             case 'OPEN_ADDRESSES':
                 setActiveTab?.('addresses');
                 addToast('Opened Saved Address directory', 'info');
+                actionSucceeded = true;
                 break;
             case 'OPEN_STORE':
                 setActiveTab?.('store');
                 addToast('Opened Medicine Storefront', 'info');
+                actionSucceeded = true;
                 break;
             case 'OPEN_CART':
                 onOpenCart?.();
                 addToast('Opened Shopping Cart', 'info');
+                actionSucceeded = true;
                 break;
             case 'OPEN_PROFILE':
                 onOpenProfile?.();
                 addToast('Opened User Profile', 'info');
+                actionSucceeded = true;
                 break;
             case 'NEW_REQUEST':
                 setActiveTab?.('requests');
                 onOpenRequestModal?.();
                 addToast('Opened New Medicine Request form', 'info');
+                actionSucceeded = true;
                 break;
             case 'CLEAR_SEARCH':
                 setSearchQuery?.('');
                 setActiveTab?.('store');
                 addToast('Cleared search filters', 'info');
+                actionSucceeded = true;
                 break;
             case 'SEARCH':
                 if (parsed.query) {
                     setSearchQuery?.(parsed.query);
                     setActiveTab?.('store');
-                    addToast(`Searching for "${parsed.query}"`, 'success');
+                    addToast('Searching for "' + parsed.query + '"', 'success');
+                    actionSucceeded = true;
                 }
                 break;
             default:
                 addToast('Voice command not recognized. Tap a quick action shortcut.', 'warning');
                 break;
+        }
+
+        if (actionSucceeded) {
+            if (minimizeTimeoutRef.current) window.clearTimeout(minimizeTimeoutRef.current);
+            minimizeTimeoutRef.current = window.setTimeout(() => {
+                setIsMinimized(true);
+                minimizeTimeoutRef.current = null;
+            }, 850);
         }
     };
     executeVoiceCommandRef.current = executeVoiceCommand;
@@ -284,11 +305,15 @@ export default function GlobalVoiceAssistant({
 
     const minimizeAssistant = () => {
         // A minimized assistant must never keep the microphone active.
+        if (minimizeTimeoutRef.current) window.clearTimeout(minimizeTimeoutRef.current);
+        minimizeTimeoutRef.current = null;
         stopListening();
         setIsMinimized(true);
     };
 
     const closeAssistant = () => {
+        if (minimizeTimeoutRef.current) window.clearTimeout(minimizeTimeoutRef.current);
+        minimizeTimeoutRef.current = null;
         stopListening();
         setIsOpen(false);
         setIsMinimized(false);
@@ -310,190 +335,126 @@ export default function GlobalVoiceAssistant({
 
     return (
         <div className="fixed bottom-20 right-4 sm:bottom-6 sm:right-6 z-[1100]">
-            {/* Main Trigger Button */}
             <button
                 type="button"
                 onClick={toggleAssistant}
-                aria-label={isOpen && isMinimized ? "Restore Application Voice Assistant" : isOpen ? "Close Application Voice Assistant" : "Open Application Voice Assistant"}
-                title={isMinimized ? "Restore Voice Assistant" : "Application Voice Assistant (Commands: Open Orders, Medicine Requests, Search, Cart)"}
-                className={`flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-full text-white shadow-2xl transition-all duration-300 cursor-pointer ${
-                    isListening
-                        ? 'bg-rose-600 shadow-rose-600/50 scale-105 animate-pulse'
-                        : isOpen
-                        ? 'bg-blue-700 shadow-blue-700/40 ring-4 ring-blue-300'
-                        : 'bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 shadow-blue-600/30'
+                aria-label={isOpen && isMinimized ? "Restore voice assistant" : isOpen ? "Close voice assistant" : "Open voice assistant"}
+                aria-expanded={isOpen && !isMinimized}
+                title={isMinimized ? "Restore voice assistant" : "Voice assistant"}
+                className={`relative flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-full text-white shadow-xl transition-all duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-blue-300 motion-reduce:transition-none ${
+                    isListening ? 'bg-rose-600 ring-4 ring-rose-200' : 'bg-blue-700 hover:bg-blue-800'
                 }`}
             >
-                <span className="text-xl sm:text-2xl select-none">
-                    {isListening ? '🎙️' : '🤖'}
-                </span>
-                {isListening && (
-                    <span className="absolute -inset-1 rounded-full bg-rose-500/30 animate-ping pointer-events-none" />
-                )}
+                <span aria-hidden="true" className="text-xl sm:text-2xl">{isListening ? '🎙️' : '✦'}</span>
+                {isListening && <span className="absolute -inset-1 rounded-full border-2 border-rose-400/70 animate-ping pointer-events-none motion-reduce:animate-none" />}
             </button>
 
-            {/* Voice Assistant Floating Control Panel */}
             {isOpen && !isMinimized && (
-                <div className="absolute bottom-16 right-0 w-[min(24rem,calc(100vw-2rem))] max-h-[70vh] overflow-y-auto bg-slate-900 text-white p-4 rounded-3xl shadow-2xl border border-slate-700 space-y-3 animate-fade-in z-[1200]">
-                    {/* Header Controls */}
-                    <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
-                        <div className="flex items-center gap-2">
-                            <span className={`w-2.5 h-2.5 rounded-full ${isListening ? 'bg-rose-500 animate-ping' : 'bg-emerald-400'}`} />
-                            <div>
-                                <h4 className="font-extrabold text-xs text-white">App Voice Assistant</h4>
-                                <span className="text-[9px] text-slate-400 block">Say "Open orders", "Medicine requests", "Search Dolo"</span>
+                <section
+                    role="dialog"
+                    aria-label="Voice assistant"
+                    aria-modal="false"
+                    className="absolute bottom-16 right-0 flex w-[min(22rem,calc(100vw-1.5rem))] max-h-[68vh] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-2xl shadow-slate-950/20 animate-fade-in motion-reduce:animate-none"
+                >
+                    <header className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
+                        <div className="flex min-w-0 items-center gap-3">
+                            <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
+                                isListening ? 'bg-rose-50 text-rose-600' : 'bg-blue-50 text-blue-700'
+                            }`}>
+                                <span aria-hidden="true" className="text-lg">{isListening ? '🎙️' : '✦'}</span>
+                            </div>
+                            <div className="min-w-0">
+                                <h2 className="text-sm font-bold text-slate-900">Voice assistant</h2>
+                                <p className="text-[11px] text-slate-500">
+                                    {isListening ? 'Listening · Speak naturally' : isSupported ? 'Ready when you are' : 'Voice input unavailable'}
+                                </p>
                             </div>
                         </div>
-                        <div className="flex items-center gap-1">
-                            <button
-                                type="button"
-                                onClick={() => setTtsEnabled(!ttsEnabled)}
-                                title={ttsEnabled ? "Audio Spoken Feedback ON" : "Audio Spoken Feedback Muted"}
-                                className={`px-2 py-1 text-[10px] font-bold rounded-lg border transition ${
-                                    ttsEnabled ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' : 'bg-slate-800 text-slate-400 border-slate-700'
-                                }`}
-                            >
-                                {ttsEnabled ? '🔊 Audio ON' : '🔇 Muted'}
+                        <div className="flex shrink-0 items-center gap-1">
+                            <button type="button" onClick={() => setTtsEnabled(!ttsEnabled)}
+                                aria-label={ttsEnabled ? 'Mute spoken responses' : 'Enable spoken responses'}
+                                title={ttsEnabled ? 'Mute spoken responses' : 'Enable spoken responses'}
+                                className="rounded-lg px-2 py-2 text-xs text-slate-500 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
+                                {ttsEnabled ? '🔊' : '🔇'}
                             </button>
-                            <button
-                                type="button"
-                                onClick={minimizeAssistant}
-                                className="text-slate-400 hover:text-white text-base leading-none p-1.5 rounded-lg"
-                                aria-label="Minimize Assistant"
-                                title="Minimize"
-                            >
-                                −
-                            </button>
-                            <button
-                                type="button"
-                                onClick={closeAssistant}
-                                className="text-slate-400 hover:text-white text-xs p-1.5 rounded-lg"
-                                aria-label="Close Assistant"
-                                title="Close"
-                            >
-                                ✕
-                            </button>
+                            <button type="button" onClick={minimizeAssistant} aria-label="Minimize voice assistant" title="Minimize"
+                                className="rounded-lg px-2.5 py-2 text-lg leading-none text-slate-500 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">−</button>
+                            <button type="button" onClick={closeAssistant} aria-label="Close voice assistant" title="Close"
+                                className="rounded-lg px-2.5 py-2 text-sm text-slate-500 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">✕</button>
                         </div>
-                    </div>
+                    </header>
 
-                    {/* Live Audio Visualizer */}
-                    {isListening && (
-                        <div className="flex items-center justify-center gap-1 py-1">
-                            <span className="w-1.5 h-4 bg-rose-500 rounded-full animate-pulse" />
-                            <span className="w-1.5 h-7 bg-rose-400 rounded-full animate-bounce" />
-                            <span className="w-1.5 h-9 bg-rose-500 rounded-full animate-pulse" />
-                            <span className="w-1.5 h-6 bg-rose-300 rounded-full animate-bounce" />
-                            <span className="w-1.5 h-3 bg-rose-500 rounded-full animate-pulse" />
-                        </div>
-                    )}
-
-                    {/* Live Transcript / Executed Action Card */}
-                    <div className="bg-slate-800/90 border border-slate-700 p-3 rounded-2xl min-h-[54px] flex items-center justify-center text-center">
-                        {interimTranscript ? (
-                            <p className="text-xs font-mono text-emerald-300 italic animate-pulse">
-                                "{interimTranscript}"
-                            </p>
-                        ) : lastExecutedCommand ? (
-                            <div className="space-y-1 w-full text-left">
-                                <div className="flex items-center justify-between text-[10px] font-bold text-slate-400">
-                                    <span>Executed Command</span>
-                                    {lastExecutedCommand.confidence && (
-                                        <span className="text-emerald-400 font-mono">{lastExecutedCommand.confidence}% Match</span>
-                                    )}
+                    <div className="space-y-4 overflow-y-auto p-4">
+                        <div aria-live="polite" aria-atomic="true"
+                            className={`rounded-xl border px-3 py-3 text-center ${
+                                isListening ? 'border-rose-100 bg-rose-50' : 'border-slate-100 bg-slate-50'
+                            }`}>
+                            {isListening ? (
+                                <>
+                                    <div className="mb-2 flex h-7 items-center justify-center gap-1" aria-hidden="true">
+                                        <span className="h-3 w-1 rounded-full bg-rose-400 animate-pulse motion-reduce:animate-none" />
+                                        <span className="h-6 w-1 rounded-full bg-rose-500 animate-bounce motion-reduce:animate-none" />
+                                        <span className="h-4 w-1 rounded-full bg-rose-400 animate-pulse motion-reduce:animate-none" />
+                                        <span className="h-7 w-1 rounded-full bg-rose-500 animate-bounce motion-reduce:animate-none" />
+                                        <span className="h-3 w-1 rounded-full bg-rose-400 animate-pulse motion-reduce:animate-none" />
+                                    </div>
+                                    <p className="text-xs font-semibold text-rose-700">{interimTranscript || 'I’m listening…'}</p>
+                                </>
+                            ) : lastExecutedCommand ? (
+                                <div className="space-y-1">
+                                    <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-700">Last action</p>
+                                    <p className="text-xs font-semibold text-slate-800">{lastExecutedCommand.label}</p>
                                 </div>
-                                <p className="text-xs font-black text-emerald-400">{lastExecutedCommand.label}</p>
+                            ) : (
+                                <>
+                                    <p className="text-sm font-semibold text-slate-800">What can I help you find?</p>
+                                    <p className="mt-1 text-[11px] text-slate-500">Try “open my orders” or “search paracetamol”.</p>
+                                </>
+                            )}
+                        </div>
+
+                        {recognitionError && (
+                            <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-xs leading-relaxed text-rose-700">
+                                {typeof recognitionError === 'string' ? recognitionError : recognitionError?.message || recognitionError?.code || 'Voice recognition encountered an error.'}
                             </div>
-                        ) : (
-                            <p className="text-[11px] text-slate-400">
-                                {isListening ? 'Speak a voice command (e.g. "Open Orders", "Medicine Requests")' : 'Tap mic to speak or select a quick voice command below'}
-                            </p>
                         )}
-                    </div>
 
-                    {recognitionError && (
-                        <div role="alert" className="rounded-xl border border-rose-800 bg-rose-950/60 px-3 py-2 text-[11px] text-rose-200">
-                            {typeof recognitionError === 'string' ? recognitionError : recognitionError?.message || recognitionError?.code || 'Voice recognition encountered an error.'}
-                        </div>
-                    )}
+                        <button type="button" onClick={isListening ? stopListening : startListening}
+                            disabled={!isListening && !isSupported}
+                            className={`flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-bold text-white shadow-sm transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-blue-200 disabled:cursor-not-allowed disabled:bg-slate-300 ${
+                                isListening ? 'bg-rose-600 hover:bg-rose-700' : 'bg-blue-700 hover:bg-blue-800'
+                            }`}>
+                            <span aria-hidden="true">{isListening ? '■' : '🎙️'}</span>
+                            {isListening ? 'Stop listening' : 'Tap to speak'}
+                        </button>
 
-                    {/* Mic Toggle Button */}
-                    <div className="flex items-center gap-2">
-                        {isListening ? (
-                            <button
-                                type="button"
-                                onClick={stopListening}
-                                className="w-full py-2 bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs rounded-xl transition cursor-pointer"
-                            >
-                                ⏹️ Stop Listening
-                            </button>
-                        ) : (
-                            <button
-                                type="button"
-                                onClick={startListening}
-                                className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5"
-                            >
-                                🎙️ Tap to Speak Voice Command
-                            </button>
-                        )}
-                    </div>
-
-                    {/* Quick Voice Command Navigation Shortcuts */}
-                    <div className="pt-2 border-t border-slate-800 space-y-1.5">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                            Quick Application Voice Commands:
-                        </span>
-                        <div className="grid grid-cols-2 gap-1.5">
-                            <button
-                                type="button"
-                                onClick={() => executeVoiceCommand('open orders')}
-                                className="px-2.5 py-1.5 bg-slate-800 hover:bg-blue-600/40 text-blue-200 hover:text-white border border-slate-700 rounded-xl font-bold text-xs transition cursor-pointer text-left flex items-center gap-1.5"
-                            >
-                                <span>📦</span>
-                                <span>Open Orders</span>
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => executeVoiceCommand('open medicine requests')}
-                                className="px-2.5 py-1.5 bg-slate-800 hover:bg-blue-600/40 text-blue-200 hover:text-white border border-slate-700 rounded-xl font-bold text-xs transition cursor-pointer text-left flex items-center gap-1.5"
-                            >
-                                <span>📋</span>
-                                <span>Medicine Requests</span>
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => executeVoiceCommand('create new medicine request')}
-                                className="px-2.5 py-1.5 bg-slate-800 hover:bg-blue-600/40 text-blue-200 hover:text-white border border-slate-700 rounded-xl font-bold text-xs transition cursor-pointer text-left flex items-center gap-1.5"
-                            >
-                                <span>➕</span>
-                                <span>New Request</span>
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => executeVoiceCommand('open addresses')}
-                                className="px-2.5 py-1.5 bg-slate-800 hover:bg-blue-600/40 text-blue-200 hover:text-white border border-slate-700 rounded-xl font-bold text-xs transition cursor-pointer text-left flex items-center gap-1.5"
-                            >
-                                <span>🏠</span>
-                                <span>Saved Addresses</span>
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => executeVoiceCommand('open cart')}
-                                className="px-2.5 py-1.5 bg-slate-800 hover:bg-blue-600/40 text-blue-200 hover:text-white border border-slate-700 rounded-xl font-bold text-xs transition cursor-pointer text-left flex items-center gap-1.5"
-                            >
-                                <span>🛒</span>
-                                <span>Open Cart</span>
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => executeVoiceCommand('open store')}
-                                className="px-2.5 py-1.5 bg-slate-800 hover:bg-blue-600/40 text-blue-200 hover:text-white border border-slate-700 rounded-xl font-bold text-xs transition cursor-pointer text-left flex items-center gap-1.5"
-                            >
-                                <span>💊</span>
-                                <span>Medicine Store</span>
-                            </button>
+                        <div>
+                            <div className="mb-2 flex items-center justify-between">
+                                <h3 className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Quick actions</h3>
+                                <span className="text-[10px] text-slate-400">Tap to run</span>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                                {[
+                                    ['📦', 'Orders', 'open orders'],
+                                    ['📋', 'Requests', 'open medicine requests'],
+                                    ['＋', 'New request', 'create new medicine request'],
+                                    ['⌖', 'Addresses', 'open addresses'],
+                                    ['🛒', 'Cart', 'open cart'],
+                                    ['💊', 'Medicine store', 'open store']
+                                ].map(([icon, label, command]) => (
+                                    <button key={command} type="button" onClick={() => executeVoiceCommand(command)}
+                                        className="flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-left text-xs font-semibold text-slate-700 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
+                                        <span aria-hidden="true" className="text-sm">{icon}</span>
+                                        <span>{label}</span>
+                                    </button>
+                                ))}
+                            </div>
                         </div>
                     </div>
-                </div>
+                    <footer className="border-t border-slate-100 px-4 py-2.5 text-center text-[10px] text-slate-400">
+                        Your microphone is active only while listening
+                    </footer>
+                </section>
             )}
         </div>
     );
