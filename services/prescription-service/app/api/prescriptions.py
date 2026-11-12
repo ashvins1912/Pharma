@@ -68,6 +68,12 @@ async def scan_product_label(
         raw_text, model_version, confidence = _run_ocr(file_bytes, file.content_type)
     except Exception as exc:
         code = getattr(exc, "code", "PRODUCT_OCR_FAILED")
+        if code == "OCR_EMPTY":
+            return {
+                "success": True,
+                "data": {"text": "", "confidence": 0.0, "modelVersion": "paddleocr-no-text", "requiresReview": True},
+                "message": "No printed text detected. A valid barcode can still identify the product."
+            }
         message = getattr(exc, "message", "Could not read the product label. Try a clearer photo.")
         raise HTTPException(status_code=422, detail={"code": code, "message": message})
     return {
