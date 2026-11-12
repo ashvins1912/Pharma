@@ -1,6 +1,7 @@
 import React from 'react';
 import { useApp } from '../context/AppContext';
 import SearchGroundingInfo from './SearchGroundingInfo';
+import VoiceSearchButton from './common/VoiceSearchButton';
 import { useLanguage } from '../context/LanguageContext';
 
 const CATEGORIES = [
@@ -40,24 +41,30 @@ export default function SearchFilter() {
     <div className="pharma-search-panel bg-white border border-slate-200 rounded-2xl sm:rounded-3xl p-3 sm:p-4 shadow-sm space-y-2.5 sm:space-y-3">
       {/* Top Bar: Search Input & Sort & Clear */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-        <div className="pharma-search-query relative flex-1 min-w-0">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs">🔍</span>
-          <input
-            type="text"
-            placeholder={t("searchPlaceholder")}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pharma-search-query__input w-full min-w-0 pl-8 pr-7 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 focus:border-blue-500 focus:bg-white rounded-xl outline-none transition min-h-[40px]"
+        <div className="pharma-search-query relative flex-1 min-w-0 flex items-center gap-1.5">
+          <div className="relative flex-1 min-w-0">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs">🔍</span>
+            <input
+              type="text"
+              placeholder={t("searchPlaceholder")}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pharma-search-query__input w-full min-w-0 pl-8 pr-7 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 focus:border-blue-500 focus:bg-white rounded-xl outline-none transition min-h-[40px]"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs p-1"
+                aria-label={t("clearSearch")}
+              >
+                ✕
+              </button>
+            )}
+          </div>
+          <VoiceSearchButton
+            onTranscript={(spokenText) => setSearchQuery(spokenText)}
+            currentQuery={searchQuery}
           />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs p-1"
-              aria-label={t("clearSearch")}
-            >
-              ✕
-            </button>
-          )}
         </div>
 
         <div className="pharma-search-controls flex items-center gap-2 shrink-0">

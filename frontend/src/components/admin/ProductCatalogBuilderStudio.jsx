@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import apiClient from '../../api/apiClient';
+import VoiceSearchButton from '../common/VoiceSearchButton';
 
 export default function ProductCatalogBuilderStudio() {
     const [activeTab, setActiveTab] = useState('explorer'); // 'explorer' | 'add_product' | 'bulk_import' | 'categories'
@@ -274,14 +275,20 @@ Pan-40,Alkem,Digestion & Acidity,Pantoprazole Sodium 40mg,40mg,Tablet,98,115,80,
                 <div className="space-y-4">
                     {/* Filters */}
                     <div className="flex flex-col sm:flex-row items-center gap-3">
-                        <div className="relative flex-1 w-full">
-                            <span className="absolute left-3 top-2.5 text-slate-400 text-xs">🔍</span>
-                            <input
-                                type="text"
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                placeholder="Search by name, brand, SKU, or active salt composition..."
-                                className="w-full pl-8 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        <div className="relative flex-1 w-full flex items-center gap-1.5">
+                            <div className="relative flex-1 min-w-0">
+                                <span className="absolute left-3 top-2.5 text-slate-400 text-xs">🔍</span>
+                                <input
+                                    type="text"
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    placeholder="Search by name, brand, SKU, or active salt composition..."
+                                    className="w-full pl-8 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                />
+                            </div>
+                            <VoiceSearchButton
+                                onTranscript={(text) => setSearchQuery(text)}
+                                currentQuery={searchQuery}
                             />
                         </div>
                         <select
