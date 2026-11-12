@@ -75,7 +75,7 @@ function hasStrengthConflict(extracted, candidate) {
   const candidateText = [candidate.strength, candidate.composition, candidate.name, candidate.brandName, candidate.genericName].filter(Boolean).join(' ');
   const candidateStrengths = [...candidateText.matchAll(/\b(\d+(?:\.\d+)?)\s*(mg|mcg|µg|g|gm|ml|iu|%)\b/gi)]
     .map(match => String(Number(match[1])) + match[2].toLowerCase().replace('µg', 'mcg').replace('gm', 'g'));
-  return candidateStrengths.length > 0 && !extracted.strengths.some(item => candidateStrengths.includes(String(item.value) + item.unit));
+  return candidateStrengths.length > 0 && !extracted.strengths.every(item => candidateStrengths.includes(String(item.value) + item.unit));
 }
 
 export function rankScannedMedicineCandidates(extracted, catalogue = [], { minimumScore = 0.86, minimumMargin = 0.10 } = {}) {
@@ -108,8 +108,9 @@ export function rankScannedMedicineCandidates(extracted, catalogue = [], { minim
       && !candidateForm.includes(extracted.dosageForm) && !extracted.dosageForm.includes(candidateForm));
     const strengthEvidence = extracted.strengths.length ? (strengthConflict ? 0 : 1) : 0.5;
     const formEvidence = extracted.dosageForm ? (formConflict ? 0 : 1) : 0.5;
-    const manufacturerEvidence = extracted.manufacturer && item.manufacturer
-      ? (clean(extracted.manufacturer).includes(clean(item.manufacturer)) || clean(item.manufacturer).includes(clean(extracted.manufacturer)) ? 1 : 0)
+    const candidateManufacturer = item.manufacturer || item.brand || item.brandName;
+    const manufacturerEvidence = extracted.manufacturer && candidateManufacturer
+      ? (clean(extracted.manufacturer).includes(clean(candidateManufacturer)) || clean(candidateManufacturer).includes(clean(extracted.manufacturer)) ? 1 : 0)
       : 0.5;
     const score = (nameScore * 0.65) + (genericScore * 0.15) + (strengthEvidence * 0.10)
       + (formEvidence * 0.05) + (manufacturerEvidence * 0.05);
