@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { getReadableErrorMessage } from '../../utils/errorMessage';
 import apiClient from '../../api/apiClient';
 import AdminFulfillmentKanban from './AdminFulfillmentKanban';
 import AdminInventoryTable from './AdminInventoryTable';
@@ -172,7 +173,7 @@ export default function AdminDashboardView() {
       setSnapshotPagination(snapshot.pagination || { page: 1, limit: 10, total: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false });
       setDeliveredCount(Number(snapshot.deliveredCount) || 0);
     } catch (err) {
-      setOrdersError(err.message || 'Could not load the order queue.');
+      setOrdersError(getReadableErrorMessage(err, 'Could not load the order queue.'));
     } finally {
       setLoadingOrders(false);
     }
