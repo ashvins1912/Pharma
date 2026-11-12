@@ -274,3 +274,132 @@ export function verifyVoiceAssistantAccuracy() {
     console.info(`[VoiceAssistantAccuracyBenchmark] Accuracy Rate: ${accuracyRate}% (${passed}/${testCases.length} Passed)`);
     return { accuracyRate, passed, total: testCases.length, results };
 }
+
+
+/**
+ * Conservative voice-to-catalogue ranking.
+ *
+ * The matcher only ranks medicines actually present in the supplied catalogue.
+ * It never invents popular-medicine candidates and it refuses automatic
+ * refinement when strength information is missing or candidates are too close.
+ */
+const normalizeVoiceMedicineText = value => normalizeText(value)
+    .replace(/\b(six hundred and fifty|six hundred fifty|six fifty)\b/g, '650')
+    .replace(/\b(six hundred and twenty five|six twenty five)\b/g, '625')
+    .replace(/\b(five hundred)\b/g, '500')
+    .replace(/\b(one hundred and twenty|one twenty)\b/g, '120')
+    .replace(/\b(forty)\b/g, '40')
+    .replace(/\b(ten)\b/g, '10')
+    .replace(/\b(\d+(?:\.\d+)?)(?:mg|mcg|gm|g|ml|iu)\b/g, '$1')
+    .replace(/\b(tablets|tabs|tbl)\b/g, 'tablet')
+    .replace(/\b(capsules|caps)\b/g, 'capsule')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const getVoiceNumbers = value => normalizeVoiceMedicineText(value).match(/\d+(?:\.\d+)?/g) || [];
+
+function scoreVoiceCandidate(query, candidate) {
+    const queryKey = normalizeVoiceMedicineText(query);
+    const fields = [
+        candidate.brandName, candidate.name, candidate.productName,
+        candidate.genericName, candidate.composition
+    ].filter(value => typeof value === 'string' && value.trim());
+    if (!queryKey || !fields.length) return 0;
+
+    const queryNumbers = getVoiceNumbers(query);
+    const candidateNumbers = getVoiceNumbers([
+        candidate.brandName, candidate.name, candidate.productName,
+        candidate.strength, candidate.packSize
+    ].filter(Boolean).join(' '));
+    if (queryNumbers.length && candidateNumbers.length
+        && !queryNumbers.some(number => candidateNumbers.includes(number))) return 0;
+
+    let best = 0;
+    for (const field of fields) {
+        const fieldKey = normalizeVoiceMedicineText(field);
+        if (!fieldKey) continue;
+        if (fieldKey === queryKey) best = Math.max(best, 1);
+        else if (fieldKey.startsWith(queryKey + ' ') || fieldKey.includes(' ' + queryKey + ' ')) {
+            best = Math.max(best, 0.97);
+        } else {
+            const jaro = calculateJaroWinklerSimilarity(queryKey, fieldKey);
+            const edit = calculateDamerauLevenshteinSimilarity(queryKey, fieldKey);
+            const queryTokens = queryKey.split(' ').filter(Boolean);
+            const fieldTokens = new Set(fieldKey.split(' ').filter(Boolean));
+            const tokenCoverage = queryTokens.length
+                ? queryTokens.filter(token => fieldTokens.has(token)).length / queryTokens.length
+                : 0;
+            let score = (jaro * 0.5) + (edit * 0.3) + (tokenCoverage * 0.2);
+            if (queryKey.length >= 5 && getPhoneticKey(queryKey) === getPhoneticKey(fieldKey)) {
+                score = Math.max(score, 0.88);
+            }
+            best = Math.max(best, score);
+        }
+    }
+    return best;
+}
+
+export function rankVoiceMedicineMatches(query, catalog = []) {
+    const cleanedQuery = String(query || '').trim();
+    if (cleanedQuery.length < 2 || !Array.isArray(catalog)) {
+        return { best: null, alternatives: [], confidence: 0, isConfident: false, reason: 'INSUFFICIENT_INPUT' };
+    }
+
+    const ranked = catalog
+        .filter(item => item && typeof item === 'object')
+        .map(item => {
+            const score = scoreVoiceCandidate(cleanedQuery, item);
+            const name = item.brandName || item.name || item.productName || item.genericName || '';
+            const strength = String(item.strength || '').trim();
+            const form = String(item.dosageForm || item.form || '').trim();
+            const queryNumbers = getVoiceNumbers(cleanedQuery);
+            const candidateNumbers = getVoiceNumbers([name, strength].filter(Boolean).join(' '));
+            const missingStrength = Boolean(strength || candidateNumbers.length) && queryNumbers.length === 0;
+            const identity = [
+                item.medicineId || item.productId || item._id || name,
+                strength, form
+            ].join('|').toLowerCase();
+            return { item, name, score, strength, form, missingStrength, identity };
+        })
+        .filter(item => item.name && item.score >= 0.5)
+        .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
+
+    const unique = [];
+    const seen = new Set();
+    for (const match of ranked) {
+        if (seen.has(match.identity)) continue;
+        seen.add(match.identity);
+        unique.push(match);
+    }
+
+    const best = unique[0] || null;
+    const runnerUp = unique[1] || null;
+    const margin = best ? best.score - (runnerUp?.score || 0) : 0;
+    const hasStrengthConflict = Boolean(best && getVoiceNumbers(cleanedQuery).length
+        && getVoiceNumbers([best.name, best.strength].filter(Boolean).join(' '))
+            .length
+        && !getVoiceNumbers(cleanedQuery).some(number =>
+            getVoiceNumbers([best.name, best.strength].filter(Boolean).join(' ')).includes(number)));
+    const isConfident = Boolean(best
+        && best.score >= 0.9
+        && margin >= 0.08
+        && !best.missingStrength
+        && !hasStrengthConflict);
+
+    return {
+        best,
+        alternatives: unique.slice(0, 3).map(item => ({
+            name: item.name,
+            score: Math.round(item.score * 100),
+            strength: item.strength,
+            dosageForm: item.form
+        })),
+        confidence: Math.round((best?.score || 0) * 100),
+        isConfident,
+        reason: !best ? 'NO_CATALOG_MATCH'
+            : best.missingStrength ? 'STRENGTH_REQUIRED'
+            : margin < 0.08 ? 'AMBIGUOUS_CANDIDATES'
+            : best.score < 0.9 ? 'LOW_CONFIDENCE'
+            : 'CONFIDENT_MATCH'
+    };
+}
