@@ -263,8 +263,108 @@ def _parse_medicine_line(raw: str) -> Dict[str, Any]:
     }
 
 
-def _run_ocr(file_bytes: bytes, content_type: str) -> tuple[str, str]:
+def _ocr_candidate_score(text: str, mean_confidence: float) -> float:
+    """Rank OCR passes using recognizer confidence plus conservative text signals."""
+    normalized = _normalize_spaces(text)
+    if not normalized:
+        return 0.0
+    confidence = max(0.0, min(1.0, float(mean_confidence or 0.0)))
+    alpha_ratio = sum(char.isalnum() for char in normalized) / max(1, len(normalized))
+    medical_hits = len(re.findall(
+        r"\b(?:mg|mcg|ml|iu|tablet|tablets|capsule|capsules|syrup|od|bd|tds|qid|sos|prn|"
+        r"morning|night|daily|amoxicillin|paracetamol|metformin)\b",
+        normalized,
+        re.I,
+    ))
+    medical_signal = min(1.0, medical_hits / 3.0)
+    return round((confidence * 0.65) + (alpha_ratio * 0.15) + (medical_signal * 0.20), 4)
+
+
+def _select_ocr_candidate(candidates: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Choose one OCR pass; never concatenate conflicting model hypotheses."""
+    valid = [item for item in candidates if _normalize_spaces(str(item.get("text") or ""))]
+    if not valid:
+        return None
+    return max(
+        valid,
+        key=lambda item: (
+            _ocr_candidate_score(str(item.get("text") or ""), float(item.get("confidence") or 0.0)),
+            len(str(item.get("text") or "").splitlines()),
+            len(str(item.get("text") or "")),
+        ),
+    )
+
+
+def _extract_paddle_observations(result: Any) -> List[tuple[str, float]]:
+    """Normalize PaddleOCR v2/v3 response shapes into (text, confidence) pairs."""
+    observations: List[tuple[str, float]] = []
+    blocks = result if isinstance(result, list) else [result]
+    for block in blocks:
+        if isinstance(block, dict):
+            texts = block.get("rec_texts") or block.get("text") or []
+            scores = block.get("rec_scores") or block.get("scores") or []
+            if isinstance(texts, str):
+                texts = [texts]
+            for index, value in enumerate(texts):
+                score = scores[index] if index < len(scores) else 0.5
+                try:
+                    confidence = max(0.0, min(1.0, float(score)))
+                except (TypeError, ValueError):
+                    confidence = 0.5
+                if str(value).strip():
+                    observations.append((str(value).strip(), confidence))
+            continue
+        if hasattr(block, "json"):
+            try:
+                payload = block.json
+                if isinstance(payload, str):
+                    import json
+                    payload = json.loads(payload)
+                payload = payload.get("res", payload) if isinstance(payload, dict) else {}
+                observations.extend(_extract_paddle_observations(payload))
+                continue
+            except Exception:
+                pass
+        if isinstance(block, list):
+            for line in block:
+                if not line or len(line) < 2:
+                    continue
+                recognition = line[1]
+                if isinstance(recognition, (list, tuple)) and recognition:
+                    try:
+                        confidence = max(0.0, min(1.0, float(recognition[1]))) if len(recognition) > 1 else 0.5
+                    except (TypeError, ValueError):
+                        confidence = 0.5
+                    if str(recognition[0]).strip():
+                        observations.append((str(recognition[0]).strip(), confidence))
+    return observations
+
+
+def _build_ocr_variants(image: Any, cv2: Any) -> List[tuple[str, Any]]:
+    """Generate low-cost views that improve resilience to blur, shadows and contrast."""
+    variants = [("original", image)]
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
+    if min(gray.shape[:2]) < 1200:
+        scale = min(2.0, 1200 / max(1, min(gray.shape[:2])))
+        gray = cv2.resize(gray, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    enhanced = clahe.apply(gray)
+    variants.append(("clahe", cv2.cvtColor(enhanced, cv2.COLOR_GRAY2BGR)))
+    denoised = cv2.GaussianBlur(enhanced, (0, 0), 1.0)
+    sharpened = cv2.addWeighted(enhanced, 1.6, denoised, -0.6, 0)
+    variants.append(("sharpened", cv2.cvtColor(sharpened, cv2.COLOR_GRAY2BGR)))
+    thresholded = cv2.adaptiveThreshold(
+        enhanced, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 31, 11
+    )
+    variants.append(("adaptive-threshold", cv2.cvtColor(thresholded, cv2.COLOR_GRAY2BGR)))
+    return variants
+
+
+def _run_ocr(file_bytes: bytes, content_type: str) -> tuple[str, str, float]:
     images: List[Any] = []
+    total_pixels = 0
+    max_document_pixels = 24_000_000
+    max_image_pixels = 12_000_000
     try:
         if content_type == "application/pdf" or file_bytes[:4] == b"%PDF":
             import fitz
@@ -275,6 +375,9 @@ def _run_ocr(file_bytes: bytes, content_type: str) -> tuple[str, str]:
                 if index >= 15:
                     break
                 pix = page.get_pixmap(matrix=fitz.Matrix(2, 2), alpha=False)
+                total_pixels += pix.width * pix.height
+                if total_pixels > max_document_pixels:
+                    raise ProcessingError("OCR_IMAGE_TOO_LARGE", "Document resolution is too large to process safely. Upload a smaller or lower-resolution scan.")
                 import numpy as np
                 import cv2
                 img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, pix.n)
@@ -290,6 +393,9 @@ def _run_ocr(file_bytes: bytes, content_type: str) -> tuple[str, str]:
             img = cv2.imdecode(np.frombuffer(file_bytes, dtype=np.uint8), cv2.IMREAD_COLOR)
             if img is None:
                 raise ProcessingError("OCR_DECODE", "Unable to decode image bytes")
+            total_pixels = int(img.shape[0]) * int(img.shape[1])
+            if total_pixels > max_image_pixels:
+                raise ProcessingError("OCR_IMAGE_TOO_LARGE", "Image resolution is too large to process safely. Upload a smaller or lower-resolution scan.")
             images.append(img)
             source = "opencv+paddle"
     except ProcessingError:
@@ -315,41 +421,42 @@ def _run_ocr(file_bytes: bytes, content_type: str) -> tuple[str, str]:
         except Exception as exc:
             raise ProcessingError("OCR_IMPORT", f"PaddleOCR unavailable: {exc}") from exc
 
-        texts: List[str] = []
+        page_texts: List[str] = []
+        page_confidences: List[float] = []
+        selected_variants: List[str] = []
         for image in images:
-            result = ocr.ocr(image, cls=True)
-            if not result:
-                continue
-            for block in result:
-                if isinstance(block, dict):
-                    rec_texts = block.get("rec_texts") or block.get("text") or []
-                    texts.extend(str(value) for value in rec_texts if str(value).strip())
+            candidates: List[Dict[str, Any]] = []
+            for variant_name, variant in _build_ocr_variants(image, cv2):
+                try:
+                    result = ocr.ocr(variant, cls=True)
+                    observations = _extract_paddle_observations(result)
+                except Exception as exc:
+                    logger.warning("PaddleOCR pass failed variant=%s: %s", variant_name, exc)
                     continue
-                if hasattr(block, "json"):
-                    try:
-                        payload = block.json
-                        if isinstance(payload, str):
-                            import json
-                            payload = json.loads(payload)
-                        res = payload.get("res", payload) if isinstance(payload, dict) else {}
-                        rec_texts = res.get("rec_texts") or []
-                        texts.extend(str(value) for value in rec_texts if str(value).strip())
-                        continue
-                    except Exception:
-                        pass
-                if isinstance(block, list):
-                    for line in block:
-                        if line and len(line) >= 2 and isinstance(line[1], (list, tuple)) and line[1]:
-                            texts.append(str(line[1][0]))
-        raw = "\n".join(texts).strip()
+                if not observations:
+                    continue
+                text = "\n".join(value for value, _ in observations).strip()
+                mean_confidence = sum(score for _, score in observations) / len(observations)
+                candidates.append({
+                    "text": text,
+                    "confidence": mean_confidence,
+                    "variant": variant_name,
+                })
+            selected = _select_ocr_candidate(candidates)
+            if selected:
+                page_texts.append(selected["text"])
+                page_confidences.append(float(selected["confidence"]))
+                selected_variants.append(str(selected["variant"]))
+        raw = "\n\n".join(page_texts).strip()
         if not raw:
-            raise ProcessingError("OCR_EMPTY", "OCR produced no text")
-        return raw, source + ":" + ocr_version
+            raise ProcessingError("OCR_EMPTY", "OCR produced no text in any image enhancement pass")
+        mean_confidence = sum(page_confidences) / max(1, len(page_confidences))
+        variant_summary = ",".join(selected_variants[:15])
+        return raw, f"{source}:{ocr_version}:multiview-v1:{variant_summary}", round(mean_confidence, 4)
     except ProcessingError:
         raise
     except Exception as exc:
         raise ProcessingError("OCR_FAILURE", f"PaddleOCR failed: {exc}") from exc
-
 
 def _run_nlp(raw_text: str) -> tuple[Optional[str], List[str], str]:
     patient = None
@@ -403,17 +510,27 @@ def process_prescription_bytes(file_bytes: Optional[bytes], content_type: str = 
     if not file_bytes:
         raise ProcessingError("NO_DOCUMENT", "Prescription document bytes missing")
 
-    raw_text, ocr_version = _run_ocr(file_bytes, content_type or "image/png")
+    raw_text, ocr_version, ocr_confidence = _run_ocr(file_bytes, content_type or "image/png")
     patient, medicine_lines, nlp_version = _run_nlp(raw_text)
     if not medicine_lines:
         raise ProcessingError("NLP_NO_MEDICINES", "No medicine lines detected")
 
     medicines = _match_medicines(medicine_lines)
+    # OCR confidence is an independent quality signal; parsing rules must never
+    # make uncertain image text look clinically certain.
+    ocr_confidence = max(0.0, min(1.0, float(ocr_confidence)))
+    for medicine in medicines:
+        medicine["confidence"] = round(min(
+            float(medicine.get("confidence", 0.0)),
+            0.55 + (0.43 * ocr_confidence),
+        ), 3)
+        if ocr_confidence < 0.78:
+            medicine["requiresReview"] = True
     med_conf = [m.get("confidence", 0.0) for m in medicines] or [0.0]
-    overall = sum(med_conf) / len(med_conf)
+    overall = min(sum(med_conf) / len(med_conf), 0.55 + (0.43 * ocr_confidence))
     if patient:
         overall = min(1.0, overall + 0.02)
-    requires_review = overall < 0.90 or any(m.get("requiresReview") for m in medicines)
+    requires_review = ocr_confidence < 0.78 or overall < 0.90 or any(m.get("requiresReview") for m in medicines)
 
     return PipelineResult(
         raw_text=raw_text[:10000],

@@ -5,9 +5,12 @@ import { useApp } from '../context/AppContext';
 import Pagination from './common/Pagination';
 import { useLanguage } from '../context/LanguageContext';
 import MedicineDetailsModal from './MedicineDetailsModal';
+import MedicineMatchSuggestions from './common/MedicineMatchSuggestions';
+import { useTenant } from '../context/TenantContext';
 
 export default function ProductGrid() {
   const { t } = useLanguage();
+  const { tenantId } = useTenant();
   const {
     medicines,
     medicinesError,
@@ -87,6 +90,17 @@ export default function ProductGrid() {
           </p>
         </div>
 
+        {searchQuery && (
+          <div className="max-w-md mx-auto text-left">
+            <MedicineMatchSuggestions
+              query={searchQuery}
+              tenantId={tenantId}
+              onSelect={product => setSelectedMedicine(product)}
+              title="Possible medicine matches in this pharmacy"
+            />
+          </div>
+        )}
+
         {/* Voice-Suggested Corrections for Spoken/Phonetic Queries */}
         {searchQuery && (
           <div className="max-w-md mx-auto">
@@ -164,6 +178,16 @@ export default function ProductGrid() {
           )}
         </div>
       </div>
+
+      {searchQuery && (
+        <MedicineMatchSuggestions
+          query={searchQuery}
+          tenantId={tenantId}
+          catalogue={medicines}
+          onSelect={product => setSelectedMedicine(product)}
+          title="Did you mean one of these products?"
+        />
+      )}
 
       {/* Responsive High-Efficiency Product Grid: 2 cols on mobile, up to 6 on desktop */}
       <div className="pharma-product-grid grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 sm:gap-3 lg:gap-3.5">

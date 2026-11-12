@@ -275,6 +275,16 @@ export const API_CAPABILITIES = [
     permission: 'orders.create'
   },
   {
+    method: 'POST',
+    pattern: /^\/api\/v1\/prescriptions\/(?:scan-product-label|upload)$/,
+    permission: 'prescription.write'
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/v1\/prescriptions\/[^/]+$/,
+    permission: 'prescription.read'
+  },
+  {
     method: 'GET',
     pattern: /^\/api\/v1\/prescriptions\/reviews\/queue$/,
     permission: 'prescription.review'
