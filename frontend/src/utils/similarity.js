@@ -302,7 +302,7 @@ function scoreVoiceCandidate(query, candidate) {
     const queryKey = normalizeVoiceMedicineText(query);
     const fields = [
         candidate.brandName, candidate.name, candidate.productName,
-        candidate.genericName, candidate.composition,
+        candidate.genericName, candidate.composition, candidate.dosageForm || candidate.form,
         candidate.strength ? `${candidate.brandName || candidate.name || ''} ${candidate.strength}` : '',
         candidate.strength ? `${candidate.genericName || ''} ${candidate.strength}` : ''
     ].filter(value => typeof value === 'string' && value.trim());
@@ -313,6 +313,11 @@ function scoreVoiceCandidate(query, candidate) {
         candidate.brandName, candidate.name, candidate.productName,
         candidate.strength
     ].filter(Boolean).join(' '));
+    const formTerms = ['tablet', 'capsule', 'syrup', 'suspension', 'injection', 'cream', 'ointment', 'drop', 'gel'];
+    const queryForm = queryKey.split(' ').find(token => formTerms.includes(token));
+    const candidateForm = normalizeVoiceMedicineText(candidate.dosageForm || candidate.form);
+    if (queryForm && candidateForm
+        && !candidateForm.split(' ').some(token => token === queryForm)) return 0;
     if (queryNumbers.length && candidateNumbers.length
         && !queryNumbers.some(number => candidateNumbers.includes(number))) return 0;
 
