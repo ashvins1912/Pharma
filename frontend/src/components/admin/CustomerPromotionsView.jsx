@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { getReadableErrorMessage } from '../../utils/errorMessage';
 import apiClient from '../../api/apiClient';
 import { useToast } from '../../context/ToastContext';
 import { useLanguage } from '../../context/LanguageContext';
@@ -53,7 +54,7 @@ export default function CustomerPromotionsView({ canManage = false }) {
       setCustomers(customerResponse.data?.customers || []);
       setPromotions(promotionResponse.data?.promotions || []);
     } catch (error) {
-      addToast(error.message || t('couldNotLoadCustomerPromotions'), 'error');
+      addToast(getReadableErrorMessage(error, t('couldNotLoadCustomerPromotions')), 'error');
     } finally {
       setLoading(false);
     }
@@ -107,7 +108,7 @@ export default function CustomerPromotionsView({ canManage = false }) {
       setCode('');
       await load();
     } catch (error) {
-      addToast(error.message || t('couldNotCreatePromotion'), 'error');
+      addToast(getReadableErrorMessage(error, t('couldNotCreatePromotion')), 'error');
     } finally {
       setSaving(false);
     }
@@ -119,7 +120,7 @@ export default function CustomerPromotionsView({ canManage = false }) {
       addToast(promotion.isActive ? t('offerRevokedNotified') : t('offerReactivated'), 'success');
       await load();
     } catch (error) {
-      addToast(error.message || t('couldNotUpdatePromotion'), 'error');
+      addToast(getReadableErrorMessage(error, t('couldNotUpdatePromotion')), 'error');
     }
   };
 
@@ -220,7 +221,7 @@ export default function CustomerPromotionsView({ canManage = false }) {
               <p className="mt-1 text-[10px] text-slate-500">{promotion.promotionType === 'CUSTOMER_COUPON' ? t('customerCoupon') : t('directCustomerDiscount')} · {promotion.discountType === 'percentage' ? `${promotion.discountValue}%` : money(promotion.discountValue)} off · min {money(promotion.minOrderAmount)}</p>
               <p className="mt-1 text-[10px] text-slate-600">{t('customer')}: <span className="font-bold">{promotion.customerName || customers.find(customer => String(customer.customerId) === String(promotion.customerId))?.name || t('customer')}</span></p>
               <p className="mt-1 break-all text-[10px] text-slate-400">{t('customerId')}: {promotion.customerId}</p>
-              {canManage && promotion.isActive && promotion.tenantId && <button type="button" onClick={async () => { try { const response = await apiClient.post(`/api/coupons/admin/customer-promotions/${promotion._id}/notify`); addToast(response.data?.message || t('customerNotified'), 'success'); } catch (error) { addToast(error.response?.data?.message || error.message || t('couldNotNotifyCustomer'), 'error'); } }} className="mt-3 min-h-9 rounded-lg border border-blue-200 bg-blue-50 px-3 text-[10px] font-black text-blue-800 hover:bg-blue-100">🔔 {t('notifyRemindCustomer')}</button>}
+              {canManage && promotion.isActive && promotion.tenantId && <button type="button" onClick={async () => { try { const response = await apiClient.post(`/api/coupons/admin/customer-promotions/${promotion._id}/notify`); addToast(response.data?.message || t('customerNotified'), 'success'); } catch (error) { addToast(getReadableErrorMessage(error, t('couldNotNotifyCustomer')), 'error'); } }} className="mt-3 min-h-9 rounded-lg border border-blue-200 bg-blue-50 px-3 text-[10px] font-black text-blue-800 hover:bg-blue-100">🔔 {t('notifyRemindCustomer')}</button>}
             </div>
           ))}
         </div>
