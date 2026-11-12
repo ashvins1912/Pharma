@@ -143,6 +143,7 @@ export default function GlobalVoiceAssistant({
 
     const [isListening, setIsListening] = useState(false);
     const [isOpen, setIsOpen] = useState(false);
+    const [isMinimized, setIsMinimized] = useState(false);
     const [interimTranscript, setInterimTranscript] = useState('');
     const [lastExecutedCommand, setLastExecutedCommand] = useState(null);
     const [ttsEnabled, setTtsEnabled] = useState(true);
@@ -281,11 +282,28 @@ export default function GlobalVoiceAssistant({
         setIsListening(false);
     };
 
+    const minimizeAssistant = () => {
+        // A minimized assistant must never keep the microphone active.
+        stopListening();
+        setIsMinimized(true);
+    };
+
+    const closeAssistant = () => {
+        stopListening();
+        setIsOpen(false);
+        setIsMinimized(false);
+        setInterimTranscript('');
+    };
+
     const toggleAssistant = () => {
+        if (isOpen && isMinimized) {
+            setIsMinimized(false);
+            return;
+        }
         if (isOpen) {
-            stopListening();
-            setIsOpen(false);
+            closeAssistant();
         } else {
+            setIsMinimized(false);
             startListening();
         }
     };
@@ -296,8 +314,8 @@ export default function GlobalVoiceAssistant({
             <button
                 type="button"
                 onClick={toggleAssistant}
-                aria-label="Toggle Application Voice Assistant"
-                title="Application Voice Assistant (Commands: Open Orders, Medicine Requests, Search, Cart)"
+                aria-label={isOpen && isMinimized ? "Restore Application Voice Assistant" : isOpen ? "Close Application Voice Assistant" : "Open Application Voice Assistant"}
+                title={isMinimized ? "Restore Voice Assistant" : "Application Voice Assistant (Commands: Open Orders, Medicine Requests, Search, Cart)"}
                 className={`flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-full text-white shadow-2xl transition-all duration-300 cursor-pointer ${
                     isListening
                         ? 'bg-rose-600 shadow-rose-600/50 scale-105 animate-pulse'
@@ -315,8 +333,8 @@ export default function GlobalVoiceAssistant({
             </button>
 
             {/* Voice Assistant Floating Control Panel */}
-            {isOpen && (
-                <div className="absolute bottom-16 right-0 w-80 sm:w-96 bg-slate-900 text-white p-4 rounded-3xl shadow-2xl border border-slate-700 space-y-3 animate-fade-in z-[1200]">
+            {isOpen && !isMinimized && (
+                <div className="absolute bottom-16 right-0 w-[min(24rem,calc(100vw-2rem))] max-h-[70vh] overflow-y-auto bg-slate-900 text-white p-4 rounded-3xl shadow-2xl border border-slate-700 space-y-3 animate-fade-in z-[1200]">
                     {/* Header Controls */}
                     <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
                         <div className="flex items-center gap-2">
@@ -339,9 +357,19 @@ export default function GlobalVoiceAssistant({
                             </button>
                             <button
                                 type="button"
-                                onClick={() => { stopListening(); setIsOpen(false); }}
-                                className="text-slate-400 hover:text-white text-xs p-1 rounded-lg"
+                                onClick={minimizeAssistant}
+                                className="text-slate-400 hover:text-white text-base leading-none p-1.5 rounded-lg"
+                                aria-label="Minimize Assistant"
+                                title="Minimize"
+                            >
+                                −
+                            </button>
+                            <button
+                                type="button"
+                                onClick={closeAssistant}
+                                className="text-slate-400 hover:text-white text-xs p-1.5 rounded-lg"
                                 aria-label="Close Assistant"
+                                title="Close"
                             >
                                 ✕
                             </button>
@@ -384,7 +412,7 @@ export default function GlobalVoiceAssistant({
 
                     {recognitionError && (
                         <div role="alert" className="rounded-xl border border-rose-800 bg-rose-950/60 px-3 py-2 text-[11px] text-rose-200">
-                            {recognitionError}
+                            {typeof recognitionError === 'string' ? recognitionError : recognitionError?.message || recognitionError?.code || 'Voice recognition encountered an error.'}
                         </div>
                     )}
 
