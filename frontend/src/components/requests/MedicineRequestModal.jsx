@@ -386,7 +386,6 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
         throw new Error('No readable text or valid barcode was detected. Try a clearer, closer photo.');
       }
       const extracted = extractMedicineLabelDetails(ocr.text || '');
-      setProductScanText(ocr.text || '');
       const scanDetails = { ...extracted, ...(barcode ? { barcode, barcodeCandidates: [barcode] } : {}) };
       setProductScanText(ocr.text);
       const query = scanDetails.barcode || scanDetails.name || scanDetails.normalizedText;
