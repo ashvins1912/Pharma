@@ -2,7 +2,7 @@ services:
   - type: web
     name: pharma-medicine-embedding
     runtime: docker
-    plan: starter
+    plan: free
     region: oregon
     dockerContext: .
     dockerfilePath: ./Dockerfile
