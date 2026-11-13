@@ -26,7 +26,11 @@ const definitions = [
   workspace('backend', mode, { PORT: ports.backend }),
   workspace('api-gateway', mode, {
     PORT: ports['api-gateway'],
-    ADMIN_SERVICE_URL: process.env.ADMIN_SERVICE_URL || `http://localhost:${ports['admin-control-plane']}`
+    ADMIN_SERVICE_URL: process.env.ADMIN_SERVICE_URL || `http://localhost:${ports['admin-control-plane']}`,
+    INVENTORY_SERVICE_URL: process.env.INVENTORY_SERVICE_URL || `http://localhost:${ports['inventory-service']}`,
+    MEDICINE_MASTER_SERVICE_URL: process.env.MEDICINE_MASTER_SERVICE_URL || `http://localhost:${ports['medicine-master-service']}`,
+    ORDER_SERVICE_URL: process.env.ORDER_SERVICE_URL || `http://localhost:${ports['order-service']}`,
+    WEBSOCKET_SERVICE_URL: process.env.WEBSOCKET_SERVICE_URL || `http://localhost:${ports['websocket-service']}`
   }),
   workspace('services/admin-control-plane', mode, { PORT: ports['admin-control-plane'] }),
   workspace('services/inventory-service', mode, { PORT: ports['inventory-service'] }),
