@@ -68,7 +68,7 @@ Set values in Render **Environment** settings only. Never commit real values, pu
 | `MEDICINE_CATALOGUE_MAX_RSS_MB` | Optional; process RSS budget used by the guard; default `1024` MiB. |
 | `MEDICINE_CATALOGUE_MAX_RSS_PERCENT` | Optional; pause worker claims at RSS budget threshold; default `80`. |
 | `MEDICINE_CATALOGUE_MAX_CPU_LOAD_PERCENT` | Optional; pause worker claims at normalized 1-minute host load threshold; default `85`. |
-| `MEDICINE_CATALOGUE_WORKER_LEASE_MS` | Optional; MongoDB worker-slot lease; default `90000` ms. |
+| `MEDICINE_CATALOGUE_WORKER_LEASE_MS` | Optional; MongoDB worker-slot lease; default `900000` ms. |
 | `MEDICINE_CATALOGUE_WORKER_POLL_MS` | Optional; worker poll interval; default `1500` ms. |
 | `PORT` | Render supplied; blueprint sets 10000. |
 
