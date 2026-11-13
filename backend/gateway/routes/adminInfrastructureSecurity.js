@@ -76,7 +76,7 @@ router.post('/integrations', async (req, res) => {
     const normalizedProvider = String(provider || '').toLowerCase();
     if (!/^[a-z][a-z0-9_-]{0,63}$/.test(normalizedProvider) || normalizedProvider === 'render') return res.status(400).json({ success: false, message: 'Enter a valid non-reserved provider identifier.' });
     if (!String(name || '').trim() || !['development', 'staging', 'production'].includes(environment) || !allowedAuth.has(authMethod)) return res.status(400).json({ success: false, message: 'Service name, environment and supported authentication method are required.' });
-    if (!credentials || typeof credentials !== 'object' || Array.isArray(credentials) || JSON.stringify(credentials).length > 24000) return res.status(400).json({ success: false, message: 'Credential payload is required and must be under 24 KB.' });
+    if (!credentials || typeof credentials !== 'object' || Array.isArray(credentials) || Object.keys(credentials).length === 0 || JSON.stringify(credentials).length > 24000 || Object.values(credentials).some(value => value === '' || value === null || value === undefined)) return res.status(400).json({ success: false, message: 'Credential payload must contain non-empty values and be under 24 KB.' });
     if (!Array.isArray(requestedScopes) || !requestedScopes.length || requestedScopes.some(scope => !allowedScopes.has(scope))) return res.status(400).json({ success: false, message: 'Invalid requested permission scopes.' });
     if (!Array.isArray(requestedCapabilities) || requestedCapabilities.some(capability => !allowedCapabilities.has(capability))) return res.status(400).json({ success: false, message: 'Invalid requested capabilities.' });
     const actor = actorOf(req);
