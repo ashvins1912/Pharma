@@ -109,17 +109,17 @@ export async function searchMedicineMaster({query,limit=15,model=mongoose.models
   const filter={isArchived:{$ne:true},$or:['brandName','genericName','productName','composition','manufacturer','uses','indications','therapeuticClass','chemicalClass','actionClass'].map(field=>({[field]:regex}))};
   let vectorRows=[],vectorAvailable=false;
   if(config.vectorSearchEnabled){
-    const state=await collection(config.vectorStateCollection).findOne({_id:STATE_ID});
-    if(state?.status==='READY'&&state.model===config.vectorModel&&state.modelRevision===config.vectorModelRevision&&state.dimensions===config.vectorDimensions){
-      try{
+    try{
+      const state=await collection(config.vectorStateCollection).findOne({_id:STATE_ID});
+      if(state?.status==='READY'&&state.model===config.vectorModel&&state.modelRevision===config.vectorModelRevision&&state.dimensions===config.vectorDimensions){
         const [queryVector]=await embedMedicineTexts([clean(query)]);
         vectorRows=await collection(config.vectorCollection).aggregate([
           {$vectorSearch:{index:config.vectorIndex,path:'embedding',queryVector,numCandidates:Math.max(100,take*20),limit:take*4,filter:{isArchived:false}}},
           {$project:{_id:0,medicineId:1,score:{$meta:'vectorSearchScore'}}}
         ]).toArray();
         vectorAvailable=true;
-      }catch(error){console.warn('[MedicineVectorSearch] vector fallback:',error.code||error.name);}
-    }
+      }
+    }catch(error){console.warn('[MedicineVectorSearch] vector fallback:',error.code||error.name);}
   }
   const ids=vectorRows.map(row=>String(row.medicineId));
   const [lexical,semantic]=await Promise.all([
