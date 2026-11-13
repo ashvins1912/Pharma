@@ -1,0 +1,46 @@
+name: Medicine vector catalogue indexing
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 2 * * 0"
+permissions:
+  contents: read
+concurrency:
+  group: medicine-vector-catalogue-index
+  cancel-in-progress: false
+jobs:
+  reindex:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm install
+      - name: Validate required secrets
+        env:
+          MEDICINE_MASTER_MONGO_URI: ${{ secrets.MEDICINE_MASTER_MONGO_URI }}
+          MEDICINE_VECTOR_INFERENCE_URL: ${{ secrets.MEDICINE_VECTOR_INFERENCE_URL }}
+          MEDICINE_VECTOR_INFERENCE_TOKEN: ${{ secrets.MEDICINE_VECTOR_INFERENCE_TOKEN }}
+          MEDICINE_VECTOR_MODEL_REVISION: ${{ vars.MEDICINE_VECTOR_MODEL_REVISION }}
+        run: |
+          test -n "$MEDICINE_MASTER_MONGO_URI"
+          test -n "$MEDICINE_VECTOR_INFERENCE_URL"
+          test -n "$MEDICINE_VECTOR_INFERENCE_TOKEN"
+          test -n "$MEDICINE_VECTOR_MODEL_REVISION"
+      - name: Dry-run catalogue vector index
+        env:
+          MEDICINE_MASTER_MONGO_URI: ${{ secrets.MEDICINE_MASTER_MONGO_URI }}
+          MEDICINE_VECTOR_INFERENCE_URL: ${{ secrets.MEDICINE_VECTOR_INFERENCE_URL }}
+          MEDICINE_VECTOR_INFERENCE_TOKEN: ${{ secrets.MEDICINE_VECTOR_INFERENCE_TOKEN }}
+          MEDICINE_VECTOR_MODEL_REVISION: ${{ vars.MEDICINE_VECTOR_MODEL_REVISION }}
+        run: npm --workspace services/medicine-master-service run vector:reindex
+      - name: Apply catalogue vector index
+        if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+        env:
+          MEDICINE_MASTER_MONGO_URI: ${{ secrets.MEDICINE_MASTER_MONGO_URI }}
+          MEDICINE_VECTOR_INFERENCE_URL: ${{ secrets.MEDICINE_VECTOR_INFERENCE_URL }}
+          MEDICINE_VECTOR_INFERENCE_TOKEN: ${{ secrets.MEDICINE_VECTOR_INFERENCE_TOKEN }}
+          MEDICINE_VECTOR_MODEL_REVISION: ${{ vars.MEDICINE_VECTOR_MODEL_REVISION }}
+        run: npm --workspace services/medicine-master-service run vector:reindex -- --apply

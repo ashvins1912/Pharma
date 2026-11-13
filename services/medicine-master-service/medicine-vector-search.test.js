@@ -1,0 +1,59 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import {buildMedicineEmbeddingText,normalizeMedicineSearchQuery,rankMedicineSearchResults} from './src/medicine-vector-search.js';
+
+test('only allowlisted shared catalogue fields enter embeddings',()=>{
+ const text=buildMedicineEmbeddingText({brandName:'Dolo 650',genericName:'Paracetamol',uses:['Fever'],customerEmail:'private@example.com',prescriptionText:'patient secret'});
+ assert.match(text,/Dolo 650/);assert.match(text,/Fever/);assert.doesNotMatch(text,/private@example|patient secret/);
+});
+test('embedding text is normalized and deduplicated',()=>{
+ assert.equal(buildMedicineEmbeddingText({brandName:' Example   Tablet ',genericName:'Example',uses:['Fever','Fever']}),'Example Tablet | Example | Fever');
+});
+test('query normalization handles punctuation and diacritics',()=>{
+ assert.equal(normalizeMedicineSearchQuery(' PARACETAMOL-650mg! '),'paracetamol 650mg');
+});
+test('exact identity outranks semantic-only match',()=>{
+ const rows=rankMedicineSearchResults({query:'dolo 650',vectorRows:[{medicineId:'semantic',score:.99},{medicineId:'exact',score:.7}],keywordRows:[
+ {medicineId:'semantic',brandName:'Other Fever Tablet',isArchived:false},{medicineId:'exact',brandName:'Dolo 650',isArchived:false}]});
+ assert.equal(rows[0].medicineId,'exact');assert.equal(rows[0].matchType,'EXACT_OR_PREFIX');
+});
+test('archived results are excluded and duplicate IDs collapse',()=>{
+ const rows=rankMedicineSearchResults({query:'paracetamol',vectorRows:[],keywordRows:[
+ {medicineId:'a',brandName:'Paracetamol 650',isArchived:false},{medicineId:'a',brandName:'Paracetamol 650',isArchived:false},
+ {medicineId:'b',brandName:'Paracetamol 500',isArchived:true}]});
+ assert.equal(rows.length,1);assert.equal(rows[0].medicineId,'a');
+});
+test('result limit is bounded',()=>{
+ const data=Array.from({length:75},(_,i)=>({medicineId:String(i),brandName:'Paracetamol '+i,isArchived:false}));
+ assert.equal(rankMedicineSearchResults({query:'paracetamol',keywordRows:data,limit:1000}).length,50);
+});
+
+test('catalogue projection excludes tenant and patient fields',()=>{
+ const text=buildMedicineEmbeddingText({brandName:'Dolo',tenantId:'tenant-secret',branchStock:12,patientName:'Private Patient',prescriptionText:'Rx private'});
+ assert.equal(text,'Dolo');
+});
+
+import {config} from './src/config.js';
+import {embedMedicineTexts} from './src/medicine-vector-search.js';
+
+test('query embeddings use the isolated authenticated inference endpoint',async()=>{
+ const oldUrl=config.vectorInferenceUrl,oldToken=config.vectorInferenceToken,oldFetch=globalThis.fetch;
+ config.vectorInferenceUrl='https://embedding.example';config.vectorInferenceToken='unit-test-token';
+ let request;
+ globalThis.fetch=async(url,options)=>{request={url:String(url),options};return {ok:true,json:async()=>({model:config.vectorModel,revision:config.vectorModelRevision,dimensions:config.vectorDimensions,embeddings:[new Array(config.vectorDimensions).fill(0.1)]})};};
+ try{
+  const rows=await embedMedicineTexts(['paracetamol 650']);
+  assert.equal(rows.length,1);assert.equal(rows[0].length,config.vectorDimensions);
+  assert.equal(request.url,'https://embedding.example/v1/embeddings');
+  assert.equal(request.options.headers.authorization,'Bearer unit-test-token');
+  assert.deepEqual(JSON.parse(request.options.body),{texts:['paracetamol 650']});
+ }finally{config.vectorInferenceUrl=oldUrl;config.vectorInferenceToken=oldToken;globalThis.fetch=oldFetch;}
+});
+
+test('isolated inference model/dimension mismatch is rejected',async()=>{
+ const oldUrl=config.vectorInferenceUrl,oldToken=config.vectorInferenceToken,oldFetch=globalThis.fetch;
+ config.vectorInferenceUrl='https://embedding.example';config.vectorInferenceToken='unit-test-token';
+ globalThis.fetch=async()=>({ok:true,json:async()=>({model:'different-model',revision:config.vectorModelRevision,dimensions:config.vectorDimensions,embeddings:[new Array(config.vectorDimensions).fill(0)]})});
+ try{await assert.rejects(()=>embedMedicineTexts(['query']),/incompatible model or vector shape/);}
+ finally{config.vectorInferenceUrl=oldUrl;config.vectorInferenceToken=oldToken;globalThis.fetch=oldFetch;}
+});
