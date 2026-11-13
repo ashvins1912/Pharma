@@ -12,7 +12,7 @@ const bytes = value => {
 const pct = (used, limit) => used == null || !limit ? 'Not reported' : `${(Number(used) / Number(limit) * 100).toFixed(1)}%`;
 const unwrap = response => response?.data?.data || response?.data || {};
 
-export default function InfrastructureOperations() {
+export default function InfrastructureOperations({ onOpenDatabaseCleanup }) {
   const [snapshot, setSnapshot] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -72,7 +72,7 @@ export default function InfrastructureOperations() {
       </article>)}
     </section>
     <section className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
-      <div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="font-black">MongoDB resource usage</h3><p className="text-xs text-slate-500">Database-level storage, data, indexes and per-collection footprint.</p></div><span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold dark:bg-slate-800">{mongo?.status || 'Loading'}</span></div>
+      <div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="font-black">MongoDB resource usage</h3><p className="text-xs text-slate-500">Database-level storage, data, indexes and per-collection footprint.</p></div><div className="flex items-center gap-2"><span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold dark:bg-slate-800">{mongo?.status || 'Loading'}</span><button type="button" onClick={onOpenDatabaseCleanup} className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-bold">Open Database Cleanup</button></div></div>
       {mongo?.message && <p className="mt-2 text-sm text-amber-700">{mongo.message}</p>}
       {mongo?.configured && <><div className="mt-3 grid gap-3 sm:grid-cols-4">{[['Database', mongo.database], ['Storage', bytes(mongo.storageBytes)], ['Data', bytes(mongo.dataBytes)], ['Indexes', bytes(mongo.indexBytes)]].map(([label, value]) => <div key={label} className="rounded-xl bg-slate-50 p-3 dark:bg-slate-800"><p className="text-xs text-slate-500">{label}</p><p className="mt-1 text-sm font-bold">{value}</p></div>)}</div><div className="mt-4 overflow-x-auto"><table className="w-full text-left text-xs"><thead><tr className="border-b border-slate-200 dark:border-slate-700"><th className="p-2">Collection</th><th className="p-2 text-right">Documents</th><th className="p-2 text-right">Data</th><th className="p-2 text-right">Indexes</th><th className="p-2 text-right">Storage</th></tr></thead><tbody>{(mongo.collections || []).map(item => <tr key={item.name} className="border-b border-slate-100 dark:border-slate-800"><td className="p-2 font-semibold">{item.name}</td><td className="p-2 text-right">{Number(item.documents || 0).toLocaleString()}</td><td className="p-2 text-right">{bytes(item.dataBytes)}</td><td className="p-2 text-right">{bytes(item.indexBytes)}</td><td className="p-2 text-right">{bytes(item.storageBytes)}</td></tr>)}</tbody></table></div><p className="mt-2 text-xs text-slate-500">MongoDB collection storage figures are database statistics, not guaranteed reclaimable disk space. Use Database Cleanup for retention-governed document cleanup.</p></>}
     </section>
