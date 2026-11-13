@@ -29,6 +29,7 @@ jobs:
           test -n "$MEDICINE_MASTER_MONGO_URI"
           test -n "$MEDICINE_VECTOR_INFERENCE_URL"
           test -n "$MEDICINE_VECTOR_INFERENCE_TOKEN"
+          test -n "$MEDICINE_VECTOR_MODEL_REVISION"
       - name: Dry-run catalogue vector index
         env:
           MEDICINE_MASTER_MONGO_URI: ${{ secrets.MEDICINE_MASTER_MONGO_URI }}
