@@ -154,7 +154,9 @@ async function listExternalResources() {
       memoryBytes: item.usage?.memoryBytes ?? null, memoryLimitBytes: item.usage?.memoryLimitBytes ?? null,
       outboundBytes: item.usage?.outboundBytes ?? null, bandwidthWindow: item.usage?.bandwidthWindow || null,
       diskBytes: item.usage?.diskBytes ?? null,
-      estimatedCost: item.usage?.estimatedCost ?? null, costCurrency: item.usage?.costCurrency || null, costWindow: item.usage?.costWindow || null,
+      estimatedCost: Number.isFinite(Number(item.usage?.estimatedCost)) ? Number(item.usage.estimatedCost) : null,
+      costCurrency: /^[A-Z]{3}$/.test(String(item.usage?.costCurrency || '').toUpperCase()) ? String(item.usage.costCurrency).toUpperCase() : null,
+      costWindow: typeof item.usage?.costWindow === 'string' ? item.usage.costWindow.slice(0, 80) : null,
       observedAt: item.usage?.observedAt || null,
       source: item.usage?.source || `${item.provider} metrics adapter`
     }
