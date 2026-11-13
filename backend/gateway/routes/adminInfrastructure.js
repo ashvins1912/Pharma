@@ -106,6 +106,54 @@ async function listRenderServices() {
     };
   });
 }
+const controlPlaneConfigured = () => Boolean(process.env.INFRASTRUCTURE_CONTROL_PLANE_URL);
+const controlPlaneRequest = async (path, options = {}) => {
+  const base = String(process.env.INFRASTRUCTURE_CONTROL_PLANE_URL || '').replace(/\/+$/, '');
+  if (!base) throw new Error('External infrastructure control plane is not configured.');
+  const url = new URL(`${base}${path}`);
+  if (process.env.NODE_ENV === 'production' && url.protocol !== 'https:') throw new Error('Infrastructure control plane must use HTTPS in production.');
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      Accept: 'application/json',
+      ...(process.env.INFRASTRUCTURE_CONTROL_PLANE_TOKEN ? { Authorization: `Bearer ${process.env.INFRASTRUCTURE_CONTROL_PLANE_TOKEN}` } : {}),
+      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+      ...options.headers
+    },
+    signal: AbortSignal.timeout(10000)
+  });
+  if (!response.ok) {
+    const body = await response.text().catch(() => '');
+    const error = new Error(`Infrastructure control plane returned HTTP ${response.status}: ${body.slice(0, 250)}`);
+    error.statusCode = response.status;
+    throw error;
+  }
+  return response.status === 204 ? null : response.json();
+};
+async function listExternalResources() {
+  if (!controlPlaneConfigured()) return [];
+  const payload = await controlPlaneRequest('/v1/resources');
+  const supported = new Set(['aws', 'azure', 'gcp']);
+  return (Array.isArray(payload?.resources) ? payload.resources : []).filter(item =>
+    item && typeof item.id === 'string' && supported.has(String(item.provider || '').toLowerCase())
+  ).map(item => ({
+    id: item.id, name: item.name || item.id, provider: String(item.provider).toLowerCase(),
+    type: item.type || 'compute', region: item.region || null, plan: item.plan || null,
+    status: item.status || 'UNKNOWN', dashboardUrl: item.dashboardUrl || null,
+    capabilities: {
+      start: item.capabilities?.start === true,
+      stop: item.capabilities?.stop === true,
+      restart: item.capabilities?.restart === true
+    },
+    usage: {
+      cpu: item.usage?.cpu ?? null, cpuUnit: item.usage?.cpuUnit || null,
+      memoryBytes: item.usage?.memoryBytes ?? null, memoryLimitBytes: item.usage?.memoryLimitBytes ?? null,
+      outboundBytes: item.usage?.outboundBytes ?? null, bandwidthWindow: item.usage?.bandwidthWindow || null,
+      diskBytes: item.usage?.diskBytes ?? null, observedAt: item.usage?.observedAt || null,
+      source: item.usage?.source || `${item.provider} metrics adapter`
+    }
+  }));
+}
 async function getMongoUsage() {
   const db = mongoose.connection?.db;
   if (!db) return { configured: false, status: 'DISCONNECTED', collections: [], message: 'MongoDB connection is not ready.' };
@@ -153,7 +201,7 @@ router.get('/status', async (_req, res) => {
 router.post('/resources/:resourceId/:action', async (req, res) => {
   const { resourceId, action } = req.params;
   if (!['start', 'stop', 'restart'].includes(action)) return res.status(400).json({ success: false, message: 'Unsupported lifecycle action.' });
-  if (!renderConfigured()) return res.status(503).json({ success: false, message: 'Render provider is not configured.' });
+  const provider = String(req.body?.provider || 'render').toLowerCase();\n  if (!['render', 'aws', 'azure', 'gcp'].includes(provider)) return res.status(400).json({ success: false, message: 'Unsupported infrastructure provider.' });
   if (req.body?.confirmation !== `${action.toUpperCase()} RESOURCE`) {
     return res.status(400).json({ success: false, code: 'CONFIRMATION_REQUIRED', message: `Type ${action.toUpperCase()} RESOURCE to confirm.` });
   }
