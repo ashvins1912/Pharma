@@ -1,4 +1,3 @@
-import { createServer } from 'node:http';
 import express from 'express';
 import { timingSafeEqual } from 'node:crypto';
 
@@ -31,6 +30,7 @@ async function embed(texts){
  return rows.map(row=>row.map(Number));
 }
 app.disable('etag');
+app.use((_req,res,next)=>{res.set('Cache-Control','no-store');next();});
 app.get('/health',(_req,res)=>res.json({status:'ok',service:'medicine-embedding'}));
 app.get('/ready',(_req,res)=>res.status(ready?200:503).json({status:ready?'ready':'loading-model',model:MODEL,revision:REVISION,dimensions:DIMENSIONS}));
 app.post('/v1/embeddings',async(req,res)=>{
