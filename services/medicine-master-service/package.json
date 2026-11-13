@@ -16,8 +16,7 @@
     "mongoose": "^9.10.4",
     "multer": "^1.4.5-lts.1",
     "xlsx": "^0.18.5",
-    "@pharma/algorithm-kernel": "file:../../packages/algorithm-kernel",
-    "@huggingface/transformers": "^3.7.2"
+    "@pharma/algorithm-kernel": "file:../../packages/algorithm-kernel"
   },
   "engines": {
     "node": ">=20.19.0"
