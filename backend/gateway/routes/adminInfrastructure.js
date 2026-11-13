@@ -101,6 +101,7 @@ async function listRenderServices() {
         bandwidthUnit: bandwidth?.unit || null,
         bandwidthWindow: bandwidth ? 'Total of available hourly points · last 24 hours' : null,
         diskBytes: null,
+        estimatedCost: null, costCurrency: null, costWindow: null,
         observedAt: [cpu?.timestamp, memory?.timestamp, bandwidth?.timestamp].filter(Boolean).sort().at(-1) || null,
         metricsStatus: metricStatus,
         source: 'Render native Metrics API · CPU/memory latest sample; bandwidth summed from hourly points over 24 hours'
@@ -152,7 +153,9 @@ async function listExternalResources() {
       cpu: item.usage?.cpu ?? null, cpuUnit: item.usage?.cpuUnit || null,
       memoryBytes: item.usage?.memoryBytes ?? null, memoryLimitBytes: item.usage?.memoryLimitBytes ?? null,
       outboundBytes: item.usage?.outboundBytes ?? null, bandwidthWindow: item.usage?.bandwidthWindow || null,
-      diskBytes: item.usage?.diskBytes ?? null, observedAt: item.usage?.observedAt || null,
+      diskBytes: item.usage?.diskBytes ?? null,
+      estimatedCost: item.usage?.estimatedCost ?? null, costCurrency: item.usage?.costCurrency || null, costWindow: item.usage?.costWindow || null,
+      observedAt: item.usage?.observedAt || null,
       source: item.usage?.source || `${item.provider} metrics adapter`
     }
   }));
