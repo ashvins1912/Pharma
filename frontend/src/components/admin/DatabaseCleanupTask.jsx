@@ -138,7 +138,8 @@ export default function DatabaseCleanupTask() {
         {SERVICES.map(service => {
           const result = results[service.key];
           return <div key={service.key} className="mt-3 border-t border-slate-100 pt-3 dark:border-slate-700">
-            <p className="font-bold">{service.label}: {result?.available && result.success !== false ? 'Request completed' : 'Failed / partially failed'}</p>\n            {result?.executedAt && <p className="text-xs text-slate-500">Executed: {new Date(result.executedAt).toLocaleString()} · Actor: {result.actor || 'Super Admin'}</p>}
+            <p className="font-bold">{service.label}: {result?.available && result.success !== false ? 'Request completed' : 'Failed / partially failed'}</p>
+            {result?.executedAt && <p className="text-xs text-slate-500">Executed: {new Date(result.executedAt).toLocaleString()} · Actor: {result.actor || 'Super Admin'}</p>}
             {result?.error && <p className="text-sm text-rose-700">{result.error}</p>}
             {(result?.results || []).map((item, index) => <p key={index} className="text-sm text-slate-600 dark:text-slate-300">{item.collection}: {item.status}, deleted {item.deletedCount || 0}{item.error ? ` — ${item.error}` : ''}</p>)}
           </div>;
