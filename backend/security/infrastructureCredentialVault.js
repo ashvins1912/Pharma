@@ -76,7 +76,7 @@ export function encryptCredentialPayload(payload) {
 }
 
 export function decryptCredentialPayload(envelope) {
-  if (!envelope || envelope.algorithm !== ALGORITHM || envelope.keyVersion !== KEY_VERSION) throw new Error('Unsupported credential envelope.');
+  if (!envelope || envelope.algorithm !== ALGORITHM || typeof envelope.keyVersion !== 'string' || !envelope.keyVersion) throw new Error('Unsupported credential envelope.');
   const selected = encryptionKey(envelope.keyVersion);
   const decipher = crypto.createDecipheriv(ALGORITHM, selected.key, Buffer.from(envelope.iv, 'base64'));
   decipher.setAuthTag(Buffer.from(envelope.authTag, 'base64'));
