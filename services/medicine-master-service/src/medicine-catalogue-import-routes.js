@@ -6,7 +6,7 @@ import { invalidateMedicineMasterVersionCache, MedicineMatchReference, mapMedici
 import { requireServiceScope } from './service-auth.js';
 import { config } from './config.js';
 import { scoreMedicineMatch } from './medicine-match-scoring.js';
-import { buildNameNgramIdf } from '@pharma/algorithm-kernel';
+import { buildNameNgramIdf, CharacterNgramCandidateIndex } from '@pharma/algorithm-kernel';
 export { scoreMedicineMatch };
 
 const router = express.Router();
@@ -83,36 +83,48 @@ async function reconcileCatalogueRecordsAgainstMaster(records) {
   const ids = [...new Set(records.flatMap(item => [item.medicineId, item.reconciliationMatch?.targetMedicineId].filter(Boolean)))];
   const canonicalKeys = [...new Set(records.map(item => item.canonicalKey).filter(Boolean))];
   const names = [...new Set(records.filter(item => item.safeNameMatch).map(item => item.brandName).filter(Boolean))];
+  const searchTerms = [...new Set(records.flatMap(item => CharacterNgramCandidateIndex.searchTerms(item.brandName, { limit: 1000 })))];
+  const candidateTerms = searchTerms.slice(0, 600);
+  const candidateTermScanTruncated = searchTerms.length > candidateTerms.length;
+  let indexState = null;
+  try { indexState = await MedicineNameNgramIndexState.findById('brandName-v1').lean(); } catch { /* Keep prefix fallback available if optional state storage is unavailable. */ }
+  const usePersistedIndex = process.env.MEDICINE_NGRAM_INDEX_ENABLED === 'true'
+    && indexState?.status === 'READY' && Boolean(indexState.backfillCompletedAt);
   const prefixes = [...new Set(records.map(item => key(item.brandName).slice(0, 2)).filter(value => value.length === 2))];
-  const scannedPrefixes = new Set(prefixes);
+  const [indexedRows, archivedIdentityRows] = await Promise.all([
+    usePersistedIndex && candidateTerms.length
+      ? MedicineNameNgramIndex.find({ grams: { $in: candidateTerms }, isArchived: false }, { medicineId: 1 }).limit(5001).lean()
+      : [],
+    ids.length ? MedicineMaster.find({ medicineId: { $in: ids }, isArchived: true }, { medicineId: 1 }).lean() : []
+  ]);
+  const indexedCandidateIds = [...new Set(indexedRows.map(row => row.medicineId))];
+  const indexCandidateLimitTruncated = indexedRows.length > 5000;
   const clauses = [
     ...(ids.length ? [{ medicineId: { $in: ids } }] : []),
     ...(canonicalKeys.length ? [{ canonicalKey: { $in: canonicalKeys } }] : []),
     ...(names.length ? [{ brandName: { $in: names } }] : []),
-    ...prefixes.map(prefix => ({ brandName: { $regex: '^' + prefix, $options: 'i' } }))
+    ...(usePersistedIndex
+      ? (indexedCandidateIds.length ? [{ medicineId: { $in: indexedCandidateIds } }] : [])
+      : prefixes.map(prefix => ({ brandName: { $regex: '^' + prefix, $options: 'i' } })))
   ];
-  const [candidates, archivedIdentityRows] = await Promise.all([
-    clauses.length ? loadCatalogueCandidates({ $or: clauses, isArchived: { $ne: true } }, {
-      _id: 1, medicineId: 1, canonicalKey: 1, brandName: 1, genericName: 1, composition: 1,
-      ingredients: 1, strength: 1, dosageForm: 1, manufacturer: 1
-    }) : [],
-    ids.length ? MedicineMaster.find({ medicineId: { $in: ids }, isArchived: true }, { medicineId: 1 }).lean() : []
-  ]);
+  const candidates = clauses.length ? await loadCatalogueCandidates({ $or: clauses, isArchived: { $ne: true } }, {
+    _id: 1, medicineId: 1, canonicalKey: 1, brandName: 1, genericName: 1, composition: 1,
+    ingredients: 1, strength: 1, dosageForm: 1, manufacturer: 1
+  }) : [];
   const archivedIds = new Set(archivedIdentityRows.map(item => item.medicineId));
-  const scanTruncated = false;
+  const scanTruncated = candidateTermScanTruncated || indexCandidateLimitTruncated;
   const activeCandidates = candidates;
   const byId = new Map(activeCandidates.map(item => [item.medicineId, item]));
-  const keyGroups = new Map(), nameGroups = new Map(), prefixGroups = new Map();
+  const keyGroups = new Map(), nameGroups = new Map();
   for (const candidate of activeCandidates) {
     if (candidate.canonicalKey) keyGroups.set(candidate.canonicalKey, [...(keyGroups.get(candidate.canonicalKey) || []), candidate]);
     const nameKey = key(candidate.brandName);
     nameGroups.set(nameKey, [...(nameGroups.get(nameKey) || []), candidate]);
-    const prefix = nameKey.slice(0, 2);
-    if (prefix.length === 2) prefixGroups.set(prefix, [...(prefixGroups.get(prefix) || []), candidate]);
   }
   const unique = groups => new Map([...groups.entries()].filter(([, group]) => group.length === 1).map(([identity, group]) => [identity, group[0]]));
   const byKey = unique(keyGroups), byName = unique(nameGroups);
   const nameNgramIdf = buildNameNgramIdf(activeCandidates);
+  const candidateIndex = new CharacterNgramCandidateIndex(activeCandidates);
   const plans = [];
   const blockers = [];
   for (const item of records) {
@@ -146,18 +158,20 @@ async function reconcileCatalogueRecordsAgainstMaster(records) {
     } else {
       let best = null;
       let tiedBest = false;
-      const prefix = key(item.brandName).slice(0, 2);
-      if (!scannedPrefixes.has(prefix)) {
-        plan = { decision: 'MANUAL_REVIEW', targetMedicineId: '', method: 'FUZZY_CANDIDATE_PREFIX_NOT_SCANNED', score: 0, warnings: ['CANDIDATE_SCAN_PREFIX_LIMIT_REACHED'] };
+      const retrieved = candidateIndex.search(item.brandName, { limit: 1000 });
+      if (!retrieved.matchedGrams) {
+        plan = { decision: 'MANUAL_REVIEW', targetMedicineId: '', method: 'FUZZY_CANDIDATE_NAME_TOO_SHORT', score: 0, warnings: ['INSUFFICIENT_NAME_FOR_FUZZY_RETRIEVAL'] };
+      } else if (retrieved.truncated) {
+        plan = { decision: 'MANUAL_REVIEW', targetMedicineId: '', method: 'FUZZY_CANDIDATE_RETRIEVAL_TRUNCATED', score: 0, warnings: ['CANDIDATE_RETRIEVAL_LIMIT_REACHED'] };
       } else {
-        for (const candidate of prefixGroups.get(prefix) || []) {
-          const scored = scoreMedicineMatch(item, candidate, { nameNgramIdf });
-          if (!best || scored.score > best.score) { best = { candidate, ...scored }; tiedBest = false; }
+        for (const entry of retrieved.candidates) {
+          const scored = scoreMedicineMatch(item, entry.record, { nameNgramIdf });
+          if (!best || scored.score > best.score) { best = { candidate: entry.record, ...scored }; tiedBest = false; }
           else if (scored.score === best.score) tiedBest = true;
         }
       }
       if (plan) {
-        // Candidate prefix was not scanned; keep this row out of automatic insert/update.
+        // Insufficient or truncated candidate retrieval is never safe evidence for auto-publish.
       } else if (best && tiedBest) {
         plan = { decision: 'MANUAL_REVIEW', targetMedicineId: '', method: 'AMBIGUOUS_TOP_MATCHES', score: best.score, warnings: ['MULTIPLE_CANDIDATES_SHARE_TOP_SCORE'] };
       } else if (best && best.decision === 'AUTO_MERGE') {
@@ -390,6 +404,41 @@ export function stopMedicineCatalogueImportWorker() {
 }
 
 const MedicineMaster = mongoose.models.MedicineMaster || mongoose.model('MedicineMaster', medicineMasterSchema);
+const medicineNameNgramIndexSchema = new mongoose.Schema({
+  medicineId: { type: String, required: true, unique: true },
+  grams: { type: [String], default: [] },
+  isArchived: { type: Boolean, default: false }
+}, { timestamps: true, collection: 'medicine_name_ngram_index' });
+medicineNameNgramIndexSchema.index({ grams: 1, isArchived: 1 });
+const MedicineNameNgramIndex = mongoose.models.MedicineNameNgramIndex
+  || mongoose.model('MedicineNameNgramIndex', medicineNameNgramIndexSchema);
+const medicineNameNgramIndexStateSchema = new mongoose.Schema({
+  _id: { type: String, required: true },
+  status: { type: String, enum: ['BUILDING', 'READY', 'FAILED', 'SYNCING'], default: 'BUILDING' },
+  indexedCount: { type: Number, default: 0 },
+  activeSyncs: { type: Number, default: 0 },
+  version: { type: Number, default: 1 },
+  backfillCompletedAt: { type: Date, default: null },
+  updatedAt: { type: Date, default: Date.now }
+}, { collection: 'medicine_name_ngram_index_state', versionKey: false });
+const MedicineNameNgramIndexState = mongoose.models.MedicineNameNgramIndexState
+  || mongoose.model('MedicineNameNgramIndexState', medicineNameNgramIndexStateSchema);
+async function syncMedicineNameNgramIndex(medicineIds) {
+  const ids = [...new Set(medicineIds.filter(Boolean))];
+  if (!ids.length) return;
+  const masters = await MedicineMaster.find({ medicineId: { $in: ids } }, { medicineId: 1, brandName: 1, isArchived: 1 }).lean();
+  if (!masters.length) return;
+  await MedicineNameNgramIndex.bulkWrite(masters.map(master => ({
+    updateOne: {
+      filter: { medicineId: master.medicineId },
+      update: { $set: {
+        grams: CharacterNgramCandidateIndex.searchTerms(master.brandName, { limit: 1000 }),
+        isArchived: Boolean(master.isArchived)
+      } },
+      upsert: true
+    }
+  })), { ordered: false });
+}
 const CatalogueImport = mongoose.models.MedicineCatalogueImport || mongoose.model('MedicineCatalogueImport', catalogueImportSchema);
 const catalogueImportChunkSchema = new mongoose.Schema({
   batchId: { type: String, required: true, index: true },
@@ -1361,7 +1410,37 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
           }
         };
       });
+      let syncNgramIndex = false;
+      if (process.env.MEDICINE_NGRAM_INDEX_ENABLED === 'true') {
+        const syncState = await MedicineNameNgramIndexState.findOneAndUpdate(
+          { _id: 'brandName-v1', backfillCompletedAt: { $ne: null }, status: { $in: ['READY', 'SYNCING'] } },
+          { $inc: { activeSyncs: 1 }, $set: { status: 'SYNCING', updatedAt: new Date() } },
+          { new: true }
+        ).lean();
+        syncNgramIndex = Boolean(syncState);
+      }
       await MedicineMaster.bulkWrite(operations, { ordered: false });
+      if (syncNgramIndex) {
+        const indexMedicineIds = chunk.map((item, itemIndex) => chunkPlans[itemIndex].targetMedicineId || item.medicineId);
+        try {
+          await syncMedicineNameNgramIndex(indexMedicineIds);
+        } catch (error) {
+          await MedicineNameNgramIndexState.updateOne(
+            { _id: 'brandName-v1' },
+            { $set: { status: 'FAILED', updatedAt: new Date() } }
+          );
+          throw error;
+        } finally {
+          await MedicineNameNgramIndexState.updateOne(
+            { _id: 'brandName-v1' },
+            { $inc: { activeSyncs: -1 }, $set: { updatedAt: new Date() } }
+          );
+          await MedicineNameNgramIndexState.updateOne(
+            { _id: 'brandName-v1', activeSyncs: 0, backfillCompletedAt: { $ne: null } },
+            { $set: { status: 'READY', updatedAt: new Date() } }
+          );
+        }
+      }
       // A master write invalidates every cached link immediately, including partial publishes.
       invalidateMedicineMasterVersionCache();
       publishedCount += chunk.length;
