@@ -239,8 +239,6 @@ export function createGatewayApp(gatewayConfig = config, healthMonitor = createH
           '/api/v1/admin/tenants', '/api/v1/admin/feature-health',
           '/api/v1/admin/service-logs', '/api/v1/admin/database-cleanup/notifications',
           '/api/v1/admin/infrastructure', '/api/v1/admin/payments',
-          '/api/v1/admin/medicine-requests', '/api/v1/admin/riders',
-          '/api/v1/admin/assignment', '/api/v1/admin/whatsapp',
           '/api/admin/whatsapp', '/api/admin/riders', '/api/admin/assignment',
           '/api/admin/payments', '/api/admin/medicine-requests'
         ];
