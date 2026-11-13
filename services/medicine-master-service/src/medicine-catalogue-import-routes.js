@@ -63,7 +63,7 @@ export async function collectCatalogueCandidates(fetchPage, batchSize = 1000) {
     results.push(...page);
     if (page.length < batchSize) break;
     const next = page[page.length - 1]?._id;
-    if (next == null || next === after) {
+    if (next == null || String(next) === String(after)) {
       throw new Error('Catalogue candidate pagination did not advance; refusing an incomplete reconciliation scan.');
     }
     after = next;
