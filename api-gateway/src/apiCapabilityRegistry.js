@@ -1,6 +1,9 @@
 import { isPermissionGranted } from '@pharma/service-kernel';
 
 const CAPABILITIES = [
+  // Super-admin infrastructure visibility and lifecycle operations.
+  ['GET', /^\/api\/v1\/admin\/infrastructure(?:\/|$)/, 'users.read'],
+  ['POST', /^\/api\/v1\/admin\/infrastructure(?:\/|$)/, 'users.manage'],
   ['POST', /^\/api\/private-images\/?$/, 'inventory.write'],
   ['GET', /^\/api\/private-images\/[^/]+\/content$/, 'inventory.read'],
   ['DELETE', /^\/api\/private-images\/[^/]+$/, 'inventory.write'],
