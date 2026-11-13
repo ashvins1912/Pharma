@@ -47,10 +47,13 @@ const metricPoints = (series, resourceId) => (Array.isArray(series) ? series : [
   .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 const latestPerSeries = (series, resourceId) => (Array.isArray(series) ? series : [])
   .filter(item => (item.labels || []).some(label => ['service', 'resource'].includes(label.field) && label.value === resourceId))
-  .map(item => (item.values || [])
-    .filter(point => Number.isFinite(Number(point.value)))
-    .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
-    .at(-1))
+  .map(item => {
+    const point = (item.values || [])
+      .filter(value => Number.isFinite(Number(value.value)))
+      .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+      .at(-1);
+    return point ? { ...point, unit: point.unit || item.unit || null } : null;
+  })
   .filter(Boolean);
 const latestMetric = (series, resourceId) => metricPoints(series, resourceId).at(-1) || null;
 const sumLatestMetricBytes = (series, resourceId) => {
