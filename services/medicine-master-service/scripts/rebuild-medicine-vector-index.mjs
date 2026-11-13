@@ -5,6 +5,7 @@ import {buildMedicineEmbeddingText,upsertMedicineVectorDocuments} from '../src/m
 const apply=process.argv.includes('--apply'),batchSize=Math.max(10,Math.min(100,Number(process.env.MEDICINE_VECTOR_BATCH_SIZE)||32)),stateId='medicine-master-vector-v1';
 async function main(){
  if(!config.mongoUri)throw new Error('Medicine Master MongoDB URI is required.');
+ if(!config.vectorInferenceUrl || !config.vectorInferenceToken)throw new Error('MEDICINE_VECTOR_INFERENCE_URL and MEDICINE_VECTOR_INFERENCE_TOKEN are required.');
  await mongoose.connect(config.mongoUri,{dbName:config.dbName,serverSelectionTimeoutMS:10000,maxPoolSize:2});
  try{
   await initializeMedicineCatalogueModels();const model=mongoose.models.MedicineMaster,db=mongoose.connection.db;
@@ -18,7 +19,13 @@ async function main(){
   const flush=async()=>{if(!batch.length)return;indexed+=await upsertMedicineVectorDocuments(batch);const last=batch.at(-1);
    await states.updateOne({_id:stateId},{$set:{indexedCount:indexed,lastUpdatedAt:last.updatedAt||new Date(),lastId:last._id,updatedAt:new Date()}});batch=[];};
   for await(const row of cursor){if(buildMedicineEmbeddingText(row))batch.push(row);if(batch.length>=batchSize)await flush();}
-  await flush();await states.updateOne({_id:stateId},{$set:{status:'READY',indexedCount:indexed,model:config.vectorModel,dimensions:config.vectorDimensions,completedAt:new Date(),updatedAt:new Date()}});
+  await flush();
+  // Never advertise READY until Atlas confirms the named Vector Search index is queryable.
+  const searchIndexes = await vectors.listSearchIndexes(config.vectorIndex).toArray();
+  if (!searchIndexes.some(index => index.name === config.vectorIndex && index.queryable === true)) {
+    throw new Error('Atlas Vector Search index is not queryable: ' + config.vectorIndex);
+  }
+  await states.updateOne({_id:stateId},{$set:{status:'READY',indexedCount:indexed,model:config.vectorModel,dimensions:config.vectorDimensions,completedAt:new Date(),updatedAt:new Date()}});
   process.stdout.write(JSON.stringify({mode:'applied',status:'READY',sourceRecords:total,indexedRecords:indexed},null,2)+'\n');
  }catch(error){if(apply)await mongoose.connection.db.collection(config.vectorStateCollection).updateOne({_id:stateId},{$set:{status:'FAILED',errorCode:error.code||error.name,updatedAt:new Date()}},{upsert:true}).catch(()=>{});throw error;}
  finally{await mongoose.disconnect();}
