@@ -2,6 +2,7 @@ import express from 'express';
 import { requireServiceScope } from './service-auth.js';
 import mongoose from 'mongoose';
 import { getOrResolveMedicineMatch, processMedicineMatchBatch } from './medicine-match-reference.js';
+import { searchMedicineMaster } from './medicine-vector-search.js';
 
 const router = express.Router();
 const medicineMaster = () => mongoose.models.MedicineMaster;
@@ -33,6 +34,16 @@ router.get('/match', async (req, res, next) => {
 router.post('/match/batch', async (req, res, next) => {
   try {
     const result = await processMedicineMatchBatch({ limit: req.body?.limit });
+    return res.json(result);
+  } catch (error) { return next(error); }
+});
+
+router.get('/search', async (req, res, next) => {
+  try {
+    const query = String(req.query.q || req.query.query || '').trim().slice(0, 120);
+    const limit = Math.max(1, Math.min(50, Number.parseInt(req.query.limit || '15', 10) || 15));
+    const result = await searchMedicineMaster({ query, limit });
+    res.set('Cache-Control', 'private, max-age=15, stale-while-revalidate=30');
     return res.json(result);
   } catch (error) { return next(error); }
 });
