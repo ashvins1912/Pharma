@@ -4,12 +4,13 @@ import { timingSafeEqual } from 'node:crypto';
 const app=express();
 app.disable('x-powered-by');
 app.use(express.json({limit:'256kb'}));
+app.use((_req,res,next)=>{res.set('Cache-Control','no-store');res.set('X-Content-Type-Options','nosniff');next();});
 const MODEL=process.env.MEDICINE_VECTOR_MODEL||'onnx-community/all-MiniLM-L6-v2-ONNX';
 const REVISION=process.env.MEDICINE_VECTOR_MODEL_REVISION||'main';
-const DIMENSIONS=Number(process.env.MEDICINE_VECTOR_DIMENSIONS||384);
+const DIMENSIONS=Math.max(1,Math.min(4096,Number.parseInt(process.env.MEDICINE_VECTOR_DIMENSIONS||'384',10)||384));
 const TOKEN=process.env.MEDICINE_EMBEDDING_TOKEN||'';
 let extractorPromise=null, ready=false, active=0;
-const MAX_CONCURRENT=Number(process.env.MEDICINE_EMBEDDING_MAX_CONCURRENT||2);
+const MAX_CONCURRENT=Math.max(1,Math.min(8,Number.parseInt(process.env.MEDICINE_EMBEDDING_MAX_CONCURRENT||'2',10)||2));
 const MAX_BATCH=32;
 function authorized(req){
  const supplied=String(req.get('authorization')||'').replace(/^Bearer\s+/i,'');
@@ -30,7 +31,6 @@ async function embed(texts){
  return rows.map(row=>row.map(Number));
 }
 app.disable('etag');
-app.use((_req,res,next)=>{res.set('Cache-Control','no-store');next();});
 app.get('/health',(_req,res)=>res.json({status:'ok',service:'medicine-embedding'}));
 app.get('/ready',(_req,res)=>res.status(ready?200:503).json({status:ready?'ready':'loading-model',model:MODEL,revision:REVISION,dimensions:DIMENSIONS}));
 app.post('/v1/embeddings',async(req,res)=>{
