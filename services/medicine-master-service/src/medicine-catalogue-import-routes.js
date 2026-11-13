@@ -1197,7 +1197,7 @@ router.get('/imports/:batchId', asyncHandler(async (req, res) => {
 router.post('/imports/:batchId/approve', asyncHandler(async (req, res) => {
   const batch = await CatalogueImport.findOne({ batchId: req.params.batchId, isHidden: { $ne: true } });
   if (!batch) return res.status(404).json({ message: 'Catalogue import batch was not found.' });
-  if (batch.status !== 'READY') return res.status(409).json({ message: 'Only a ready batch can be approved.' });
+  if (!['READY', 'PARTIALLY_PUBLISHED'].includes(batch.status)) return res.status(409).json({ message: 'Only a ready or partially published batch can be approved.' });
   if (Number(batch.report?.blockingConflicts || 0) > 0) return res.status(409).json({ message: 'This combined batch contains conflicting source identifiers with different strength, form or composition. Separate the conflicting source batches before approval.' });
   if (req.body?.confirmReconciliation !== true || req.body?.reportFingerprint !== batch.reportFingerprint) return res.status(400).json({ message: 'Review confirmation does not match this reconciliation report. Refresh the batch and confirm the current report.' });
   batch.approvedBy = req.service.userId || req.service.name;
@@ -1222,10 +1222,32 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
     const recordChunks = stagedChunks.length ? stagedChunks.map(item => item.records) : (batch.records?.length ? [batch.records] : []);
     const records = recordChunks.flat();
     const freshReconciliation = await reconcileCatalogueRecordsAgainstMaster(records);
-    if (freshReconciliation.blockers.length) {
+    const blockedMedicineIds = new Set(freshReconciliation.blockers.map(item => item.medicineId).filter(Boolean));
+    const blockedTargets = new Set(freshReconciliation.blockers
+      .filter(item => item.reason === 'MULTIPLE_INCOMING_RECORDS_TARGET_SAME_MEDICINE')
+      .map(item => item.targetMedicineId).filter(Boolean));
+    const hasUnscopedBlocker = freshReconciliation.blockers.some(item =>
+      !item.medicineId && item.reason !== 'MULTIPLE_INCOMING_RECORDS_TARGET_SAME_MEDICINE'
+    );
+    const publishEntries = records.map((record, index) => ({ record, plan: freshReconciliation.plans[index] }))
+      .filter(({ record, plan }) => {
+        if (!['AUTO_MERGE', 'NO_MATCH'].includes(plan.decision)) return false;
+        if (blockedMedicineIds.has(record.medicineId)) return false;
+        if (plan.decision === 'AUTO_MERGE' && blockedTargets.has(plan.targetMedicineId)) return false;
+        if (plan.decision === 'NO_MATCH' && (freshReconciliation.scanTruncated || hasUnscopedBlocker)) return false;
+        return true;
+      });
+    const skippedCount = records.length - publishEntries.length;
+    const publishSummary = {
+      ...freshReconciliation.summary,
+      publishableRecords: publishEntries.length,
+      skippedRecords: skippedCount,
+      publishedRecords: 0
+    };
+    if (!publishEntries.length) {
       const refreshedReport = {
         ...(batch.report || {}),
-        publishReconciliation: freshReconciliation.summary,
+        publishReconciliation: publishSummary,
         publishBlockedAt: new Date().toISOString()
       };
       batch.report = refreshedReport;
@@ -1233,7 +1255,7 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
       batch.approvedAt = null;
       batch.approvedBy = '';
       batch.status = 'READY';
-      batch.errorMessage = 'Publishing blocked: live catalogue reconciliation found stale, ambiguous or conflicting records. Review the updated report and approve again after resolving them.';
+      batch.errorMessage = 'Publishing blocked: no records passed live reconciliation. Resolve the conflicts and approve the updated report.';
       await batch.save();
       return res.status(409).json({
         message: batch.errorMessage,
@@ -1241,15 +1263,14 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
         status: batch.status,
         report: refreshedReport,
         reportFingerprint: batch.reportFingerprint,
-        reconciliation: freshReconciliation.summary
+        reconciliation: publishSummary
       });
     }
-    const planByIndex = freshReconciliation.plans;
-    let recordOffset = 0;
-    for (const recordChunk of recordChunks) for (let offset = 0; offset < recordChunk.length; offset += 250) {
-      const chunk = recordChunk.slice(offset, offset + 250);
-      const chunkPlans = planByIndex.slice(recordOffset, recordOffset + chunk.length);
-      recordOffset += chunk.length;
+    const planByIndex = publishEntries;
+    for (let offset = 0; offset < planByIndex.length; offset += 250) {
+      const entries = planByIndex.slice(offset, offset + 250);
+      const chunk = entries.map(entry => entry.record);
+      const chunkPlans = entries.map(entry => entry.plan);
       const ids = [...new Set(chunkPlans.map(plan => plan.targetMedicineId).filter(Boolean))];
       const existing = ids.length ? await MedicineMaster.find({ medicineId: { $in: ids }, isArchived: { $ne: true } }).lean() : [];
       const byId = new Map(existing.map(item => [item.medicineId, item]));
@@ -1305,8 +1326,32 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
       publishedCount += chunk.length;
       await CatalogueImport.updateOne({ _id: batch._id }, { $set: { publishedCount } });
     }
-    batch.status = 'PUBLISHED';
     batch.publishedCount = publishedCount;
+    if (skippedCount > 0) {
+      const refreshedReport = {
+        ...(batch.report || {}),
+        publishReconciliation: { ...publishSummary, publishedRecords: publishedCount },
+        publishBlockedAt: new Date().toISOString()
+      };
+      batch.report = refreshedReport;
+      batch.reportFingerprint = hash(JSON.stringify(refreshedReport));
+      batch.approvedAt = null;
+      batch.approvedBy = '';
+      batch.status = 'PARTIALLY_PUBLISHED';
+      batch.errorMessage = `Published ${publishedCount} conflict-free records; ${skippedCount} records remain blocked for manual review or reconciliation.`;
+      await batch.save();
+      return res.json({
+        batchId: batch.batchId,
+        status: batch.status,
+        publishedCount,
+        skippedCount,
+        message: batch.errorMessage,
+        report: batch.report,
+        reportFingerprint: batch.reportFingerprint
+      });
+    }
+    batch.status = 'PUBLISHED';
+    batch.errorMessage = '';
     await batch.save();
     return res.json({ batchId: batch.batchId, status: batch.status, publishedCount, report: batch.report });
   } catch (error) {
