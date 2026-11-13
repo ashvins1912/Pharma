@@ -52,7 +52,7 @@ const cleanupEstimate = async (model, filter) => {
 async function getDatabaseCleanupPlan() {
   const dates = cleanupCutoffs();
   const stagedBatches = await StagedImportBatch.find({
-    status: { $in: ['PUBLISHED', 'REVERTED'] }, completedAt: { $lt: dates.staged }
+    status: { $in: ['PUBLISHED', 'REVERTED'] }, updatedAt: { $lt: dates.staged }
   }).select('batchId').lean();
   const stagedBatchIds = stagedBatches.map(item => item.batchId);
   const terminalBatches = await ImportBatch.find({
