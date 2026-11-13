@@ -1409,4 +1409,71 @@ export async function initializeMedicineCatalogueModels() {
   await Promise.all([MedicineMaster.init(), CatalogueImport.init(), CatalogueImportChunk.init(), CatalogueImportJob.init()]);
   startMedicineCatalogueImportWorker();
 }
+
+const catalogueCleanupPlan = async () => {
+  const chunkCutoff = new Date(Date.now() - 60 * 60 * 1000);
+  const failedCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const publishedBatches = await CatalogueImport.find({ status: 'PUBLISHED', updatedAt: { $lt: chunkCutoff } }).select('batchId').lean();
+  const publishedIds = publishedBatches.map(batch => batch.batchId);
+  const readyJobs = await CatalogueImportJob.find({ status: 'READY', completedAt: { $lt: chunkCutoff }, batchId: { $in: publishedIds } }).select('jobId fileId fileSize').lean();
+  const failedJobs = await CatalogueImportJob.find({ status: 'FAILED', completedAt: { $lt: failedCutoff } }).select('jobId fileId fileSize').lean();
+  const jobs = [...readyJobs, ...failedJobs];
+  const jobFileIds = jobs.map(job => job.fileId).filter(Boolean);
+  const [chunkStats, jobBytes] = await Promise.all([
+    CatalogueImportChunk.aggregate([
+      { $match: { batchId: { $in: publishedIds } } },
+      { $group: { _id: null, count: { $sum: 1 }, bytes: { $sum: { $bsonSize: '$ROOT' } } } }
+    ]),
+    Promise.resolve(jobs.reduce((sum, job) => sum + (Number(job.fileSize) || 0), 0))
+  ]);
+  return {
+    retention: { publishedImportHours: 1, failedJobHours: 24 },
+    protected: { medicineMasterCatalogue: 'Never deleted', importBatchReports: 'Retained', READY batches awaiting publish: 'Retained' },
+    collections: [
+      { name: 'medicinecatalogueimportchunks', count: chunkStats[0]?.count || 0, estimatedBytes: chunkStats[0]?.bytes || 0, rule: 'Chunks belonging only to PUBLISHED batches older than 1 hour' },
+      { name: 'medicinecatalogueimportjobs', count: jobs.length, estimatedBytes: jobBytes, rule: 'READY jobs for published batches older than 1 hour and FAILED jobs older than 24 hours' },
+      { name: 'medicineCatalogueUploads.files', count: jobs.length, estimatedBytes: jobBytes, rule: 'GridFS uploads referenced by eligible terminal jobs' }
+    ],
+    eligibleJobIds: jobs.map(job => job.jobId),
+    eligibleFileIds: jobFileIds.map(id => String(id))
+  };
+};
+router.get('/admin/database-cleanup/status', asyncHandler(async (_req, res) => {
+  const { eligibleJobIds, eligibleFileIds, ...summary } = await catalogueCleanupPlan();
+  return res.json({ success: true, service: 'medicine-master-service', ...summary });
+}));
+router.post('/admin/database-cleanup/preview', asyncHandler(async (_req, res) => {
+  const { eligibleJobIds, eligibleFileIds, ...summary } = await catalogueCleanupPlan();
+  return res.json({ success: true, service: 'medicine-master-service', ...summary });
+}));
+router.post('/admin/database-cleanup/execute', asyncHandler(async (req, res) => {
+  if (req.body?.confirmation !== 'DELETE ELIGIBLE MEDICINE IMPORT DATA') {
+    return res.status(400).json({ success: false, code: 'CONFIRMATION_REQUIRED', message: 'Type the exact confirmation phrase to execute cleanup.' });
+  }
+  const plan = await catalogueCleanupPlan();
+  const results = [];
+  try {
+    const chunks = await CatalogueImportChunk.deleteMany({ batchId: { $in: (await CatalogueImport.find({ status: 'PUBLISHED', updatedAt: { $lt: new Date(Date.now() - 3600000) } }).distinct('batchId')) } });
+    results.push({ collection: 'medicinecatalogueimportchunks', status: 'COMPLETED', deletedCount: chunks.deletedCount || 0 });
+  } catch (error) {
+    results.push({ collection: 'medicinecatalogueimportchunks', status: 'FAILED', deletedCount: 0, error: error.message, code: error.code || null });
+  }
+  for (const jobId of plan.eligibleJobIds) {
+    try {
+      const job = await CatalogueImportJob.findOne({ jobId, status: { $in: ['READY', 'FAILED'] } }).lean();
+      if (!job) continue;
+      if (job.fileId) {
+        try { await getCatalogueImportBucket().delete(job.fileId); }
+        catch (error) { if (error.code !== 'ENOENT') throw error; }
+      }
+      await CatalogueImportJob.deleteOne({ _id: job._id });
+      results.push({ collection: 'medicinecatalogueimportjobs', status: 'COMPLETED', deletedCount: 1, jobId });
+    } catch (error) {
+      results.push({ collection: 'medicinecatalogueimportjobs', status: 'FAILED', deletedCount: 0, jobId, error: error.message, code: error.code || null });
+    }
+  }
+  const failed = results.some(item => item.status === 'FAILED');
+  return res.status(failed ? 207 : 200).json({ success: !failed, service: 'medicine-master-service', executedAt: new Date(), actor: req.service?.userId || req.service?.name || 'super-admin', results });
+}));
+
 export default router;
