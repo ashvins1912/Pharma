@@ -391,6 +391,7 @@ async function processNextCatalogueImportJob() {
   const resources = getCatalogueProcessingResourceSnapshot();
   const protection = evaluateCatalogueProcessingGuard({
     heapUsedPercent: resources.process.heapUsedPercent,
+    rssUsedPercent: resources.process.rssUsedPercent,
     cpuLoadPercent: resources.host.cpuLoadPercent
   });
   if (!protection.allowed) return;
