@@ -418,6 +418,8 @@ async function processNextCatalogueImportJob() {
   try {
     workerSlotId = await acquireCatalogueWorkerSlot();
     if (workerSlotId === null) return;
+    const latestControl = await getCatalogueOperatorControl();
+    if (latestControl.operatorPaused || process.env.MEDICINE_CATALOGUE_PROCESSING_ENABLED === 'false') return;
     job = await CatalogueImportJob.findOneAndUpdate({
       $or: [{ status: 'QUEUED' }, { status: 'PROCESSING', leaseExpiresAt: { $lt: new Date() } }]
     }, { $set: { status: 'PROCESSING', stage: 'ANALYZING', leaseExpiresAt: new Date(Date.now() + 15 * 60 * 1000), startedAt: new Date(), errorMessage: '' }, $inc: { attempts: 1 } }, { sort: { createdAt: 1 }, new: true });
@@ -820,9 +822,13 @@ router.post('/imports/processing-guard/control', asyncHandler(async (req, res) =
 }));
 
 const enforceCatalogueQueueCapacity = asyncHandler(async (_req, res, next) => {
-  const queuedJobs = await CatalogueImportJob.countDocuments({ status: 'QUEUED' });
+  const [queuedJobs, operatorControl] = await Promise.all([
+    CatalogueImportJob.countDocuments({ status: 'QUEUED' }),
+    getCatalogueOperatorControl()
+  ]);
   const resources = getCatalogueProcessingResourceSnapshot();
   const protection = evaluateCatalogueProcessingGuard({
+    enabled: process.env.MEDICINE_CATALOGUE_PROCESSING_ENABLED !== 'false' && !operatorControl.operatorPaused,
     heapUsedPercent: resources.process.heapUsedPercent,
     rssUsedPercent: resources.process.rssUsedPercent,
     cpuLoadPercent: resources.host.cpuLoadPercent,
