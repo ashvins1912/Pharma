@@ -13,6 +13,8 @@
   "type": "module",
   "scripts": {
     "dev": "node scripts/dev.js",
+    "start:all": "node scripts/service-runner.js start",
+    "start": "npm run start:all",
     "dev:split": "START_ADMIN_SERVICE=true node scripts/dev.js",
     "dev:frontend": "npm --workspace frontend run dev",
     "dev:gateway": "npm --workspace api-gateway run dev",
