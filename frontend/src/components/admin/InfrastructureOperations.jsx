@@ -44,6 +44,12 @@ export default function InfrastructureOperations({ onOpenDatabaseCleanup }) {
   const databases = snapshot?.databases || [];
   const resources = providers.flatMap(provider => provider.resources || []);
   const mongo = databases.find(item => item.id === 'mongodb');
+  const sumReported = key => {
+    const values = resources.map(resource => resource.usage?.[key]).filter(value => value != null && Number.isFinite(Number(value)));
+    return values.length ? values.reduce((sum, value) => sum + Number(value), 0) : null;
+  };
+  const totalMemoryBytes = sumReported('memoryBytes');
+  const totalOutboundBytes = sumReported('outboundBytes');
 
   return <section className="space-y-5">
     <header className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
@@ -55,6 +61,13 @@ export default function InfrastructureOperations({ onOpenDatabaseCleanup }) {
     </header>
     {error && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">{error}</p>}
     {notice && <p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</p>}
+    <section className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
+      <div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="font-black">Project resource totals</h3><p className="text-xs text-slate-500">Sum of currently reported cloud resource samples; services without telemetry are excluded.</p></div><span className="text-xs text-slate-500">{resources.length} cloud resources</span></div>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-800"><p className="text-xs text-slate-500">Combined memory in use</p><p className="mt-1 text-lg font-black">{bytes(totalMemoryBytes)}</p></div>
+        <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-800"><p className="text-xs text-slate-500">Outbound bandwidth · 24h</p><p className="mt-1 text-lg font-black">{bytes(totalOutboundBytes)}</p></div>
+      </div>
+    </section>
     <section className="space-y-3"><div><h3 className="font-black">Cloud providers</h3><p className="text-xs text-slate-500">Only configured providers are connected. Render is the initial lifecycle adapter; other clouds plug into the same normalized resource contract.</p></div>
       {providers.map(provider => <article key={provider.id} className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
         <div className="flex flex-wrap items-center justify-between gap-2"><div className="font-extrabold">{provider.name}</div><span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold dark:bg-slate-800">{provider.status}</span></div>
