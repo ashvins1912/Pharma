@@ -33,30 +33,65 @@ const normaliseRenderService = item => {
     usage: { cpu: null, memoryBytes: null, memoryLimitBytes: null, outboundBytes: null, diskBytes: null, source: 'Metrics API is not included in Render service-list responses; connect an OpenTelemetry/Prometheus metrics adapter to populate usage.' }
   };
 };
-async function loadNormalizedMetrics() {
-  const endpoint = process.env.INFRASTRUCTURE_METRICS_ENDPOINT;
-  if (!endpoint) return [];
-  const response = await fetch(endpoint, {
-    headers: process.env.INFRASTRUCTURE_METRICS_TOKEN
-      ? { Authorization: `Bearer ${process.env.INFRASTRUCTURE_METRICS_TOKEN}`, Accept: 'application/json' }
-      : { Accept: 'application/json' },
-    signal: AbortSignal.timeout(8000)
-  });
-  if (!response.ok) throw new Error(`Metrics adapter returned HTTP ${response.status}`);
-  const payload = await response.json();
-  return Array.isArray(payload?.resources) ? payload.resources : [];
+const unitBytes = (value, unit) => {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  const u = String(unit || '').trim().toLowerCase();
+  const factors = { b: 1, byte: 1, bytes: 1, kb: 1024, kib: 1024, mb: 1024 ** 2, mib: 1024 ** 2, gb: 1024 ** 3, gib: 1024 ** 3, tb: 1024 ** 4, tib: 1024 ** 4 };
+  return factors[u] ? n * factors[u] : null;
+};
+const latestMetric = (series, resourceId) => {
+  const matching = (Array.isArray(series) ? series : []).filter(item =>
+    (item.labels || []).some(label => ['service', 'resource'].includes(label.field) && label.value === resourceId)
+  );
+  const points = matching.flatMap(item => (item.values || []).map(point => ({ ...point, unit: point.unit || item.unit || null })))
+    .filter(point => Number.isFinite(Number(point.value)))
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  return points[0] || null;
+};
+async function renderMetric(metric, resourceIds, startTime, endTime) {
+  if (!resourceIds.length) return [];
+  const params = new URLSearchParams({ startTime, endTime, resolutionSeconds: '60' });
+  resourceIds.forEach(id => params.append('resource', id));
+  return renderRequest(`/metrics/${metric}?${params.toString()}`);
 }
 async function listRenderServices() {
   if (!renderConfigured()) return [];
   const result = await renderRequest('/services?limit=100');
-  let samples = [];
-  try { samples = await loadNormalizedMetrics(); } catch (error) { console.warn('[Infrastructure] Metrics adapter unavailable:', error.message); }
   const entries = Array.isArray(result) ? result : (result?.services || result?.items || []);
-  const byId = new Map(samples.filter(sample => sample?.provider === 'render' && sample?.resourceId).map(sample => [sample.resourceId, sample]));
-  return entries.map(normaliseRenderService).filter(item => item.id).map(item => {
-    const sample = byId.get(item.id);
-    if (!sample) return item;
-    return { ...item, usage: { cpu: sample.cpu ?? null, memoryBytes: sample.memoryBytes ?? null, memoryLimitBytes: sample.memoryLimitBytes ?? null, outboundBytes: sample.outboundBytes ?? null, diskBytes: sample.diskBytes ?? null, observedAt: sample.observedAt || null, source: sample.source || 'Configured normalized metrics adapter' } };
+  const resources = entries.map(normaliseRenderService).filter(item => item.id);
+  const ids = resources.map(item => item.id);
+  const end = new Date();
+  const start = new Date(end.getTime() - 60 * 60 * 1000);
+  const [cpuResult, memoryResult, bandwidthResult] = await Promise.allSettled([
+    renderMetric('cpu', ids, start.toISOString(), end.toISOString()),
+    renderMetric('memory', ids, start.toISOString(), end.toISOString()),
+    renderMetric('bandwidth', ids, start.toISOString(), end.toISOString())
+  ]);
+  const metricStatus = { cpu: cpuResult.status, memory: memoryResult.status, bandwidth: bandwidthResult.status };
+  return resources.map(resource => {
+    const cpu = cpuResult.status === 'fulfilled' ? latestMetric(cpuResult.value, resource.id) : null;
+    const memory = memoryResult.status === 'fulfilled' ? latestMetric(memoryResult.value, resource.id) : null;
+    const bandwidth = bandwidthResult.status === 'fulfilled' ? latestMetric(bandwidthResult.value, resource.id) : null;
+    const memoryBytes = memory ? unitBytes(memory.value, memory.unit) : null;
+    const outboundBytes = bandwidth ? unitBytes(bandwidth.value, bandwidth.unit) : null;
+    return {
+      ...resource,
+      usage: {
+        cpu: cpu ? Number(cpu.value) : null,
+        cpuUnit: cpu?.unit || null,
+        memoryBytes,
+        memoryUnit: memory?.unit || null,
+        memoryLimitBytes: null,
+        outboundBytes,
+        bandwidthUnit: bandwidth?.unit || null,
+        bandwidthWindow: bandwidth ? 'Latest Render API data point (hourly metric)' : null,
+        diskBytes: null,
+        observedAt: [cpu?.timestamp, memory?.timestamp, bandwidth?.timestamp].filter(Boolean).sort().at(-1) || null,
+        metricsStatus: metricStatus,
+        source: 'Render native Metrics API (CPU, memory and outbound bandwidth)'
+      }
+    };
   });
 }
 async function getMongoUsage() {
@@ -104,7 +139,7 @@ router.get('/status', async (_req, res) => {
       error: metricsError,
       note: 'Memory, CPU and network/bandwidth values are shown only when a metrics adapter supplies normalized samples. Never infer zero usage from missing telemetry.'
     },
-    supportedAdapters: ['render', 'aws', 'azure', 'gcp', 'mongodb', 'atlas']
+    providerAdapterContract: ['render', 'aws', 'azure', 'gcp'],\n    databaseAdapters: ['mongodb', 'atlas']
   });
 });
 router.post('/resources/:resourceId/:action', async (req, res) => {
