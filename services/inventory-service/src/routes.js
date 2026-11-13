@@ -36,9 +36,11 @@ const router = express.Router();
 const asyncHandler = handler => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
 const CLEANUP_RETENTION_DAYS = 30;
 const STAGED_RETENTION_DAYS = 7;
+const RESERVATION_RETENTION_DAYS = 180;
 const cleanupCutoffs = () => ({
   staged: new Date(Date.now() - STAGED_RETENTION_DAYS * 86400000),
-  history: new Date(Date.now() - CLEANUP_RETENTION_DAYS * 86400000)
+  history: new Date(Date.now() - CLEANUP_RETENTION_DAYS * 86400000),
+  reservations: new Date(Date.now() - RESERVATION_RETENTION_DAYS * 86400000)
 });
 const cleanupEstimate = async (model, filter) => {
   const [count, sizes] = await Promise.all([
@@ -61,20 +63,20 @@ async function getDatabaseCleanupPlan() {
     status: { $in: ['COMPLETED', 'COMPLETED_WITH_ERRORS', 'FAILED'] }, completedAt: { $lt: dates.history }
   }).select('_id').lean();
   const terminalJobIds = terminalJobs.map(item => item._id);
-  const [stagedRows, snapshots, failures, releasedReservations, activeReservations] = await Promise.all([
+  const [stagedRows, snapshots, failures, reservations, activeReservations] = await Promise.all([
     cleanupEstimate(StagedImportRow, { batchId: { $in: stagedBatchIds } }),
     cleanupEstimate(ImportBatchSnapshot, { batchId: { $in: terminalBatchIds } }),
     cleanupEstimate(ImportFailure, { jobId: { $in: terminalJobIds } }),
-    Reservation.countDocuments({ status: { $in: ['RELEASED', 'DEDUCTED'] }, updatedAt: { $lt: dates.history } }),
+    cleanupEstimate(Reservation, { status: { $in: ['RELEASED', 'DEDUCTED'] }, updatedAt: { $lt: dates.reservations } }),
     Reservation.countDocuments({ status: 'RESERVED' })
   ]);
   return {
-    retention: { stagedRowsDays: STAGED_RETENTION_DAYS, importHistoryDays: CLEANUP_RETENTION_DAYS },
+    retention: { stagedRowsDays: STAGED_RETENTION_DAYS, importHistoryDays: CLEANUP_RETENTION_DAYS, terminalReservationsDays: RESERVATION_RETENTION_DAYS },
     collections: [
       { name: 'stagedimportrows', ...stagedRows, rule: 'Rows belonging only to PUBLISHED/REVERTED batches completed more than 7 days ago' },
       { name: 'inventoryimportbatchsnapshots', ...snapshots, rule: 'Snapshots belonging to terminal import batches older than 30 days' },
       { name: 'inventoryimportfailures', ...failures, rule: 'Failure diagnostics belonging to terminal import jobs older than 30 days' },
-      { name: 'inventoryreservations', count: releasedReservations, estimatedBytes: null, activeCount: activeReservations, deletedCount: 0, rule: 'Never deleted by cleanup; reservation/order reconciliation data is retained' }
+      { name: 'inventoryreservations', ...reservations, activeCount: activeReservations, rule: 'Only RELEASED/DEDUCTED reservations older than 180 days; RESERVED records are never deleted' }
     ]
   };
 }
@@ -97,7 +99,8 @@ router.post('/admin/database-cleanup/execute', requireServiceScope('platform.dat
   const operations = [
     ['stagedimportrows', () => StagedImportRow.deleteMany({ batchId: { $in: stagedBatches } })],
     ['inventoryimportbatchsnapshots', () => ImportBatchSnapshot.deleteMany({ batchId: { $in: terminalBatches } })],
-    ['inventoryimportfailures', () => ImportFailure.deleteMany({ jobId: { $in: terminalJobs } })]
+    ['inventoryimportfailures', () => ImportFailure.deleteMany({ jobId: { $in: terminalJobs } })],
+    ['inventoryreservations', () => Reservation.deleteMany({ status: { $in: ['RELEASED', 'DEDUCTED'] }, updatedAt: { $lt: dates.reservations } })]
   ];
   const results = [];
   for (const [collection, run] of operations) {
@@ -109,7 +112,7 @@ router.post('/admin/database-cleanup/execute', requireServiceScope('platform.dat
     }
   }
   const failed = results.some(item => item.status === 'FAILED');
-  return res.status(failed ? 207 : 200).json({ success: !failed, service: 'inventory-service', executedAt: new Date(), actor: req.service?.userId || req.service?.name || 'super-admin', results, reservationsDeleted: 0 });
+  return res.status(failed ? 207 : 200).json({ success: !failed, service: 'inventory-service', executedAt: new Date(), actor: req.service?.userId || req.service?.name || 'super-admin', results, reservationsDeleted: results.find(item => item.collection === 'inventoryreservations')?.deletedCount || 0 });
 }));
 
 const getInventoryScope = (req, fallback = {}) => {
