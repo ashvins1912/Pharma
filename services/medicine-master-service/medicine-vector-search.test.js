@@ -40,7 +40,7 @@ test('query embeddings use the isolated authenticated inference endpoint',async(
  const oldUrl=config.vectorInferenceUrl,oldToken=config.vectorInferenceToken,oldFetch=globalThis.fetch;
  config.vectorInferenceUrl='https://embedding.example';config.vectorInferenceToken='unit-test-token';
  let request;
- globalThis.fetch=async(url,options)=>{request={url:String(url),options};return {ok:true,json:async()=>({model:config.vectorModel,dimensions:config.vectorDimensions,embeddings:[new Array(config.vectorDimensions).fill(0.1)]})};};
+ globalThis.fetch=async(url,options)=>{request={url:String(url),options};return {ok:true,json:async()=>({model:config.vectorModel,revision:config.vectorModelRevision,dimensions:config.vectorDimensions,embeddings:[new Array(config.vectorDimensions).fill(0.1)]})};};
  try{
   const rows=await embedMedicineTexts(['paracetamol 650']);
   assert.equal(rows.length,1);assert.equal(rows[0].length,config.vectorDimensions);
@@ -53,7 +53,7 @@ test('query embeddings use the isolated authenticated inference endpoint',async(
 test('isolated inference model/dimension mismatch is rejected',async()=>{
  const oldUrl=config.vectorInferenceUrl,oldToken=config.vectorInferenceToken,oldFetch=globalThis.fetch;
  config.vectorInferenceUrl='https://embedding.example';config.vectorInferenceToken='unit-test-token';
- globalThis.fetch=async()=>({ok:true,json:async()=>({model:'different-model',dimensions:config.vectorDimensions,embeddings:[new Array(config.vectorDimensions).fill(0)]})});
+ globalThis.fetch=async()=>({ok:true,json:async()=>({model:'different-model',revision:config.vectorModelRevision,dimensions:config.vectorDimensions,embeddings:[new Array(config.vectorDimensions).fill(0)]})});
  try{await assert.rejects(()=>embedMedicineTexts(['query']),/incompatible model or vector shape/);}
  finally{config.vectorInferenceUrl=oldUrl;config.vectorInferenceToken=oldToken;globalThis.fetch=oldFetch;}
 });
