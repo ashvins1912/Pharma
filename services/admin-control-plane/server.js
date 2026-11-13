@@ -10,7 +10,8 @@ const [
   expressModule, cookieParserModule, mongooseModule,
   envModule, dbModule, contextModule, corsModule, headersModule,
   tenantsModule, featureHealthModule, serviceLogsModule, cleanupModule,
-  infrastructureModule, infrastructureSecurityModule
+  infrastructureModule, infrastructureSecurityModule,
+  whatsappModule, riderAdminModule, assignmentAdminModule, paymentReminderModule, medicineRequestModule
 ] = await Promise.all([
   import('express'), import('cookie-parser'), import('mongoose'),
   import('../../backend/config/env.js'), import('../../backend/config/db.js'),
@@ -21,7 +22,12 @@ const [
   import('../../backend/gateway/routes/adminServiceLogs.js'),
   import('../../backend/gateway/routes/adminDatabaseCleanup.js'),
   import('../../backend/gateway/routes/adminInfrastructure.js'),
-  import('../../backend/gateway/routes/adminInfrastructureSecurity.js')
+  import('../../backend/gateway/routes/adminInfrastructureSecurity.js'),
+  import('../../backend/routes/whatsappRoutes.js'),
+  import('../../backend/modules/delivery/routes/riderRoutes.js'),
+  import('../../backend/modules/delivery/routes/assignmentRoutes.js'),
+  import('../../backend/routes/adminPaymentReminderRoutes.js'),
+  import('../../backend/routes/medicineRequestRoutes.js')
 ]);
 
 const express = expressModule.default;
@@ -75,6 +81,17 @@ app.use('/api/v1/admin/tenants', tenantsModule.default);
 app.use('/api/v1/admin/feature-health', featureHealthModule.default);
 app.use('/api/v1/admin/service-logs', serviceLogsModule.default);
 app.use('/api/v1/admin/database-cleanup/notifications', cleanupModule.default);
+app.use('/api/v1/admin/payments', paymentReminderModule.default);
+app.use('/api/v1/admin/medicine-requests', medicineRequestModule.default);
+app.use('/api/v1/admin/riders', riderAdminModule.default);
+app.use('/api/v1/admin/assignment', assignmentAdminModule.default);
+app.use('/api/v1/admin/whatsapp', whatsappModule.default);
+// Existing browser clients still call these legacy paths; preserve them during migration.
+app.use('/api/admin/whatsapp', whatsappModule.default);
+app.use('/api/admin/riders', riderAdminModule.default);
+app.use('/api/admin/assignment', assignmentAdminModule.default);
+app.use('/api/admin/payments', paymentReminderModule.default);
+app.use('/api/admin/medicine-requests', medicineRequestModule.default);
 
 app.use((error, _req, res, _next) => {
   const status = Number(error.status || error.statusCode || 500);
