@@ -145,7 +145,11 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
     if (!window.confirm('Publish this approved combined batch to the shared medicine master catalogue?')) return;
     setBatchActionBusy(true);
     try {
-      await apiClient.post(`/api/v1/inventory/catalogue/imports/${encodeURIComponent(reviewBatch.batchId)}/publish`, {});
+      // Publishing thousands of catalogue records can exceed apiClient's 10s default timeout.
+      // Keep this request open; the backend owns the publish lifecycle and persists progress.
+      await apiClient.post(`/api/v1/inventory/catalogue/imports/${encodeURIComponent(reviewBatch.batchId)}/publish`, {}, {
+        timeout: 0
+      });
       await refreshReviewedBatch();
       addToast('Combined medicine batch published.', 'success');
     } catch (error) {
