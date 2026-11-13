@@ -25,7 +25,7 @@ CPU and memory display the latest available sample. Bandwidth sums available hou
 
 ## AWS, Azure and GCP control-plane adapter
 
-For multi-cloud support, deploy a small private adapter service that owns the AWS/Azure/GCP SDK clients and credentials. Configure its base URL and bearer token using the two environment variables above. The app backend calls only this fixed server-side URL; cloud credentials are never sent to the browser.
+For multi-cloud support, deploy a small private adapter service that owns the AWS/Azure/GCP SDK clients and credentials. Configure its base URL and bearer token using the two environment variables above. Production requires HTTPS and a bearer token. The app backend calls only this fixed server-side URL; cloud credentials are never sent to the browser.
 
 The adapter must implement:
 
