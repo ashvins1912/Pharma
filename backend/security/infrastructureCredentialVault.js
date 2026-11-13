@@ -46,24 +46,38 @@ auditSchema.index({ occurredAt: -1 });
 const Integration = mongoose.models.InfrastructureIntegration || mongoose.model('InfrastructureIntegration', integrationSchema, COLLECTION);
 const Audit = mongoose.models.InfrastructureSecurityAudit || mongoose.model('InfrastructureSecurityAudit', auditSchema, AUDIT_COLLECTION);
 
-function encryptionKey() {
+function encryptionKey(version = null) {
+  const rawRing = String(process.env.INFRASTRUCTURE_CREDENTIAL_ENCRYPTION_KEYS || '').trim();
+  if (rawRing) {
+    let ring;
+    try { ring = JSON.parse(rawRing); } catch { throw new Error('Credential key ring must be valid JSON.'); }
+    const activeVersion = String(ring.activeVersion || '');
+    const selectedVersion = version || activeVersion;
+    const encoded = ring.keys?.[selectedVersion];
+    if (!selectedVersion || !encoded) throw new Error(`Credential encryption key version ${selectedVersion || '(missing)'} is unavailable.`);
+    const key = Buffer.from(String(encoded), 'base64');
+    if (key.length !== 32) throw new Error(`Credential encryption key ${selectedVersion} must decode to 32 bytes.`);
+    return { key, version: selectedVersion };
+  }
   const encoded = String(process.env.INFRASTRUCTURE_CREDENTIAL_ENCRYPTION_KEY || '').trim();
-  if (!encoded) throw new Error('Credential vault is locked: configure INFRASTRUCTURE_CREDENTIAL_ENCRYPTION_KEY.');
+  if (!encoded) throw new Error('Credential vault is locked: configure INFRASTRUCTURE_CREDENTIAL_ENCRYPTION_KEYS.');
   const key = Buffer.from(encoded, 'base64');
   if (key.length !== 32) throw new Error('Credential vault key must be a base64-encoded 32-byte key.');
-  return key;
+  return { key, version: KEY_VERSION };
 }
 
 export function encryptCredentialPayload(payload) {
   const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv(ALGORITHM, encryptionKey(), iv);
+  const active = encryptionKey();
+  const cipher = crypto.createCipheriv(ALGORITHM, active.key, iv);
   const ciphertext = Buffer.concat([cipher.update(JSON.stringify(payload), 'utf8'), cipher.final()]);
-  return { algorithm: ALGORITHM, keyVersion: KEY_VERSION, iv: iv.toString('base64'), authTag: cipher.getAuthTag().toString('base64'), ciphertext: ciphertext.toString('base64') };
+  return { algorithm: ALGORITHM, keyVersion: active.version, iv: iv.toString('base64'), authTag: cipher.getAuthTag().toString('base64'), ciphertext: ciphertext.toString('base64') };
 }
 
 export function decryptCredentialPayload(envelope) {
   if (!envelope || envelope.algorithm !== ALGORITHM || envelope.keyVersion !== KEY_VERSION) throw new Error('Unsupported credential envelope.');
-  const decipher = crypto.createDecipheriv(ALGORITHM, encryptionKey(), Buffer.from(envelope.iv, 'base64'));
+  const selected = encryptionKey(envelope.keyVersion);
+  const decipher = crypto.createDecipheriv(ALGORITHM, selected.key, Buffer.from(envelope.iv, 'base64'));
   decipher.setAuthTag(Buffer.from(envelope.authTag, 'base64'));
   const clear = Buffer.concat([decipher.update(Buffer.from(envelope.ciphertext, 'base64')), decipher.final()]);
   return JSON.parse(clear.toString('utf8'));
