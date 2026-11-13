@@ -23,7 +23,7 @@ The service exposes authenticated `POST /v1/embeddings` and health/readiness end
 
 ### Option A: separate Render service
 
-Deploy `services/medicine-embedding-service` as its own Render Web Service using its Dockerfile (or import the service blueprint in `services/medicine-embedding-service/render.yaml`). Use a paid always-on instance for predictable production latency. Render Free is supported for staging/low-volume trials only: it may sleep, cold-start while downloading/loading the model, and has tight CPU/RAM limits. A Free inference service must never be a dependency for checkout/order writes; search falls back to keyword mode.
+Deploy `deploy/medicine-embedding-service` as its own Render Web Service using its Dockerfile (or import the service blueprint in `deploy/medicine-embedding-service/render.yaml`). Use a paid always-on instance for predictable production latency. Render Free is supported for staging/low-volume trials only: it may sleep, cold-start while downloading/loading the model, and has tight CPU/RAM limits. A Free inference service must never be a dependency for checkout/order writes; search falls back to keyword mode.
 
 Set on Medicine Master:
 - `MEDICINE_VECTOR_INFERENCE_URL=https://<your-render-embedding-service>`
@@ -34,7 +34,7 @@ Set on Medicine Master:
 
 Build and deploy the same Dockerfile:
 ```bash
-gcloud builds submit services/medicine-embedding-service --tag REGION-docker.pkg.dev/PROJECT/pharma/medicine-embedding:VERSION
+gcloud builds submit deploy/medicine-embedding-service --tag REGION-docker.pkg.dev/PROJECT/pharma/medicine-embedding:VERSION
 gcloud run deploy pharma-medicine-embedding \
   --image REGION-docker.pkg.dev/PROJECT/pharma/medicine-embedding:VERSION \
   --region REGION --port 8080 --no-allow-unauthenticated \
