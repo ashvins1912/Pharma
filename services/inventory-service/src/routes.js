@@ -112,7 +112,9 @@ router.post('/admin/database-cleanup/execute', requireServiceScope('platform.dat
     }
   }
   const failed = results.some(item => item.status === 'FAILED');
-  return res.status(failed ? 207 : 200).json({ success: !failed, service: 'inventory-service', executedAt: new Date(), actor: req.service?.userId || req.service?.name || 'super-admin', results, reservationsDeleted: results.find(item => item.collection === 'inventoryreservations')?.deletedCount || 0 });
+  const actorId = req.service?.userId || req.service?.name || 'super-admin';
+  console.info(JSON.stringify({ event: 'database_cleanup_completed', service: 'inventory-service', actor: actorId, requestId: req.requestId, results, at: new Date().toISOString() }));
+  return res.status(failed ? 207 : 200).json({ success: !failed, service: 'inventory-service', executedAt: new Date(), actor: actorId, results, reservationsDeleted: results.find(item => item.collection === 'inventoryreservations')?.deletedCount || 0 });
 }));
 
 const getInventoryScope = (req, fallback = {}) => {
