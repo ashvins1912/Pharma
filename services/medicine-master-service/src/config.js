@@ -14,6 +14,13 @@ export const config = {
   serviceJwtIssuer: process.env.SERVICE_JWT_ISSUER || 'ashvin-pharmacy',
   serviceJwtAudience: process.env.MEDICINE_MASTER_SERVICE_JWT_AUDIENCE || 'medicine-master-service',
   maxUploadBytes: positiveInteger(process.env.MEDICINE_MASTER_IMPORT_MAX_FILE_BYTES, 110 * 1024 * 1024, 110 * 1024 * 1024),
+  vectorSearchEnabled: process.env.MEDICINE_VECTOR_SEARCH_ENABLED === 'true',
+  vectorModel: process.env.MEDICINE_VECTOR_MODEL || 'onnx-community/all-MiniLM-L6-v2-ONNX',
+  vectorDimensions: positiveInteger(process.env.MEDICINE_VECTOR_DIMENSIONS, 384, 4096),
+  vectorCollection: process.env.MEDICINE_VECTOR_COLLECTION || 'medicine_master_vector_index',
+  vectorStateCollection: process.env.MEDICINE_VECTOR_STATE_COLLECTION || 'medicine_master_vector_sync_state',
+  vectorIndex: process.env.MEDICINE_VECTOR_INDEX || 'medicine_master_vector_idx',
+  vectorSyncIntervalMs: positiveInteger(process.env.MEDICINE_VECTOR_SYNC_INTERVAL_MS, 30000, 3600000),
   loggingEnabled: process.env.LOGGING_ENABLED !== 'false'
 };
 
