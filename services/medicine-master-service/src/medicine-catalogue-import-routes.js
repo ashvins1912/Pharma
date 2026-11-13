@@ -51,7 +51,7 @@ const pick = (record, ...names) => {
 
 // Read every matching master row in stable _id order. Bounded pages avoid
 // Mongo result limits without silently treating a partial scan as complete.
-export async function collectCatalogueCandidates(fetchPage, batchSize = 1000) {
+export async function collectCatalogueCandidates(fetchPage, batchSize = 1000, onPage = null) {
   if (typeof fetchPage !== 'function' || !Number.isInteger(batchSize) || batchSize < 1) {
     throw new TypeError('A page loader and positive integer batch size are required.');
   }
@@ -61,6 +61,7 @@ export async function collectCatalogueCandidates(fetchPage, batchSize = 1000) {
     const page = await fetchPage({ after, limit: batchSize });
     if (!Array.isArray(page)) throw new TypeError('Catalogue candidate page must be an array.');
     results.push(...page);
+    if (onPage) await onPage(results.length, page.length);
     if (page.length < batchSize) break;
     const next = page[page.length - 1]?._id;
     if (next == null || String(next) === String(after)) {
@@ -71,11 +72,11 @@ export async function collectCatalogueCandidates(fetchPage, batchSize = 1000) {
   return results;
 }
 
-async function loadCatalogueCandidates(filter, projection) {
+async function loadCatalogueCandidates(filter, projection, onPage = null) {
   return collectCatalogueCandidates(({ after, limit }) => {
     const pageFilter = after ? { $and: [filter, { _id: { $gt: after } }] } : filter;
     return MedicineMaster.find(pageFilter, projection).sort({ _id: 1 }).limit(limit).lean();
-  });
+  }, 1000, onPage);
 }
 
 async function reconcileCatalogueRecordsAgainstMaster(records) {
@@ -716,6 +717,7 @@ async function processCatalogueImportPreview(req, res) {
   const incomingKeyCounts = new Map();
   for (let offset = 0; offset < records.length; offset += CATALOGUE_CHUNK_SIZE) { for (const item of records.slice(offset, offset + CATALOGUE_CHUNK_SIZE)) if (item.canonicalKey) incomingKeyCounts.set(item.canonicalKey, (incomingKeyCounts.get(item.canonicalKey) || 0) + 1); if (req.file.size > LARGE_IMPORT_THRESHOLD_BYTES) await yieldToEventLoop(); }
   const candidateProjection = { medicineId: 1, canonicalKey: 1, brandName: 1 };
+  if (req.importJob) await updateCatalogueImportJob(req.importJob, { stage: 'RECONCILING', progressPercent: 40 });
   const exactCandidates = await MedicineMaster.find({ $or: [{ medicineId: { $in: ids } }, { canonicalKey: { $in: canonicalKeys } }] }, candidateProjection).lean();
   const nameCandidates = names.length
     ? await MedicineMaster.find({ brandName: { $in: names } }, candidateProjection).collation({ locale: 'en', strength: 2 }).lean()
@@ -724,12 +726,17 @@ async function processCatalogueImportPreview(req, res) {
   const fuzzyCandidates = fuzzyPrefixes.length
     ? await loadCatalogueCandidates(
       { $or: fuzzyPrefixes.map(prefix => ({ brandName: { $regex: '^' + prefix, $options: 'i' } })) },
-      { _id: 1, medicineId: 1, canonicalKey: 1, brandName: 1, genericName: 1, composition: 1, ingredients: 1, strength: 1, dosageForm: 1, manufacturer: 1 }
+      { _id: 1, medicineId: 1, canonicalKey: 1, brandName: 1, genericName: 1, composition: 1, ingredients: 1, strength: 1, dosageForm: 1, manufacturer: 1 },
+      req.importJob ? async scanned => {
+        const progressPercent = Math.min(47, 42 + Math.floor(scanned / 5000));
+        await updateCatalogueImportJob(req.importJob, { stage: 'RECONCILING', progressPercent });
+      } : null
     )
     : [];
   const existingByMongoId = new Map();
   for (const candidate of [...exactCandidates, ...nameCandidates, ...fuzzyCandidates]) existingByMongoId.set(String(candidate._id), candidate);
   const existing = [...existingByMongoId.values()];
+  if (req.importJob) await updateCatalogueImportJob(req.importJob, { stage: 'RECONCILING', progressPercent: 48 });
   const existingById = new Map(existing.map(item => [item.medicineId, item]));
   const existingKeyGroups = new Map();
   const existingNameGroups = new Map();
@@ -760,6 +767,11 @@ async function processCatalogueImportPreview(req, res) {
     if (best && ['AUTO_MERGE', 'MANUAL_REVIEW'].includes(best.decision)) {
       item.reconciliationMatch = { targetMedicineId: best.candidate.medicineId, method: 'HYBRID_TFIDF_NGRAM_LINKAGE', score: best.score, nameScore: best.nameScore, compositionScore: best.compositionScore, decision: best.decision, warnings: best.warnings };
     }
+    if (req.importJob && (recordIndex + 1) % 500 === 0) {
+      const progressPercent = 48 + Math.floor(((recordIndex + 1) / records.length) * 18);
+      await updateCatalogueImportJob(req.importJob, { stage: 'RECONCILING', progressPercent, processedRecords: sourceRecords, totalRecords: sourceRecords });
+      await yieldToEventLoop();
+    }
   }
   const recordsByMasterTarget = new Map();
   const deduplicatedRecords = [];
@@ -779,6 +791,7 @@ async function processCatalogueImportPreview(req, res) {
   }
   records = deduplicatedRecords;
   duplicatesRemoved += fuzzyTargetDuplicatesMerged;
+  if (req.importJob) await updateCatalogueImportJob(req.importJob, { stage: 'RECONCILING', progressPercent: 72, processedRecords: sourceRecords, totalRecords: sourceRecords });
   const fuzzyAutoMerge = records.filter(item => item.reconciliationMatch?.method === 'HYBRID_TFIDF_NGRAM_LINKAGE' && item.reconciliationMatch.decision === 'AUTO_MERGE').length;
   const fuzzyManualReview = records.filter(item => item.reconciliationMatch?.decision === 'MANUAL_REVIEW').length;
   const updateCandidates = records.filter(item => item.reconciliationMatch?.decision === 'AUTO_MERGE').length;
