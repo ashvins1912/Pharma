@@ -14,6 +14,7 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
   const [statusBusy, setStatusBusy] = useState(false);
   const [reviewConfirmed, setReviewConfirmed] = useState(false);
   const [jobStatus, setJobStatus] = useState(null);
+  const [publishError, setPublishError] = useState(null);
 
   if (!isOpen) return null;
 
@@ -24,6 +25,7 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
     setBatchStatus(null);
     setReviewConfirmed(false);
     setJobStatus(null);
+    setPublishError(null);
     setBusy(false);
   };
 
@@ -109,6 +111,7 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
     if (!preview?.batchId || !batchStatus?.approvedAt) return;
     if (!window.confirm('Publish these cleaned records to the shared medicine master catalogue? This will not update tenant prices, branch stock, batches or expiry data.')) return;
     setBusy(true);
+    setPublishError(null);
     try {
       const response = await apiClient.post(`/api/v1/inventory/catalogue/imports/${encodeURIComponent(preview.batchId)}/publish`, {});
       setPublished(response.data);
@@ -125,7 +128,12 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
         setPublished(null);
         setReviewConfirmed(false);
       }
-      addToast(getReadableErrorMessage(payload || error, 'Catalogue publishing failed.'), 'error');
+      setPublishError({
+        status: error.response?.status || null,
+        code: payload?.code || payload?.errorCode || null,
+        message: getReadableErrorMessage(payload || error, 'Catalogue publishing failed.'),
+        details: payload?.details || payload?.conflicts || payload?.errors || null
+      });
     } finally {
       setBusy(false);
     }
@@ -153,7 +161,8 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
 
   return createPortal(
     <div className="fixed inset-0 z-[120] h-[100dvh] w-screen overflow-y-auto overscroll-y-contain bg-slate-950/60 p-0 backdrop-blur-sm sm:h-auto sm:w-auto sm:px-5 sm:py-6" role="dialog" aria-modal="true" aria-labelledby="medicine-catalogue-import-title">
-      <section className="mx-auto flex h-full max-h-[100dvh] min-h-0 w-full max-w-5xl flex-col overflow-hidden border-0 bg-white shadow-2xl sm:my-0 sm:h-auto sm:max-h-[calc(100dvh-3rem)] sm:rounded-3xl sm:border">
+      <section className="relative mx-auto flex h-full max-h-[100dvh] min-h-0 w-full max-w-5xl flex-col overflow-hidden border-0 bg-white shadow-2xl sm:my-0 sm:h-auto sm:max-h-[calc(100dvh-3rem)] sm:rounded-3xl sm:border">
+        {publishError && <div className="absolute inset-0 z-40 flex items-center justify-center overflow-y-auto bg-slate-950/75 p-4 backdrop-blur-sm" role="alertdialog" aria-modal="true" aria-labelledby="catalogue-import-publish-error-title"><section className="w-full max-w-xl rounded-2xl border border-rose-200 bg-white p-5 shadow-2xl"><div className="flex items-start gap-3"><span className="rounded-full bg-rose-100 px-3 py-2 text-sm font-black text-rose-700">{publishError.status || 'ERR'}</span><div className="min-w-0 flex-1"><h3 id="catalogue-import-publish-error-title" className="text-base font-black text-slate-900">Catalogue publish failed</h3><p className="mt-2 break-words text-sm leading-6 text-slate-700">{publishError.message}</p>{publishError.code && <p className="mt-2 font-mono text-xs text-rose-700">Error code: {publishError.code}</p>}</div></div>{publishError.details && <details className="mt-4 rounded-xl border border-slate-200 p-3"><summary className="cursor-pointer text-xs font-bold text-slate-700">View conflict details</summary><pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words text-[11px] text-slate-600">{typeof publishError.details === 'string' ? publishError.details : JSON.stringify(publishError.details, null, 2)}</pre></details>}<p className="mt-4 rounded-xl bg-amber-50 p-3 text-xs leading-5 text-amber-900">This import review remains open. No automatic retry was started. Review the error and refresh the batch status before taking another publish action.</p><div className="mt-4 flex justify-end"><button type="button" onClick={() => setPublishError(null)} className="min-h-11 rounded-xl bg-slate-900 px-5 py-2.5 text-xs font-extrabold text-white">Back to import review</button></div></section></div>}
         <header className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200 px-4 py-4 sm:px-6">
           <div className="min-w-0">
             <h2 id="medicine-catalogue-import-title" className="text-base sm:text-lg font-black text-slate-900">Medicine Master Catalogue Enrichment</h2>
