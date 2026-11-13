@@ -21,7 +21,7 @@ When `RENDER_API_KEY` is configured, the backend reads Render's native Metrics A
 - Memory: `/v1/metrics/memory`
 - Outbound bandwidth: `/v1/metrics/bandwidth`
 
-CPU and memory display the latest available sample. Bandwidth sums available hourly data points across the last 24 hours. Render's bandwidth graph has hourly resolution and its samples can arrive with a delay, so the current 24-hour total may be incomplete. Memory limit and disk usage are left unreported unless a future adapter supplies them; the UI does not invent plan limits. See https://render.com/docs/service-metrics and https://api-docs.render.com/reference/get-memory.
+CPU is averaged across the latest available instance samples and memory is summed across the latest available instance samples. Bandwidth sums available hourly data points across the last 24 hours. Render's bandwidth graph has hourly resolution and its samples can arrive with a delay, so the current 24-hour total may be incomplete. Memory limit and disk usage are left unreported unless a future adapter supplies them; the UI does not invent plan limits. See https://render.com/docs/service-metrics and https://api-docs.render.com/reference/get-memory.
 
 ## AWS, Azure and GCP control-plane adapter
 
