@@ -186,3 +186,46 @@ Credentials are encrypted using AES-256-GCM with a fresh random 96-bit IV and au
 ### Important implementation boundary
 
 Saved credentials support re-verification without re-entry, but the application does not silently bypass user authentication, Super Admin authorisation, provider scopes, or policy gates. The verification API currently requires the private control plane's `/v1/connections/verify` implementation. A successful read-only verification is not approval for production lifecycle actions. The UI workflow, independent approver workflow, scheduled re-verification, KMS integration, immutable/WORM audit export and full policy-evidence lifecycle remain follow-on work and must not be represented as complete until implemented and tested.
+
+
+## Standalone Admin Control Plane deployment
+
+The repository now contains a deployable workspace at `services/admin-control-plane`. It can run beside the core backend or as an independently scaled process. It reuses the existing backend route modules and their authentication/authorization middleware rather than forking a second implementation.
+
+### Admin routes moved behind the control-plane process
+
+- `/api/v1/admin/tenants`
+- `/api/v1/admin/feature-health`
+- `/api/v1/admin/service-logs`
+- `/api/v1/admin/database-cleanup/notifications`
+- `/api/v1/admin/infrastructure` and `/api/v1/admin/infrastructure/security`
+- Admin payment reminders, medicine requests, rider, assignment and WhatsApp routes under their existing `/api/v1/admin/*` and legacy `/api/admin/*` paths.
+
+The API Gateway can route the migrated paths to the independent process using `ADMIN_SERVICE_URL`. When unset, requests continue to the existing backend. Gateway authentication, capability checks and signed request binding remain in front of the admin service. The service requires `REQUIRE_GATEWAY_TRUST=true` in production and retains route-level Super Admin checks.
+
+### Startup commands
+
+```bash
+# Existing consolidated development mode
+npm run dev
+
+# Split development mode (starts Admin Control Plane on port 8091)
+START_ADMIN_SERVICE=true npm run dev
+
+# Start / test the Admin Control Plane directly
+npm run dev:admin
+npm run start:admin
+npm run test:admin
+```
+
+The root workspace already includes `services/*`; the admin service is therefore included in the root npm workspace install. Its health endpoints are `/health` and database-aware `/ready`. A Dockerfile is provided; build it with the repository root as the Docker build context.
+
+### Deployment configuration
+
+Deploy `services/admin-control-plane` with start command `npm --workspace services/admin-control-plane start`. Configure `ADMIN_MONGO_URI`, gateway trust and the same authentication/security environment required by the existing backend modules. Configure `ADMIN_SERVICE_URL` on the API Gateway to the deployed Admin Control Plane origin to activate routing. Do not expose the service directly to browsers; allow ingress from the Gateway/private network only.
+
+**Database boundary:** Current migrated admin routers still use existing platform models and therefore require `ADMIN_MONGO_URI` to point to the same logical MongoDB database used by the core platform. This supports process isolation and independent compute scaling, not yet a physically independent admin database. Giving the control plane a separate database is a later data-ownership migration: move admin-owned control-plane records first, then replace shared business-data reads with authenticated service APIs/read models. Do not point it at an empty, unrelated Mongo database and expect tenant, rider, notification or service-log workflows to work.
+
+### Migration boundary
+
+This is the first deployable extraction boundary, not a claim that every admin-related workflow in the application has been moved. Tenant-scoped operational routes and domain-specific admin actions that still depend on backend-only modules remain available through the backend until each route has explicit ownership, authorization tests, data-access contracts and a migration. During the transition, unset `ADMIN_SERVICE_URL` to retain the consolidated deployment; route only the migrated allow-listed paths after the new service passes health and integration checks.
