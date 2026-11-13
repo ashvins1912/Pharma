@@ -324,7 +324,7 @@ export default function AdminDashboardView() {
     matrix: { category: t('platformSettings'), title: t('roleFeatureMatrix'), icon: '📐' },
     automation: { category: t('platformSettings'), title: t('systemChecks'), icon: '🧪' },
     featureHealth: { category: t('platformSettings'), title: t('systemHealth'), icon: '🩺' },
-    databaseCleanup: { category: t('platformSettings'), title: 'Database Cleanup', icon: '🧹' }
+    databaseCleanup: { category: 'Task Operations', title: 'Database Cleanup', icon: '🧹' }
   }[adminTab] || { category: 'Operations', title: 'Workspace', icon: '⚡' };
 
   return (
@@ -697,7 +697,13 @@ export default function AdminDashboardView() {
                 isSuperAdmin && { tab: 'telemetry', label: t('liveTelemetry'), icon: '📡', tone: 'governance' },
                 isSuperAdmin && { tab: 'matrix', label: t('roleFeatureMatrix'), icon: '📐', tone: 'governance' },
                 isSuperAdmin && { tab: 'automation', label: t('systemChecks'), icon: '🧪', tone: 'governance' },
-                isSuperAdmin && { tab: 'featureHealth', label: t('systemHealth'), icon: '🩺', tone: 'governance' },
+                isSuperAdmin && { tab: 'featureHealth', label: t('systemHealth'), icon: '🩺', tone: 'governance' }
+              ]
+            },
+            {
+              id: 'taskOperations',
+              title: 'Task Operations',
+              items: [
                 isSuperAdmin && { tab: 'databaseCleanup', label: 'Database Cleanup', icon: '🧹', tone: 'governance' }
               ]
             }
