@@ -132,7 +132,10 @@ async function syncChanged() {
     ] } : {};
     const rows=await mongoose.models.MedicineMaster.find(filter).sort({updatedAt:1,_id:1}).limit(32).lean();
     if(!rows.length)return;
-    await upsertMedicineVectorDocuments(rows);
+    const indexable = rows.filter(row => buildMedicineEmbeddingText(row));
+    if (indexable.length) await upsertMedicineVectorDocuments(indexable);
+    // Advance over non-searchable source records too, so one empty record cannot
+    // permanently stall the bounded incremental scan.
     const last=rows.at(-1);
     await states.updateOne({_id:STATE_ID,status:'READY'},{$set:{lastUpdatedAt:last.updatedAt||new Date(),lastId:last._id,updatedAt:new Date()}});
   }catch(error){console.error('[MedicineVectorSearch] sync failed:',error.code||error.name);}
