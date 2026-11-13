@@ -15,6 +15,10 @@ export const config = {
   serviceJwtAudience: process.env.MEDICINE_MASTER_SERVICE_JWT_AUDIENCE || 'medicine-master-service',
   maxUploadBytes: positiveInteger(process.env.MEDICINE_MASTER_IMPORT_MAX_FILE_BYTES, 110 * 1024 * 1024, 110 * 1024 * 1024),
   vectorSearchEnabled: process.env.MEDICINE_VECTOR_SEARCH_ENABLED === 'true',
+  // Query embeddings are delegated to a separately deployed local-ONNX service.
+  vectorInferenceUrl: process.env.MEDICINE_VECTOR_INFERENCE_URL || '',
+  vectorInferenceToken: process.env.MEDICINE_VECTOR_INFERENCE_TOKEN || '',
+  vectorInferenceTimeoutMs: positiveInteger(process.env.MEDICINE_VECTOR_INFERENCE_TIMEOUT_MS, 1800, 10000),
   vectorModel: process.env.MEDICINE_VECTOR_MODEL || 'onnx-community/all-MiniLM-L6-v2-ONNX',
   vectorDimensions: positiveInteger(process.env.MEDICINE_VECTOR_DIMENSIONS, 384, 4096),
   vectorCollection: process.env.MEDICINE_VECTOR_COLLECTION || 'medicine_master_vector_index',
