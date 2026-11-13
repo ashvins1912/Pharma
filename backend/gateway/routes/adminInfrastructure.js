@@ -74,11 +74,13 @@ async function listRenderServices() {
   const resources = entries.map(normaliseRenderService).filter(item => item.id);
   const ids = resources.map(item => item.id);
   const end = new Date();
-  const start = new Date(end.getTime() - 24 * 60 * 60 * 1000);
+  const recentStart = new Date(end.getTime() - 60 * 60 * 1000);
+  const dayStart = new Date(end.getTime() - 24 * 60 * 60 * 1000);
+  const computeIds = resources.filter(resource => !['static_site', 'cron_job'].includes(resource.type)).map(resource => resource.id);
   const [cpuResult, memoryResult, bandwidthResult] = await Promise.allSettled([
-    renderMetric('cpu', ids, start.toISOString(), end.toISOString()),
-    renderMetric('memory', ids, start.toISOString(), end.toISOString()),
-    renderMetric('bandwidth', ids, start.toISOString(), end.toISOString())
+    renderMetric('cpu', computeIds, recentStart.toISOString(), end.toISOString()),
+    renderMetric('memory', computeIds, recentStart.toISOString(), end.toISOString()),
+    renderMetric('bandwidth', ids, dayStart.toISOString(), end.toISOString())
   ]);
   const metricStatus = { cpu: cpuResult.status, memory: memoryResult.status, bandwidth: bandwidthResult.status };
   return resources.map(resource => {
