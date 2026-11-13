@@ -36,3 +36,10 @@ test('processing guard supports an operator pause', () => {
   });
   assert.deepEqual(result.reasons, ['PROCESSING_DISABLED']);
 });
+
+test('processing guard pauses when the configured process RSS budget is exhausted', () => {
+  const result = evaluateCatalogueProcessingGuard({
+    enabled: true, heapUsedPercent: 20, rssUsedPercent: 99, cpuLoadPercent: 10, queuedJobs: 0
+  });
+  assert.ok(result.reasons.includes('RSS_PRESSURE'));
+});
