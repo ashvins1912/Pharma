@@ -34,12 +34,12 @@ const integrationSchema = new mongoose.Schema({
 }, { timestamps: true, minimize: false, strict: true });
 integrationSchema.index({ provider: 1, environment: 1, createdAt: -1 });
 const auditSchema = new mongoose.Schema({
-  integrationId: { type: String, required: true, index: true },
-  actor: { type: String, required: true },
-  event: { type: String, required: true },
-  outcome: { type: String, required: true },
-  details: { type: mongoose.Schema.Types.Mixed, default: {} },
-  requestId: { type: String, default: null },
+  integrationId: { type: String, required: true, index: true, immutable: true },
+  actor: { type: String, required: true, immutable: true },
+  event: { type: String, required: true, immutable: true },
+  outcome: { type: String, required: true, immutable: true },
+  details: { type: mongoose.Schema.Types.Mixed, default: {}, immutable: true },
+  requestId: { type: String, default: null, immutable: true },
   occurredAt: { type: Date, default: Date.now, immutable: true }
 }, { versionKey: false, strict: true });
 auditSchema.index({ occurredAt: -1 });
