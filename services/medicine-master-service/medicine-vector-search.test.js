@@ -27,3 +27,8 @@ test('result limit is bounded',()=>{
  const data=Array.from({length:75},(_,i)=>({medicineId:String(i),brandName:'Paracetamol '+i,isArchived:false}));
  assert.equal(rankMedicineSearchResults({query:'paracetamol',keywordRows:data,limit:1000}).length,50);
 });
+
+test('catalogue projection excludes tenant and patient fields',()=>{
+ const text=buildMedicineEmbeddingText({brandName:'Dolo',tenantId:'tenant-secret',branchStock:12,patientName:'Private Patient',prescriptionText:'Rx private'});
+ assert.equal(text,'Dolo');
+});
