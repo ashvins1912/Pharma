@@ -24,6 +24,7 @@ import adminPaymentReminderRoutes from '../routes/adminPaymentReminderRoutes.js'
 import deliveryEventRoutes from '../routes/deliveryEventRoutes.js';
 import activityRouter from './routes/activity.js';
 import adminServiceLogsRouter from './routes/adminServiceLogs.js';
+import adminDatabaseCleanupRouter from './routes/adminDatabaseCleanup.js';
 import ServiceLog from '../models/ServiceLog.js';
 
 const gateway = express.Router();
@@ -83,6 +84,7 @@ gateway.use('/auth', authRouter);
 gateway.use('/profile', profileRouter);
 gateway.use('/admin/tenants', adminTenantsRouter);
 gateway.use('/admin/service-logs', adminServiceLogsRouter);
+gateway.use('/admin/database-cleanup/notifications', adminDatabaseCleanupRouter);
 gateway.use('/admin/feature-health', adminFeatureHealthRouter);
 gateway.use('/vendors', vendorRouter);
 gateway.use('/vendor', vendorRouter);

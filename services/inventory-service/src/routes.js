@@ -5,7 +5,8 @@ import express from 'express';
 import multer from 'multer';
 import mongoose from 'mongoose';
 import { config } from './config.js';
-import { ImportJob, Audit } from './models.js';
+import { ImportJob, Audit, Reservation, ImportBatch, ImportBatchSnapshot, ImportFailure } from './models.js';
+import { StagedImportBatch, StagedImportRow } from './staged-import-models.js';
 import {
   buildFailureWorkbook,
   createImportJob,
@@ -32,9 +33,90 @@ import { publishInventoryChanged } from './realtimeEvents.js';
 import { queueMedicineMatch } from './medicine-match-queue.js';
 
 const router = express.Router();
-const asyncHandler = handler => (req, res, next) => {
-  Promise.resolve(handler(req, res, next)).catch(next);
+const asyncHandler = handler => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
+const CLEANUP_RETENTION_DAYS = 30;
+const STAGED_RETENTION_DAYS = 7;
+const RESERVATION_RETENTION_DAYS = 180;
+const cleanupCutoffs = () => ({
+  staged: new Date(Date.now() - STAGED_RETENTION_DAYS * 86400000),
+  history: new Date(Date.now() - CLEANUP_RETENTION_DAYS * 86400000),
+  reservations: new Date(Date.now() - RESERVATION_RETENTION_DAYS * 86400000)
+});
+const cleanupEstimate = async (model, filter) => {
+  const [count, sizes] = await Promise.all([
+    model.countDocuments(filter),
+    model.aggregate([{ $match: filter }, { $group: { _id: null, bytes: { $sum: { $bsonSize: '$$ROOT' } } } }])
+  ]);
+  return { count, estimatedBytes: sizes[0]?.bytes || 0 };
 };
+async function getDatabaseCleanupPlan() {
+  const dates = cleanupCutoffs();
+  const stagedBatches = await StagedImportBatch.find({
+    status: { $in: ['PUBLISHED', 'REVERTED'] }, updatedAt: { $lt: dates.staged }
+  }).select('batchId').lean();
+  const stagedBatchIds = stagedBatches.map(item => item.batchId);
+  const terminalBatches = await ImportBatch.find({
+    status: { $in: ['COMPLETED', 'COMPLETED_WITH_ERRORS', 'REVERTED'] }, updatedAt: { $lt: dates.history }
+  }).select('batchId').lean();
+  const terminalBatchIds = terminalBatches.map(item => item.batchId);
+  const terminalJobs = await ImportJob.find({
+    status: { $in: ['COMPLETED', 'COMPLETED_WITH_ERRORS', 'FAILED'] }, completedAt: { $lt: dates.history }
+  }).select('_id').lean();
+  const terminalJobIds = terminalJobs.map(item => item._id);
+  const [stagedRows, snapshots, failures, reservations, activeReservations] = await Promise.all([
+    cleanupEstimate(StagedImportRow, { batchId: { $in: stagedBatchIds } }),
+    cleanupEstimate(ImportBatchSnapshot, { batchId: { $in: terminalBatchIds } }),
+    cleanupEstimate(ImportFailure, { jobId: { $in: terminalJobIds } }),
+    cleanupEstimate(Reservation, { status: { $in: ['RELEASED', 'DEDUCTED'] }, updatedAt: { $lt: dates.reservations } }),
+    Reservation.countDocuments({ status: 'RESERVED' })
+  ]);
+  return {
+    retention: { stagedRowsDays: STAGED_RETENTION_DAYS, importHistoryDays: CLEANUP_RETENTION_DAYS, terminalReservationsDays: RESERVATION_RETENTION_DAYS },
+    collections: [
+      { name: 'stagedimportrows', ...stagedRows, rule: 'Rows belonging only to PUBLISHED/REVERTED batches completed more than 7 days ago' },
+      { name: 'inventoryimportbatchsnapshots', ...snapshots, rule: 'Snapshots belonging to terminal import batches older than 30 days' },
+      { name: 'inventoryimportfailures', ...failures, rule: 'Failure diagnostics belonging to terminal import jobs older than 30 days' },
+      { name: 'inventoryreservations', ...reservations, activeCount: activeReservations, rule: 'Only RELEASED/DEDUCTED reservations older than 180 days; RESERVED records are never deleted' }
+    ]
+  };
+}
+router.get('/admin/database-cleanup/status', requireServiceScope('platform.database.cleanup'), asyncHandler(async (_req, res) => {
+  return res.json({ success: true, service: 'inventory-service', ...(await getDatabaseCleanupPlan()) });
+}));
+router.post('/admin/database-cleanup/preview', requireServiceScope('platform.database.cleanup'), asyncHandler(async (_req, res) => {
+  return res.json({ success: true, service: 'inventory-service', ...(await getDatabaseCleanupPlan()) });
+}));
+router.post('/admin/database-cleanup/execute', requireServiceScope('platform.database.cleanup'), asyncHandler(async (req, res) => {
+  if (req.body?.confirmation !== 'DELETE ELIGIBLE INVENTORY IMPORT DATA') {
+    return res.status(400).json({ success: false, code: 'CONFIRMATION_REQUIRED', message: 'Type the exact confirmation phrase to execute cleanup.' });
+  }
+  const dates = cleanupCutoffs();
+  const [stagedBatches, terminalBatches, terminalJobs] = await Promise.all([
+    StagedImportBatch.find({ status: { $in: ['PUBLISHED', 'REVERTED'] }, completedAt: { $lt: dates.staged } }).distinct('batchId'),
+    ImportBatch.find({ status: { $in: ['COMPLETED', 'COMPLETED_WITH_ERRORS', 'REVERTED'] }, updatedAt: { $lt: dates.history } }).distinct('batchId'),
+    ImportJob.find({ status: { $in: ['COMPLETED', 'COMPLETED_WITH_ERRORS', 'FAILED'] }, completedAt: { $lt: dates.history } }).distinct('_id')
+  ]);
+  const operations = [
+    ['stagedimportrows', () => StagedImportRow.deleteMany({ batchId: { $in: stagedBatches } })],
+    ['inventoryimportbatchsnapshots', () => ImportBatchSnapshot.deleteMany({ batchId: { $in: terminalBatches } })],
+    ['inventoryimportfailures', () => ImportFailure.deleteMany({ jobId: { $in: terminalJobs } })],
+    ['inventoryreservations', () => Reservation.deleteMany({ status: { $in: ['RELEASED', 'DEDUCTED'] }, updatedAt: { $lt: dates.reservations } })]
+  ];
+  const results = [];
+  for (const [collection, run] of operations) {
+    try {
+      const result = await run();
+      results.push({ collection, status: 'COMPLETED', deletedCount: result.deletedCount || 0 });
+    } catch (error) {
+      results.push({ collection, status: 'FAILED', deletedCount: 0, error: error.message, code: error.code || null });
+    }
+  }
+  const failed = results.some(item => item.status === 'FAILED');
+  const actorId = req.service?.userId || req.service?.name || 'super-admin';
+  console.info(JSON.stringify({ event: 'database_cleanup_completed', service: 'inventory-service', actor: actorId, requestId: req.requestId, results, at: new Date().toISOString() }));
+  return res.status(failed ? 207 : 200).json({ success: !failed, service: 'inventory-service', executedAt: new Date(), actor: actorId, results, reservationsDeleted: results.find(item => item.collection === 'inventoryreservations')?.deletedCount || 0 });
+}));
+
 const getInventoryScope = (req, fallback = {}) => {
   const serviceScope = req.service?.name === 'api-gateway' ? req.service : (req.service || {});
   const tenantId = serviceScope.tenantId
