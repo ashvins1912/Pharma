@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { getReadableErrorMessage } from '../../utils/errorMessage';
 import apiClient from '../../api/apiClient';
 import { useToast } from '../../context/ToastContext';
@@ -150,7 +151,7 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
     </div>
   );
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[120] h-[100dvh] w-screen overflow-y-auto overscroll-y-contain bg-slate-950/60 p-0 backdrop-blur-sm sm:h-auto sm:w-auto sm:px-5 sm:py-6" role="dialog" aria-modal="true" aria-labelledby="medicine-catalogue-import-title">
       <section className="mx-auto flex h-full max-h-[100dvh] min-h-0 w-full max-w-5xl flex-col overflow-hidden border-0 bg-white shadow-2xl sm:my-0 sm:h-auto sm:max-h-[calc(100dvh-3rem)] sm:rounded-3xl sm:border">
         <header className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200 px-4 py-4 sm:px-6">
@@ -313,6 +314,7 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
           )}
         </footer>
       </section>
-    </div>
+    </div>,
+    document.body
   );
 }
