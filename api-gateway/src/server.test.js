@@ -207,6 +207,11 @@ test('customer person DELETE is registered as profile.write without opening othe
   assert.equal(resolveGatewayCapability('DELETE', '/api/v1/customers/me'), null);
 });
 
+test('shared Medicine Master semantic search requires catalogue read capability', () => {
+  assert.equal(resolveGatewayCapability('GET', '/api/v1/inventory/catalogue/medicines/search?q=paracetamol'), 'inventory.catalogue.read');
+  assert.equal(resolveGatewayCapability('POST', '/api/v1/inventory/catalogue/medicines/search'), null);
+});
+
 test('explicit revocations override Super Admin wildcard grants', () => {
   const user = {
     role: 'SUPER_ADMIN',
