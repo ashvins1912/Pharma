@@ -1473,7 +1473,9 @@ router.post('/admin/database-cleanup/execute', asyncHandler(async (req, res) => 
     }
   }
   const failed = results.some(item => item.status === 'FAILED');
-  return res.status(failed ? 207 : 200).json({ success: !failed, service: 'medicine-master-service', executedAt: new Date(), actor: req.service?.userId || req.service?.name || 'super-admin', results });
+  const actorId = req.service?.userId || req.service?.name || 'super-admin';
+  console.info(JSON.stringify({ event: 'database_cleanup_completed', service: 'medicine-master-service', actor: actorId, requestId: req.requestId, results, at: new Date().toISOString() }));
+  return res.status(failed ? 207 : 200).json({ success: !failed, service: 'medicine-master-service', executedAt: new Date(), actor: actorId, results });
 }));
 
 export default router;
