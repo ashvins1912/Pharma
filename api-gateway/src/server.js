@@ -240,7 +240,7 @@ export function createGatewayApp(gatewayConfig = config, healthMonitor = createH
           '/api/v1/admin/service-logs', '/api/v1/admin/database-cleanup/notifications',
           '/api/v1/admin/infrastructure', '/api/v1/admin/payments',
           '/api/admin/whatsapp', '/api/admin/riders', '/api/admin/assignment',
-          '/api/admin/payments', '/api/admin/medicine-requests'
+          '/api/admin/medicine-requests'
         ];
         const isPlatformAdminRoute = adminRoutePrefixes.some(prefix => adminPath === prefix || adminPath.startsWith(`${prefix}/`));
         const destination = isPlatformAdminRoute && gatewayConfig.adminServiceUrl
