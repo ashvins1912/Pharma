@@ -1053,10 +1053,16 @@ router.get('/matches/review', async (req, res, next) => {
     const page = Math.max(1, Number.parseInt(req.query.page || '1', 10) || 1);
     const limit = Math.max(1, Math.min(100, Number.parseInt(req.query.limit || '100', 10) || 100));
     const status = String(req.query.status || 'PENDING').toUpperCase();
-    const filter = status === 'ALL'
-      ? { mappingStatus: { $ne: 'APPROVED' } }
-      : status === 'PENDING' ? { $or: [{ mappingStatus: 'PENDING' }, { mappingStatus: { $exists: false } }] }
-        : { mappingStatus: status };
+    const parsedMinConfidence = Number.parseInt(req.query.minConfidence ?? '80', 10);
+    const minConfidence = Number.isFinite(parsedMinConfidence) ? Math.max(0, Math.min(100, parsedMinConfidence)) : 80;
+    const filter = {
+      confidence: { $gte: minConfidence },
+      ...(status === 'ALL'
+        ? { mappingStatus: { $ne: 'APPROVED' } }
+        : status === 'PENDING'
+          ? { $or: [{ mappingStatus: 'PENDING' }, { mappingStatus: { $exists: false } }] }
+          : { mappingStatus: status })
+    };
     const [rows, total] = await Promise.all([
       MedicineMatchReference.find(filter).sort({ updatedAt: 1, _id: 1 }).skip((page - 1) * limit).limit(limit).lean(),
       MedicineMatchReference.countDocuments(filter)
@@ -1066,7 +1072,7 @@ router.get('/matches/review', async (req, res, next) => {
     candidateProjection._id = 0; candidateProjection.medicineId = 1;
     const candidates = ids.length ? await MedicineMaster.find({ medicineId: { $in: ids }, isArchived: { $ne: true } }, candidateProjection).lean() : [];
     const byId = new Map(candidates.map(item => [item.medicineId, item]));
-    return res.json({ items: rows.map(row => ({ ...row, candidate: byId.get(row.mappedMedicineId || row.medicineId) || null })), pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } });
+    return res.json({ items: rows.map(row => ({ ...row, candidates: (row.candidates || []).filter(candidate => Number(candidate.score ?? row.confidence ?? 0) >= minConfidence), candidate: byId.get(row.mappedMedicineId || row.medicineId) || null })), pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } });
   } catch (error) { return next(error); }
 });
 router.post('/matches/discover', async (req, res, next) => {
