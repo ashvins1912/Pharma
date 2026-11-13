@@ -180,6 +180,8 @@ export function createServiceRouters(gatewayConfig = config) {
   medicineMasterRouter.post('/admin/database-cleanup/preview', catalogueImportAuth, catalogueImportCleanup);
   medicineMasterRouter.post('/admin/database-cleanup/execute', catalogueImportAuth, catalogueImportCleanup);
   const catalogueImport = medicineMaster('inventory.catalogue.import');
+  medicineMasterRouter.get('/imports/processing-guard', catalogueImportAuth, catalogueImport);
+  medicineMasterRouter.post('/imports/processing-guard/control', catalogueImportAuth, catalogueImport);
   medicineMasterRouter.get('/imports', catalogueImportAuth, catalogueImport);
   medicineMasterRouter.post('/imports/merge', catalogueImportAuth, catalogueImport);
   medicineMasterRouter.post('/imports/preview', catalogueImportAuth, catalogueImport);
