@@ -39,6 +39,7 @@ All paths are API Gateway paths; the gateway preserves these paths while proxyin
 | POST | `/api/v1/inventory/catalogue/imports/remove-selected` | Platform Super Admin |
 | GET | `/api/v1/inventory/catalogue/imports` | Platform Super Admin |
 | GET | `/api/v1/inventory/catalogue/imports/processing-guard` | Platform Super Admin; queue and resource protection status |
+| POST | `/api/v1/inventory/catalogue/imports/processing-guard/control` | Platform Super Admin; centrally persisted pause/resume with reason and exact confirmation |
 | GET | `/api/v1/inventory/catalogue/imports/jobs/:jobId` | Platform Super Admin |
 | POST | `/api/v1/inventory/catalogue/imports/jobs/:jobId/retry` | Platform Super Admin |
 | POST | `/api/v1/inventory/catalogue/imports/jobs/:jobId/restart` | Platform Super Admin |
@@ -48,6 +49,11 @@ All paths are API Gateway paths; the gateway preserves these paths while proxyin
 | POST | `/api/v1/inventory/catalogue/imports/:batchId/publish` | Platform Super Admin |
 
 The public match endpoint is read-only and returns Medicine Master fields only after a Super Admin approves a target record and explicit field allowlist. Unmapped/ambiguous products return no Medicine Master data to the Store. The admin review queue is paginated at up to 100 references per page; approvals retain the selected target, allowed fields, actor and timestamp. Do not include credentials or customer personal data in catalogue search payloads.
+
+
+### Super Admin processing guard controls
+
+The Super Admin dashboard exposes the live processing guard under **Task Operations → Medicine Catalogue Guard**. The GET status endpoint reports queue depth, active jobs, heap/RSS/host-load metrics, configured limits, operator pause state and recent operator history. The POST control endpoint accepts `action` (`pause` or `resume`), an operational `reason` of at least eight characters, and the exact confirmation phrase. The global operator state and up to 50 audit events are stored in MongoDB, so all Medicine Master instances sharing the database observe the same pause. Pausing prevents new uploads and worker claims; already-running work is not force-killed. Resume only clears the operator pause and never overrides resource protection or `MEDICINE_CATALOGUE_PROCESSING_ENABLED=false`.
 
 ## Application secrets
 
