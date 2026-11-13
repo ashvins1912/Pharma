@@ -15,7 +15,10 @@ const estimate = async (model, filter) => {
 };
 const plan = async () => {
   const before = cutoff();
-  const notifications = { $or: [\n    { read: true, readAt: { $lt: before } },\n    { status: { $in: ['DELIVERED', 'Delivered'] }, createdAt: { $lt: before } }\n  ] };
+  const notifications = { $or: [
+    { read: true, readAt: { $lt: before } },
+    { status: { $in: ['DELIVERED', 'Delivered'] }, createdAt: { $lt: before } }
+  ] };
   const events = { status: { $in: ['DELIVERED', 'SUCCESS', 'COMPLETED'] }, occurredAt: { $lt: before } };
   const [notificationStats, eventStats] = await Promise.all([
     estimate(Notification, notifications), estimate(NotificationDeliveryEvent, events)
@@ -48,7 +51,10 @@ router.post('/execute', async (req, res) => {
   }
   const before = cutoff();
   const filters = [
-    [Notification, { $or: [\n      { read: true, readAt: { $lt: before } },\n      { status: { $in: ['DELIVERED', 'Delivered'] }, createdAt: { $lt: before } }\n    ] }],
+    [Notification, { $or: [
+      { read: true, readAt: { $lt: before } },
+      { status: { $in: ['DELIVERED', 'Delivered'] }, createdAt: { $lt: before } }
+    ] }],
     [NotificationDeliveryEvent, { status: { $in: ['DELIVERED', 'SUCCESS', 'COMPLETED'] }, occurredAt: { $lt: before } }]
   ];
   const results = [];
