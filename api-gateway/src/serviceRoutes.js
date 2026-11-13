@@ -173,6 +173,11 @@ export function createServiceRouters(gatewayConfig = config) {
   medicineMasterRouter.patch('/medicines/:medicineId', catalogueImportAuth, medicineMaster('inventory.catalogue.import'));
   medicineMasterRouter.delete('/medicines/:medicineId', catalogueImportAuth, medicineMaster('inventory.catalogue.import'));
   medicineMasterRouter.get('/medicines/:medicineId/audit', catalogueImportAuth, medicineMaster('inventory.catalogue.import'));
+
+  const catalogueImportCleanup = medicineMaster('inventory.catalogue.import');
+  medicineMasterRouter.get('/admin/database-cleanup/status', catalogueImportAuth, catalogueImportCleanup);
+  medicineMasterRouter.post('/admin/database-cleanup/preview', catalogueImportAuth, catalogueImportCleanup);
+  medicineMasterRouter.post('/admin/database-cleanup/execute', catalogueImportAuth, catalogueImportCleanup);
   const catalogueImport = medicineMaster('inventory.catalogue.import');
   medicineMasterRouter.get('/imports', catalogueImportAuth, catalogueImport);
   medicineMasterRouter.post('/imports/merge', catalogueImportAuth, catalogueImport);
