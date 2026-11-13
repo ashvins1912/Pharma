@@ -6,11 +6,11 @@ const router = express.Router();
 router.use(authenticateUser, requireSuperAdmin);
 
 const RENDER_API = 'https://api.render.com/v1';
-const renderConfigured = () => Boolean(process.env.RENDER_API_KEY);
+const renderConfigured = () => Boolean(String(process.env.RENDER_API_KEY || '').trim());
 const renderRequest = async (path, options = {}) => {
   const response = await fetch(`${RENDER_API}${path}`, {
     ...options,
-    headers: { Accept: 'application/json', Authorization: `Bearer ${process.env.RENDER_API_KEY}`, ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...options.headers }
+    headers: { Accept: 'application/json', Authorization: `Bearer ${String(process.env.RENDER_API_KEY || '').trim()}`, ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...options.headers }
   });
   if (!response.ok) {
     const body = await response.text().catch(() => '');
@@ -109,18 +109,18 @@ async function listRenderServices() {
     };
   });
 }
-const controlPlaneConfigured = () => Boolean(process.env.INFRASTRUCTURE_CONTROL_PLANE_URL);
+const controlPlaneConfigured = () => Boolean(String(process.env.INFRASTRUCTURE_CONTROL_PLANE_URL || '').trim());
 const controlPlaneRequest = async (path, options = {}) => {
   const base = String(process.env.INFRASTRUCTURE_CONTROL_PLANE_URL || '').replace(/\/+$/, '');
   if (!base) throw new Error('External infrastructure control plane is not configured.');
   const url = new URL(`${base}${path}`);
   if (process.env.NODE_ENV === 'production' && url.protocol !== 'https:') throw new Error('Infrastructure control plane must use HTTPS in production.');
-  if (process.env.NODE_ENV === 'production' && !process.env.INFRASTRUCTURE_CONTROL_PLANE_TOKEN) throw new Error('Infrastructure control plane bearer token is required in production.');
+  if (process.env.NODE_ENV === 'production' && !String(process.env.INFRASTRUCTURE_CONTROL_PLANE_TOKEN || '').trim()) throw new Error('Infrastructure control plane bearer token is required in production.');
   const response = await fetch(url, {
     ...options,
     headers: {
       Accept: 'application/json',
-      ...(process.env.INFRASTRUCTURE_CONTROL_PLANE_TOKEN ? { Authorization: `Bearer ${process.env.INFRASTRUCTURE_CONTROL_PLANE_TOKEN}` } : {}),
+      ...(process.env.INFRASTRUCTURE_CONTROL_PLANE_TOKEN ? { Authorization: `Bearer ${String(process.env.INFRASTRUCTURE_CONTROL_PLANE_TOKEN || '').trim()}` } : {}),
       ...(options.body ? { 'Content-Type': 'application/json' } : {}),
       ...options.headers
     },
