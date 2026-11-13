@@ -21,7 +21,7 @@ export default function InfrastructureOperations() {
 
   const refresh = useCallback(async () => {
     setLoading(true); setError('');
-    try { const response = await apiClient.get('/api/v1/admin/infrastructure/status'); setSnapshot(unwrap(response)); }
+    try { const response = await apiClient.get('/api/v1/admin/infrastructure/status', { timeout: 30000 }); setSnapshot(unwrap(response)); }
     catch (failure) { setError(failure.response?.data?.message || failure.message || 'Could not load infrastructure status.'); }
     finally { setLoading(false); }
   }, []);
