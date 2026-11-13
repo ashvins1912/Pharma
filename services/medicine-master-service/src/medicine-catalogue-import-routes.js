@@ -398,12 +398,20 @@ async function processNextCatalogueImportJob() {
   catalogueImportWorkerBusy = true;
   let job;
   let heartbeat;
+  let workerSlotId = null;
   try {
+    workerSlotId = await acquireCatalogueWorkerSlot();
+    if (workerSlotId === null) return;
     job = await CatalogueImportJob.findOneAndUpdate({
       $or: [{ status: 'QUEUED' }, { status: 'PROCESSING', leaseExpiresAt: { $lt: new Date() } }]
     }, { $set: { status: 'PROCESSING', stage: 'ANALYZING', leaseExpiresAt: new Date(Date.now() + 15 * 60 * 1000), startedAt: new Date(), errorMessage: '' }, $inc: { attempts: 1 } }, { sort: { createdAt: 1 }, new: true });
     if (!job) return;
-    heartbeat = setInterval(() => {\n      void Promise.all([\n        CatalogueImportJob.updateOne({ jobId: job.jobId, status: 'PROCESSING' }, { $set: { leaseExpiresAt: new Date(Date.now() + 15 * 60 * 1000) } }),\n        renewCatalogueWorkerSlot(workerSlotId)\n      ]).catch(() => {});\n    }, 30000);
+    heartbeat = setInterval(() => {
+      void Promise.all([
+        CatalogueImportJob.updateOne({ jobId: job.jobId, status: 'PROCESSING' }, { $set: { leaseExpiresAt: new Date(Date.now() + 15 * 60 * 1000) } }),
+        renewCatalogueWorkerSlot(workerSlotId)
+      ]).catch(() => {});
+    }, 30000);
     heartbeat.unref?.();
     const buffer = await streamToBuffer(getCatalogueImportBucket().openDownloadStream(job.fileId));
     const fakeResponse = {
@@ -428,7 +436,11 @@ async function processNextCatalogueImportJob() {
     if (job) await CatalogueImportJob.updateOne({ jobId: job.jobId }, { $set: {
       status: 'FAILED', stage: 'FAILED', leaseExpiresAt: null, errorMessage: String(error.message || 'Import processing failed.').slice(0, 1000), completedAt: new Date()
     } });
-  } finally {\n    if (heartbeat) clearInterval(heartbeat);\n    await releaseCatalogueWorkerSlot(workerSlotId).catch(() => {});\n    catalogueImportWorkerBusy = false;\n  }
+  } finally {
+    if (heartbeat) clearInterval(heartbeat);
+    await releaseCatalogueWorkerSlot(workerSlotId).catch(() => {});
+    catalogueImportWorkerBusy = false;
+  }
 }
 export function startMedicineCatalogueImportWorker() {
   if (catalogueImportWorkerTimer) return;
