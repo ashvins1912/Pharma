@@ -38,7 +38,8 @@ gcloud builds submit deploy/medicine-embedding-service --tag REGION-docker.pkg.d
 gcloud run deploy pharma-medicine-embedding \
   --image REGION-docker.pkg.dev/PROJECT/pharma/medicine-embedding:VERSION \
   --region REGION --port 8080 --no-allow-unauthenticated \
-  --memory 2Gi --cpu 2 --concurrency 8 --min 0 --max 5
+  --memory 2Gi --cpu 2 --concurrency 8 --min 0 --max 5 \\
+  --set-env-vars MEDICINE_VECTOR_MODEL_REVISION=REVISION
 ```
 Configure `MEDICINE_EMBEDDING_TOKEN` through Secret Manager (for example `--set-secrets MEDICINE_EMBEDDING_TOKEN=pharma-medicine-embedding-token:latest`), never as a literal command-line value. This deployment uses Cloud Run HTTPS plus the service's constant-time-checked high-entropy bearer token at the application layer; the endpoint is not unauthenticated even though Cloud Run invocation is public. Rotate the token in Secret Manager and the Medicine Master environment together. For organizations requiring Cloud Run IAM-only ingress, add an OIDC ID-token transport adapter before switching to `--no-allow-unauthenticated`. Set `MEDICINE_VECTOR_INFERENCE_URL` to the Cloud Run URL.
 
