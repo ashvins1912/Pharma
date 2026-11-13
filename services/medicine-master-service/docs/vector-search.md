@@ -8,7 +8,7 @@ The search endpoint, response shape, gateway capability and existing catalogue l
 
 MedicineMaster in the existing Atlas database (`pharma_inventory`) remains the source of truth. Projection: `medicine_master_vector_index`; state: `medicine_master_vector_sync_state`. Only allowlisted shared catalogue fields are embedded. Tenant pricing, branch stock, batches, expiry, customer details and prescription data are excluded. Inventory Service remains authoritative for stock and pricing.
 
-Default model: `onnx-community/all-MiniLM-L6-v2-ONNX`, 384 dimensions. Set `MEDICINE_VECTOR_MODEL_REVISION` to an immutable Hugging Face commit SHA in both inference deployments and keep it identical across environments. Never mix vectors from different model revisions.
+Default model: `onnx-community/all-MiniLM-L6-v2-ONNX`, 384 dimensions. Set `MEDICINE_VECTOR_MODEL_REVISION` to an immutable Hugging Face commit SHA in the inference service, Medicine Master, and GitHub repository variable `MEDICINE_VECTOR_MODEL_REVISION`; keep it identical across environments. The indexer records and validates the revision so a model upgrade cannot silently mix vector spaces. Never mix vectors from different model revisions.
 
 ## Isolated inference service
 
