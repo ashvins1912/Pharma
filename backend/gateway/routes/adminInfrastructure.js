@@ -22,11 +22,12 @@ const renderRequest = async (path, options = {}) => {
 };
 const normaliseRenderService = item => {
   const service = item?.service || item;
+  const isSuspended = service.suspended === true || service.suspended === 'suspended' || Boolean(service.suspendedAt);
   return {
     id: service.id, name: service.name, type: service.type, provider: 'render',
     region: service.region || null, plan: service.plan || null,
-    status: service.suspended ? 'SUSPENDED' : (service.serviceDetails?.url ? 'ACTIVE' : (service.status || 'UNKNOWN')),
-    suspended: Boolean(service.suspended),
+    status: isSuspended ? 'SUSPENDED' : (service.serviceDetails?.url ? 'ACTIVE' : (service.status || 'UNKNOWN')),
+    suspended: isSuspended,
     dashboardUrl: service.dashboardUrl || null,
     capabilities: { start: Boolean(service.suspended), stop: !service.suspended && ['web_service', 'private_service', 'background_worker'].includes(service.type), restart: ['web_service', 'private_service', 'background_worker'].includes(service.type) },
     usage: { cpu: null, memoryBytes: null, memoryLimitBytes: null, outboundBytes: null, diskBytes: null, source: 'Metrics API is not included in Render service-list responses; connect an OpenTelemetry/Prometheus metrics adapter to populate usage.' }
@@ -47,7 +48,9 @@ async function loadNormalizedMetrics() {
 }
 async function listRenderServices() {
   if (!renderConfigured()) return [];
-  const [result, samples] = await Promise.all([renderRequest('/services?limit=100'), loadNormalizedMetrics()]);
+  const result = await renderRequest('/services?limit=100');
+  let samples = [];
+  try { samples = await loadNormalizedMetrics(); } catch (error) { console.warn('[Infrastructure] Metrics adapter unavailable:', error.message); }
   const entries = Array.isArray(result) ? result : (result?.services || result?.items || []);
   const byId = new Map(samples.filter(sample => sample?.provider === 'render' && sample?.resourceId).map(sample => [sample.resourceId, sample]));
   return entries.map(normaliseRenderService).filter(item => item.id).map(item => {
