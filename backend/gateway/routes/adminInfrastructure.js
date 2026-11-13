@@ -37,7 +37,7 @@ const unitBytes = (value, unit) => {
   const n = Number(value);
   if (!Number.isFinite(n)) return null;
   const u = String(unit || '').trim().toLowerCase();
-  const factors = { b: 1, byte: 1, bytes: 1, kb: 1024, kib: 1024, mb: 1024 ** 2, mib: 1024 ** 2, gb: 1024 ** 3, gib: 1024 ** 3, tb: 1024 ** 4, tib: 1024 ** 4 };
+  const factors = { b: 1, byte: 1, bytes: 1, kb: 1000, kib: 1024, mb: 1000 ** 2, mib: 1024 ** 2, gb: 1000 ** 3, gib: 1024 ** 3, tb: 1000 ** 4, tib: 1024 ** 4 };
   return factors[u] ? n * factors[u] : null;
 };
 const latestMetric = (series, resourceId) => {
@@ -57,8 +57,17 @@ async function renderMetric(metric, resourceIds, startTime, endTime) {
 }
 async function listRenderServices() {
   if (!renderConfigured()) return [];
-  const result = await renderRequest('/services?limit=100');
-  const entries = Array.isArray(result) ? result : (result?.services || result?.items || []);
+  let cursor = null;
+  const entries = [];
+  for (let page = 0; page < 10; page += 1) {
+    const query = new URLSearchParams({ limit: '100' });
+    if (cursor) query.set('cursor', cursor);
+    const result = await renderRequest(`/services?${query.toString()}`);
+    const pageItems = Array.isArray(result) ? result : (result?.services || result?.items || []);
+    entries.push(...pageItems);
+    cursor = Array.isArray(result) ? (pageItems[pageItems.length - 1]?.cursor || null) : (result?.cursor || null);
+    if (!cursor || !pageItems.length) break;
+  }
   const resources = entries.map(normaliseRenderService).filter(item => item.id);
   const ids = resources.map(item => item.id);
   const end = new Date();
@@ -118,11 +127,7 @@ async function getMongoUsage() {
 }
 router.get('/status', async (_req, res) => {
   const providers = [];
-  let metricsError = null;
-  if (process.env.INFRASTRUCTURE_METRICS_ENDPOINT) {
-    try { await loadNormalizedMetrics(); } catch (error) { metricsError = error.message; }
-  }
-  if (renderConfigured()) {
+    if (renderConfigured()) {
     try { providers.push({ id: 'render', name: 'Render', status: 'CONNECTED', resources: await listRenderServices() }); }
     catch (error) { providers.push({ id: 'render', name: 'Render', status: 'ERROR', error: error.message, resources: [] }); }
   } else providers.push({ id: 'render', name: 'Render', status: 'NOT_CONFIGURED', message: 'Set RENDER_API_KEY in the backend secret environment.' });
@@ -135,11 +140,11 @@ router.get('/status', async (_req, res) => {
     providers, databases: [{ id: 'mongodb', provider: 'mongodb', name: 'MongoDB', ...mongo }],
     metrics: {
       provider: process.env.INFRASTRUCTURE_METRICS_PROVIDER || null,
-      endpointConfigured: Boolean(process.env.INFRASTRUCTURE_METRICS_ENDPOINT),
-      error: metricsError,
-      note: 'Memory, CPU and network/bandwidth values are shown only when a metrics adapter supplies normalized samples. Never infer zero usage from missing telemetry.'
+      liveRenderMetrics: renderConfigured(),
+      note: 'Render CPU, memory and bandwidth are read from the native Render Metrics API. Additional cloud providers implement the same normalized adapter contract; missing samples remain unreported.'
     },
-    providerAdapterContract: ['render', 'aws', 'azure', 'gcp'],\n    databaseAdapters: ['mongodb', 'atlas']
+    providerAdapterContract: ['render', 'aws', 'azure', 'gcp'],
+    databaseAdapters: ['mongodb', 'atlas']
   });
 });
 router.post('/resources/:resourceId/:action', async (req, res) => {
