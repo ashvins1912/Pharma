@@ -173,6 +173,7 @@ const CAPABILITIES = [
   ['PATCH', /^\/api\/v1\/orders\/[^/]+\/status$/, 'orders.manage'],
   ['GET', /^\/api\/v1\/orders(?:\/|$)/, 'orders.read'],
   ['POST', /^\/api\/v1\/orders\/?$/, 'orders.create'],
+  ['GET', /^\/api\/v1\/inventory\/catalogue\/medicines\/search$/, 'inventory.catalogue.read'],
   ['GET', /^\/api\/v1\/catalog(?:\/|$)/, 'inventory.read'],
   ['GET', /^\/api\/v1\/pricing(?:\/|$)/, 'orders.read'],
   ['GET', /^\/api\/v1\/delivery(?:\/|$)/, 'delivery.read'],
