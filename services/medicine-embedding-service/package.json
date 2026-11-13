@@ -1,0 +1,16 @@
+{
+  "name": "pharma-medicine-embedding-service",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@huggingface/transformers": "3.7.2",
+    "express": "4.21.2"
+  },
+  "engines": {
+    "node": ">=20.19.0"
+  }
+}
