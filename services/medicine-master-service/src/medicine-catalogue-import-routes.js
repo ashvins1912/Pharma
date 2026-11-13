@@ -48,14 +48,42 @@ const pick = (record, ...names) => {
   }
   return undefined;
 };
+
+// Read every matching master row in stable _id order. Bounded pages avoid
+// Mongo result limits without silently treating a partial scan as complete.
+export async function collectCatalogueCandidates(fetchPage, batchSize = 1000) {
+  if (typeof fetchPage !== 'function' || !Number.isInteger(batchSize) || batchSize < 1) {
+    throw new TypeError('A page loader and positive integer batch size are required.');
+  }
+  const results = [];
+  let after = null;
+  while (true) {
+    const page = await fetchPage({ after, limit: batchSize });
+    if (!Array.isArray(page)) throw new TypeError('Catalogue candidate page must be an array.');
+    results.push(...page);
+    if (page.length < batchSize) break;
+    const next = page[page.length - 1]?._id;
+    if (next == null || String(next) === String(after)) {
+      throw new Error('Catalogue candidate pagination did not advance; refusing an incomplete reconciliation scan.');
+    }
+    after = next;
+  }
+  return results;
+}
+
+async function loadCatalogueCandidates(filter, projection) {
+  return collectCatalogueCandidates(({ after, limit }) => {
+    const pageFilter = after ? { $and: [filter, { _id: { $gt: after } }] } : filter;
+    return MedicineMaster.find(pageFilter, projection).sort({ _id: 1 }).limit(limit).lean();
+  });
+}
+
 async function reconcileCatalogueRecordsAgainstMaster(records) {
   const ids = [...new Set(records.flatMap(item => [item.medicineId, item.reconciliationMatch?.targetMedicineId].filter(Boolean)))];
   const canonicalKeys = [...new Set(records.map(item => item.canonicalKey).filter(Boolean))];
   const names = [...new Set(records.filter(item => item.safeNameMatch).map(item => item.brandName).filter(Boolean))];
-  const allPrefixes = [...new Set(records.map(item => key(item.brandName).slice(0, 2)).filter(value => value.length === 2))];
-  const prefixes = allPrefixes.slice(0, 120);
+  const prefixes = [...new Set(records.map(item => key(item.brandName).slice(0, 2)).filter(value => value.length === 2))];
   const scannedPrefixes = new Set(prefixes);
-  const prefixScanTruncated = allPrefixes.length > prefixes.length;
   const clauses = [
     ...(ids.length ? [{ medicineId: { $in: ids } }] : []),
     ...(canonicalKeys.length ? [{ canonicalKey: { $in: canonicalKeys } }] : []),
@@ -63,16 +91,14 @@ async function reconcileCatalogueRecordsAgainstMaster(records) {
     ...prefixes.map(prefix => ({ brandName: { $regex: '^' + prefix, $options: 'i' } }))
   ];
   const [candidates, archivedIdentityRows] = await Promise.all([
-    clauses.length ? MedicineMaster.find({ $or: clauses, isArchived: { $ne: true } }, {
+    clauses.length ? loadCatalogueCandidates({ $or: clauses, isArchived: { $ne: true } }, {
       _id: 1, medicineId: 1, canonicalKey: 1, brandName: 1, genericName: 1, composition: 1,
       ingredients: 1, strength: 1, dosageForm: 1, manufacturer: 1
-    }).limit(5001).lean() : [],
+    }) : [],
     ids.length ? MedicineMaster.find({ medicineId: { $in: ids }, isArchived: true }, { medicineId: 1 }).lean() : []
   ]);
-  const archivedIds = new Set(archivedIdentityRows.map(item => item.medicineId));
-  const candidateLimitTruncated = candidates.length > 5000;
-  const scanTruncated = candidateLimitTruncated || prefixScanTruncated;
-  const activeCandidates = candidates.slice(0, 5000);
+  const scanTruncated = false;
+  const activeCandidates = candidates;
   const byId = new Map(activeCandidates.map(item => [item.medicineId, item]));
   const keyGroups = new Map(), nameGroups = new Map(), prefixGroups = new Map();
   for (const candidate of activeCandidates) {
@@ -171,7 +197,7 @@ async function reconcileCatalogueRecordsAgainstMaster(records) {
   };
 }
 
-const fuzzyCandidatePrefixes = records => [...new Set(records.map(item => key(item.brandName).slice(0, 2)).filter(value => value.length === 2))].slice(0, 120);
+export const fuzzyCandidatePrefixes = records => [...new Set(records.map(item => key(item.brandName).slice(0, 2)).filter(value => value.length === 2))];
 const bool = value => typeof value === 'boolean' ? value : ['true', 'yes', '1'].includes(text(value).toLowerCase());
 const cleanRetailProductName = value => text(value).split(/\b(?:mrp|price|inclusive of all taxes|prescription required|prescription only)\b|₹|\bRs\.?\s*\d/i)[0].replace(/[|,;\-–]+\s*$/, '').trim();
 const cleanDosageForm = value => {
@@ -695,9 +721,10 @@ async function processCatalogueImportPreview(req, res) {
     : [];
   const fuzzyPrefixes = fuzzyCandidatePrefixes(records);
   const fuzzyCandidates = fuzzyPrefixes.length
-    ? await MedicineMaster.find({ $or: fuzzyPrefixes.map(prefix => ({ brandName: { $regex: '^' + prefix, $options: 'i' } })) },
-      { medicineId: 1, canonicalKey: 1, brandName: 1, genericName: 1, composition: 1, ingredients: 1, strength: 1, dosageForm: 1, manufacturer: 1 })
-      .limit(5000).lean()
+    ? await loadCatalogueCandidates(
+      { $or: fuzzyPrefixes.map(prefix => ({ brandName: { $regex: '^' + prefix, $options: 'i' } })) },
+      { _id: 1, medicineId: 1, canonicalKey: 1, brandName: 1, genericName: 1, composition: 1, ingredients: 1, strength: 1, dosageForm: 1, manufacturer: 1 }
+    )
     : [];
   const existingByMongoId = new Map();
   for (const candidate of [...exactCandidates, ...nameCandidates, ...fuzzyCandidates]) existingByMongoId.set(String(candidate._id), candidate);
