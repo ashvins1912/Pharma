@@ -26,6 +26,7 @@ import RoleFeatureMatrixTab from './RoleFeatureMatrixTab';
 import AutomationTestCenterTab from './AutomationTestCenterTab';
 import FeatureHealthDashboard from './FeatureHealthDashboard';
 import DatabaseCleanupTask from './DatabaseCleanupTask';
+import InfrastructureOperations from './InfrastructureOperations';
 import TenantProfileDashboard from './TenantProfileDashboard';
 import { useLanguage } from '../../context/LanguageContext';
 import { getAdminMedicineRequests, getAdminPendingMedicineRequestCount } from '../../api/medicineRequestService';
@@ -239,7 +240,8 @@ export default function AdminDashboardView() {
       isSuperAdmin && 'matrix',
       isSuperAdmin && 'automation',
       isSuperAdmin && 'featureHealth',
-      isSuperAdmin && 'databaseCleanup'
+      isSuperAdmin && 'databaseCleanup',
+      isSuperAdmin && 'infrastructureOperations'
     ].filter(Boolean);
     if (!allowedTabs.includes(adminTab)) setAdminTab(allowedTabs[0] || '');
   }, [
@@ -324,7 +326,8 @@ export default function AdminDashboardView() {
     matrix: { category: t('platformSettings'), title: t('roleFeatureMatrix'), icon: '📐' },
     automation: { category: t('platformSettings'), title: t('systemChecks'), icon: '🧪' },
     featureHealth: { category: t('platformSettings'), title: t('systemHealth'), icon: '🩺' },
-    databaseCleanup: { category: 'Task Operations', title: 'Database Cleanup', icon: '🧹' }
+    databaseCleanup: { category: 'Task Operations', title: 'Database Cleanup', icon: '🧹' },
+    infrastructureOperations: { category: 'Task Operations', title: 'Infrastructure & Resource Operations', icon: '☁️' }
   }[adminTab] || { category: 'Operations', title: 'Workspace', icon: '⚡' };
 
   return (
@@ -704,7 +707,8 @@ export default function AdminDashboardView() {
               id: 'taskOperations',
               title: 'Task Operations',
               items: [
-                isSuperAdmin && { tab: 'databaseCleanup', label: 'Database Cleanup', icon: '🧹', tone: 'governance' }
+                isSuperAdmin && { tab: 'databaseCleanup', label: 'Database Cleanup', icon: '🧹', tone: 'governance' },
+                isSuperAdmin && { tab: 'infrastructureOperations', label: 'Infrastructure & Resources', icon: '☁️', tone: 'governance' }
               ]
             }
           ].map(group => {
