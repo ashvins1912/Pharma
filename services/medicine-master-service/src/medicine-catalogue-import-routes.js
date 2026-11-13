@@ -1428,7 +1428,7 @@ const catalogueCleanupPlan = async () => {
   ]);
   return {
     retention: { publishedImportHours: 1, failedJobHours: 24 },
-    protected: { medicineMasterCatalogue: 'Never deleted', importBatchReports: 'Retained', READY batches awaiting publish: 'Retained' },
+    protected: { medicineMasterCatalogue: 'Never deleted', importBatchReports: 'Retained', 'READY batches awaiting publish': 'Retained' },
     collections: [
       { name: 'medicinecatalogueimportchunks', count: chunkStats[0]?.count || 0, estimatedBytes: chunkStats[0]?.bytes || 0, rule: 'Chunks belonging only to PUBLISHED batches older than 1 hour' },
       { name: 'medicinecatalogueimportjobs', count: jobs.length, estimatedBytes: jobBytes, rule: 'READY jobs for published batches older than 1 hour and FAILED jobs older than 24 hours' },
