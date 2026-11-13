@@ -2,12 +2,13 @@ import { spawn } from 'node:child_process';
 
 let shuttingDown = false;
 
+const adminEnabled = process.env.START_ADMIN_SERVICE === 'true';
 const definitions = [
   ['backend', ['--prefix', 'backend', 'run', 'dev'], { PORT: '8090' }],
-  ['api-gateway', ['--prefix', 'api-gateway', 'run', 'dev'], { PORT: '8080' }],
+  ['api-gateway', ['--prefix', 'api-gateway', 'run', 'dev'], { PORT: '8080', ...(adminEnabled ? { ADMIN_SERVICE_URL: 'http://localhost:8091' } : {}) }],
   ['frontend', ['--prefix', 'frontend', 'run', 'dev'], {}]
 ];
-if (process.env.START_ADMIN_SERVICE === 'true') {
+if (adminEnabled) {
   definitions.splice(2, 0, ['admin-control-plane', ['--workspace', 'services/admin-control-plane', 'run', 'dev'], { PORT: process.env.ADMIN_PORT || '8091' }]);
 }
 
