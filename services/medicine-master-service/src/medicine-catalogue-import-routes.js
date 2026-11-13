@@ -1326,11 +1326,12 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
       publishedCount += chunk.length;
       await CatalogueImport.updateOne({ _id: batch._id }, { $set: { publishedCount } });
     }
-    batch.publishedCount = publishedCount;
+    const totalPublishedForBatch = await MedicineMaster.countDocuments({ lastImportBatchId: batch.batchId });
+    batch.publishedCount = Math.max(publishedCount, totalPublishedForBatch);
     if (skippedCount > 0) {
       const refreshedReport = {
         ...(batch.report || {}),
-        publishReconciliation: { ...publishSummary, publishedRecords: publishedCount },
+        publishReconciliation: { ...publishSummary, publishedRecords: batch.publishedCount },
         publishBlockedAt: new Date().toISOString()
       };
       batch.report = refreshedReport;
@@ -1338,12 +1339,12 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
       batch.approvedAt = null;
       batch.approvedBy = '';
       batch.status = 'PARTIALLY_PUBLISHED';
-      batch.errorMessage = `Published ${publishedCount} conflict-free records; ${skippedCount} records remain blocked for manual review or reconciliation.`;
+      batch.errorMessage = `Published ${batch.publishedCount} conflict-free records; ${skippedCount} records remain blocked for manual review or reconciliation.`;
       await batch.save();
       return res.json({
         batchId: batch.batchId,
         status: batch.status,
-        publishedCount,
+        publishedCount: batch.publishedCount,
         skippedCount,
         message: batch.errorMessage,
         report: batch.report,
