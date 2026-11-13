@@ -133,6 +133,7 @@ async function listRenderServices() {
     };
   });
 }
+const numberOrNull = value => value != null && Number.isFinite(Number(value)) ? Number(value) : null;
 const controlPlaneConfigured = () => Boolean(String(process.env.INFRASTRUCTURE_CONTROL_PLANE_URL || '').trim());
 const controlPlaneRequest = async (path, options = {}) => {
   const base = String(process.env.INFRASTRUCTURE_CONTROL_PLANE_URL || '').replace(/\/+$/, '');
@@ -174,10 +175,10 @@ async function listExternalResources() {
       restart: item.capabilities?.restart === true
     },
     usage: {
-      cpu: item.usage?.cpu ?? null, cpuUnit: item.usage?.cpuUnit || null,
-      memoryBytes: item.usage?.memoryBytes ?? null, memoryLimitBytes: item.usage?.memoryLimitBytes ?? null,
-      outboundBytes: item.usage?.outboundBytes ?? null, bandwidthWindow: item.usage?.bandwidthWindow || null,
-      diskBytes: item.usage?.diskBytes ?? null,
+      cpu: numberOrNull(item.usage?.cpu), cpuUnit: item.usage?.cpuUnit || null,
+      memoryBytes: numberOrNull(item.usage?.memoryBytes), memoryLimitBytes: numberOrNull(item.usage?.memoryLimitBytes),
+      outboundBytes: numberOrNull(item.usage?.outboundBytes), bandwidthWindow: item.usage?.bandwidthWindow || null,
+      diskBytes: numberOrNull(item.usage?.diskBytes),
       estimatedCost: item.usage?.estimatedCost != null && Number.isFinite(Number(item.usage.estimatedCost)) ? Number(item.usage.estimatedCost) : null,
       costCurrency: /^[A-Z]{3}$/.test(String(item.usage?.costCurrency || '').toUpperCase()) ? String(item.usage.costCurrency).toUpperCase() : null,
       costWindow: typeof item.usage?.costWindow === 'string' ? item.usage.costWindow.slice(0, 80) : null,
