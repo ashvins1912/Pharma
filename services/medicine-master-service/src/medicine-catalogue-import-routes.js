@@ -7,6 +7,7 @@ import { requireServiceScope } from './service-auth.js';
 import { config } from './config.js';
 import { scoreMedicineMatch } from './medicine-match-scoring.js';
 import { buildNameNgramIdf, CharacterNgramCandidateIndex } from '@pharma/algorithm-kernel';
+import { catalogueProcessingLimits, evaluateCatalogueProcessingGuard, getCatalogueProcessingResourceSnapshot } from './guards/catalogue-processing-guard.js';
 export { scoreMedicineMatch };
 
 const router = express.Router();
@@ -358,6 +359,12 @@ const streamToBuffer = async stream => {
 };
 async function processNextCatalogueImportJob() {
   if (catalogueImportWorkerBusy || mongoose.connection.readyState !== 1) return;
+  const resources = getCatalogueProcessingResourceSnapshot();
+  const protection = evaluateCatalogueProcessingGuard({
+    heapUsedPercent: resources.process.heapUsedPercent,
+    cpuLoadPercent: resources.host.cpuLoadPercent
+  });
+  if (!protection.allowed) return;
   catalogueImportWorkerBusy = true;
   let job;
   let heartbeat;
@@ -395,7 +402,7 @@ async function processNextCatalogueImportJob() {
 }
 export function startMedicineCatalogueImportWorker() {
   if (catalogueImportWorkerTimer) return;
-  catalogueImportWorkerTimer = setInterval(() => { void processNextCatalogueImportJob(); }, 1500);
+  catalogueImportWorkerTimer = setInterval(() => { void processNextCatalogueImportJob(); }, catalogueProcessingLimits.pollIntervalMs);
   catalogueImportWorkerTimer.unref?.();
 }
 export function stopMedicineCatalogueImportWorker() {
@@ -697,6 +704,47 @@ router.use((req, res, next) => req.service?.isPlatformUser === true
   ? next()
   : res.status(403).json({ code: 'PLATFORM_ADMIN_REQUIRED', message: 'Only a platform administrator can publish the shared medicine master catalogue.' }));
 
+router.get('/imports/processing-guard', asyncHandler(async (_req, res) => {
+  const [queuedJobs, activeJobs] = await Promise.all([
+    CatalogueImportJob.countDocuments({ status: 'QUEUED' }),
+    CatalogueImportJob.countDocuments({ status: 'PROCESSING' })
+  ]);
+  const resources = getCatalogueProcessingResourceSnapshot();
+  const protection = evaluateCatalogueProcessingGuard({
+    heapUsedPercent: resources.process.heapUsedPercent,
+    cpuLoadPercent: resources.host.cpuLoadPercent,
+    queuedJobs
+  });
+  return res.json({
+    enabled: process.env.MEDICINE_CATALOGUE_PROCESSING_ENABLED !== 'false',
+    state: protection.allowed ? 'READY' : 'PROTECTED',
+    reasons: protection.reasons,
+    limits: catalogueProcessingLimits,
+    queue: { queuedJobs, activeJobs, maxQueuedJobs: catalogueProcessingLimits.maxQueuedJobs },
+    resources
+  });
+}));
+
+const enforceCatalogueQueueCapacity = asyncHandler(async (_req, res, next) => {
+  const queuedJobs = await CatalogueImportJob.countDocuments({ status: 'QUEUED' });
+  const resources = getCatalogueProcessingResourceSnapshot();
+  const protection = evaluateCatalogueProcessingGuard({
+    heapUsedPercent: resources.process.heapUsedPercent,
+    cpuLoadPercent: resources.host.cpuLoadPercent,
+    queuedJobs
+  });
+  if (protection.reasons.includes('QUEUE_CAPACITY_REACHED')) {
+    res.set('Retry-After', '30');
+    return res.status(429).json({ code: 'CATALOGUE_QUEUE_FULL', message: 'The medicine catalogue processing queue is full. Retry after existing jobs complete.', queuedJobs, maxQueuedJobs: catalogueProcessingLimits.maxQueuedJobs });
+  }
+  const resourceReasons = protection.reasons.filter(reason => reason !== 'QUEUE_CAPACITY_REACHED');
+  if (resourceReasons.length) {
+    res.set('Retry-After', '30');
+    return res.status(503).json({ code: 'CATALOGUE_PROCESSING_PROTECTED', message: 'Catalogue uploads are temporarily paused by the resource protection guard.', reasons: resourceReasons });
+  }
+  return next();
+});
+
 async function processCatalogueImportPreview(req, res) {
   if (!req.file) return res.status(400).json({ message: 'Select a JSON file to upload.' });
   let payload;
@@ -903,7 +951,7 @@ async function processCatalogueImportPreview(req, res) {
   }
 
 }
-router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (req, res) => {
+router.post('/imports/preview', enforceCatalogueQueueCapacity, upload.single('jsonFile'), asyncHandler(async (req, res) => {
   if (!req.file) return res.status(400).json({ message: 'Select a JSON file to upload.' });
   const jobId = randomUUID();
   await CatalogueImportJob.create({
