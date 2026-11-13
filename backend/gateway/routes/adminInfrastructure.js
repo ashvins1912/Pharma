@@ -122,7 +122,7 @@ async function listRenderServices() {
         memoryLimitBytes: null,
         outboundBytes,
         bandwidthUnit: bandwidth?.unit || null,
-        bandwidthWindow: bandwidth ? 'Total of available hourly points · last 24 hours' : null,
+        bandwidthWindow: bandwidth ? '24h' : null,
         diskBytes: null,
         estimatedCost: null, costCurrency: null, costWindow: null,
         observedAt: [cpu?.timestamp, memory?.timestamp, bandwidth?.timestamp].filter(Boolean).sort().at(-1) || null,
