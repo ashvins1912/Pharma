@@ -97,6 +97,7 @@ async function reconcileCatalogueRecordsAgainstMaster(records) {
     }) : [],
     ids.length ? MedicineMaster.find({ medicineId: { $in: ids }, isArchived: true }, { medicineId: 1 }).lean() : []
   ]);
+  const archivedIds = new Set(archivedIdentityRows.map(item => item.medicineId));
   const scanTruncated = false;
   const activeCandidates = candidates;
   const byId = new Map(activeCandidates.map(item => [item.medicineId, item]));
