@@ -45,7 +45,7 @@ const cleanupCutoffs = () => ({
 const cleanupEstimate = async (model, filter) => {
   const [count, sizes] = await Promise.all([
     model.countDocuments(filter),
-    model.aggregate([{ $match: filter }, { $group: { _id: null, bytes: { $sum: { $bsonSize: '$ROOT' } } } }])
+    model.aggregate([{ $match: filter }, { $group: { _id: null, bytes: { $sum: { $bsonSize: '$$ROOT' } } } }])
   ]);
   return { count, estimatedBytes: sizes[0]?.bytes || 0 };
 };
