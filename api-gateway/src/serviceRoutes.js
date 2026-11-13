@@ -186,16 +186,16 @@ export function createServiceRouters(gatewayConfig = config) {
   medicineMasterRouter.post('/imports/:batchId/approve', catalogueImportAuth, catalogueImport);
   medicineMasterRouter.post('/imports/:batchId/publish', catalogueImportAuth, catalogueImport);
 
-  const inventoryCleanup = inventory('platform.database.cleanup');
-  inventoryRouter.get('/admin/database-cleanup/status', requireSuperAdmin, inventoryCleanup);
-  inventoryRouter.post('/admin/database-cleanup/preview', requireSuperAdmin, inventoryCleanup);
-  inventoryRouter.post('/admin/database-cleanup/execute', requireSuperAdmin, inventoryCleanup);
   const inventory = scope => createServiceHandler({
     audience: gatewayConfig.inventoryJwtAudience,
     getScope: () => scope,
     target: gatewayConfig.inventoryServiceUrl,
     validateTenantBranch: scope === 'inventory.import'
   }, gatewayConfig);
+  const inventoryCleanup = inventory('platform.database.cleanup');
+  inventoryRouter.get('/admin/database-cleanup/status', requireSuperAdmin, inventoryCleanup);
+  inventoryRouter.post('/admin/database-cleanup/preview', requireSuperAdmin, inventoryCleanup);
+  inventoryRouter.post('/admin/database-cleanup/execute', requireSuperAdmin, inventoryCleanup);
   inventoryRouter.get('/alerts', inventory('inventory.read'));
   inventoryRouter.get('/alerts/summary', inventory('inventory.read'));
   inventoryRouter.get('/suggest-restock', inventory('inventory.read'));
