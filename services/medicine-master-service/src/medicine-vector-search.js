@@ -42,7 +42,7 @@ export async function embedMedicineTexts(texts) {
     if (!response.ok) throw new Error('Embedding inference returned HTTP ' + response.status);
     const payload = await response.json();
     const rows = payload?.embeddings;
-    if (payload?.model !== config.vectorModel || payload?.dimensions !== config.vectorDimensions ||
+    if (payload?.model !== config.vectorModel || payload?.revision !== config.vectorModelRevision || payload?.dimensions !== config.vectorDimensions ||
         !Array.isArray(rows) || rows.length !== input.length ||
         rows.some(row => !Array.isArray(row) || row.length !== config.vectorDimensions ||
           row.some(value => !Number.isFinite(Number(value))))) {
@@ -65,7 +65,7 @@ export async function upsertMedicineVectorDocuments(records,{embed=embedMedicine
     return {updateOne:{filter:{medicineId:row.medicineId},update:{$set:{
       medicineId:row.medicineId,embedding:embedding.map(Number),
       embeddingTextHash:createHash('sha256').update(texts[index]).digest('hex'),
-      embeddingModel:config.vectorModel,embeddingDimensions:config.vectorDimensions,
+      embeddingModel:config.vectorModel,embeddingModelRevision:config.vectorModelRevision,embeddingDimensions:config.vectorDimensions,
       isArchived:Boolean(row.isArchived),sourceUpdatedAt:row.updatedAt || new Date(),updatedAt:new Date()
     }},upsert:true}};
   });
@@ -110,7 +110,7 @@ export async function searchMedicineMaster({query,limit=15,model=mongoose.models
   let vectorRows=[],vectorAvailable=false;
   if(config.vectorSearchEnabled){
     const state=await collection(config.vectorStateCollection).findOne({_id:STATE_ID});
-    if(state?.status==='READY'&&state.model===config.vectorModel&&state.dimensions===config.vectorDimensions){
+    if(state?.status==='READY'&&state.model===config.vectorModel&&state.modelRevision===config.vectorModelRevision&&state.dimensions===config.vectorDimensions){
       try{
         const [queryVector]=await embedMedicineTexts([clean(query)]);
         vectorRows=await collection(config.vectorCollection).aggregate([
