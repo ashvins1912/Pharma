@@ -27,6 +27,7 @@ import AutomationTestCenterTab from './AutomationTestCenterTab';
 import FeatureHealthDashboard from './FeatureHealthDashboard';
 import DatabaseCleanupTask from './DatabaseCleanupTask';
 import InfrastructureOperations from './InfrastructureOperations';
+import MedicineCatalogueProcessingGuard from './MedicineCatalogueProcessingGuard';
 import TenantProfileDashboard from './TenantProfileDashboard';
 import { useLanguage } from '../../context/LanguageContext';
 import { getAdminMedicineRequests, getAdminPendingMedicineRequestCount } from '../../api/medicineRequestService';
@@ -241,7 +242,8 @@ export default function AdminDashboardView() {
       isSuperAdmin && 'automation',
       isSuperAdmin && 'featureHealth',
       isSuperAdmin && 'databaseCleanup',
-      isSuperAdmin && 'infrastructureOperations'
+      isSuperAdmin && 'infrastructureOperations',
+      isSuperAdmin && 'catalogueProcessingGuard'
     ].filter(Boolean);
     if (!allowedTabs.includes(adminTab)) setAdminTab(allowedTabs[0] || '');
   }, [
@@ -327,7 +329,8 @@ export default function AdminDashboardView() {
     automation: { category: t('platformSettings'), title: t('systemChecks'), icon: '🧪' },
     featureHealth: { category: t('platformSettings'), title: t('systemHealth'), icon: '🩺' },
     databaseCleanup: { category: 'Task Operations', title: 'Database Cleanup', icon: '🧹' },
-    infrastructureOperations: { category: 'Task Operations', title: 'Infrastructure & Resource Operations', icon: '☁️' }
+    infrastructureOperations: { category: 'Task Operations', title: 'Infrastructure & Resource Operations', icon: '☁️' },
+    catalogueProcessingGuard: { category: 'Task Operations', title: 'Medicine Catalogue Processing Guard', icon: '🛡️' }
   }[adminTab] || { category: 'Operations', title: 'Workspace', icon: '⚡' };
 
   return (
@@ -708,7 +711,8 @@ export default function AdminDashboardView() {
               title: 'Task Operations',
               items: [
                 isSuperAdmin && { tab: 'databaseCleanup', label: 'Database Cleanup', icon: '🧹', tone: 'governance' },
-                isSuperAdmin && { tab: 'infrastructureOperations', label: 'Infrastructure & Resources', icon: '☁️', tone: 'governance' }
+                isSuperAdmin && { tab: 'infrastructureOperations', label: 'Infrastructure & Resources', icon: '☁️', tone: 'governance' },
+                isSuperAdmin && { tab: 'catalogueProcessingGuard', label: 'Medicine Catalogue Guard', icon: '🛡️', tone: 'governance' }
               ]
             }
           ].map(group => {
@@ -790,6 +794,9 @@ export default function AdminDashboardView() {
       )}
       {adminTab === 'infrastructureOperations' && isSuperAdmin && (
         <div className="admin-screen admin-screen--infrastructure-operations"><InfrastructureOperations onOpenDatabaseCleanup={() => setAdminTab('databaseCleanup')} /></div>
+      )}
+      {adminTab === 'catalogueProcessingGuard' && isSuperAdmin && (
+        <div className="admin-screen admin-screen--catalogue-processing-guard"><MedicineCatalogueProcessingGuard /></div>
       )}
       {adminTab === 'members' && canManageMembers && <div className="admin-screen admin-screen--members"><TenantStaffManager tenantId={activeTenantId} /></div>}
       {adminTab === 'serviceLogs' && isSuperAdmin && <div className="admin-screen admin-screen--service-logs"><ServiceLogsTab /></div>}

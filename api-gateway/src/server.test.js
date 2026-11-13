@@ -212,6 +212,15 @@ test('shared Medicine Master semantic search requires catalogue read capability'
   assert.equal(resolveGatewayCapability('POST', '/api/v1/inventory/catalogue/medicines/search'), null);
 });
 
+test('Medicine Catalogue Processing Guard status and controls require the platform catalogue-import capability', () => {
+  const status = '/api/v1/inventory/catalogue/imports/processing-guard';
+  const control = '/api/v1/inventory/catalogue/imports/processing-guard/control';
+  assert.equal(resolveGatewayCapability('GET', status), 'inventory.catalogue.import');
+  assert.equal(resolveGatewayCapability('POST', control), 'inventory.catalogue.import');
+  assert.equal(isGatewayPermissionAllowed({ role: 'SUPER_ADMIN', permissions: ['inventory.catalogue.import'] }, 'inventory.catalogue.import'), true);
+  assert.equal(isGatewayPermissionAllowed({ role: 'TENANT_ADMIN', permissions: ['inventory.catalogue.read'] }, 'inventory.catalogue.import'), false);
+});
+
 test('explicit revocations override Super Admin wildcard grants', () => {
   const user = {
     role: 'SUPER_ADMIN',

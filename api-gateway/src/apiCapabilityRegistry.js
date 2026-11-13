@@ -149,6 +149,8 @@ const CAPABILITIES = [
   // the gateway capability is an additional least-privilege perimeter check.
   ['GET', /^\/api\/v1\/inventory\/catalogue\/matches\/review$/, 'inventory.catalogue.import'],
   ['POST', /^\/api\/v1\/inventory\/catalogue\/matches\/(?:discover|[^/]+\/map)$/, 'inventory.catalogue.import'],
+  ['GET', /^\/api\/v1\/inventory\/catalogue\/imports\/processing-guard$/, 'inventory.catalogue.import'],
+  ['POST', /^\/api\/v1\/inventory\/catalogue\/imports\/processing-guard\/control$/, 'inventory.catalogue.import'],
   ['GET', /^\/api\/v1\/inventory\/catalogue\/imports$/, 'inventory.catalogue.import'],
   ['POST', /^\/api\/v1\/inventory\/catalogue\/imports\/(?:preview|merge|remove-selected)$/, 'inventory.catalogue.import'],
   ['GET', /^\/api\/v1\/inventory\/catalogue\/imports\/jobs\/[^/]+$/, 'inventory.catalogue.import'],

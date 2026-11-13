@@ -353,6 +353,20 @@ const catalogueWorkerSlotSchema = new mongoose.Schema({
   leaseExpiresAt: { type: Date, default: new Date(0), index: true }
 }, { timestamps: true });
 const CatalogueWorkerSlot = mongoose.models.MedicineCatalogueWorkerSlot || mongoose.model('MedicineCatalogueWorkerSlot', catalogueWorkerSlotSchema);
+const catalogueProcessingControlSchema = new mongoose.Schema({
+  _id: { type: String, default: 'global' },
+  operatorPaused: { type: Boolean, default: false },
+  pauseReason: { type: String, default: '' },
+  updatedBy: { type: String, default: '' },
+  history: { type: [mongoose.Schema.Types.Mixed], default: [] }
+}, { collection: 'medicine_catalogue_processing_control', versionKey: false, timestamps: true });
+const CatalogueProcessingControl = mongoose.models.MedicineCatalogueProcessingControl
+  || mongoose.model('MedicineCatalogueProcessingControl', catalogueProcessingControlSchema);
+const getCatalogueOperatorControl = async () => {
+  const control = await CatalogueProcessingControl.findById('global').lean();
+  return control || { operatorPaused: false, pauseReason: '', updatedBy: '', history: [] };
+};
+
 const catalogueWorkerOwnerId = randomUUID();
 async function acquireCatalogueWorkerSlot() {
   const now = new Date();
@@ -388,8 +402,10 @@ const streamToBuffer = async stream => {
 };
 async function processNextCatalogueImportJob() {
   if (catalogueImportWorkerBusy || mongoose.connection.readyState !== 1) return;
+  const operatorControl = await getCatalogueOperatorControl();
   const resources = getCatalogueProcessingResourceSnapshot();
   const protection = evaluateCatalogueProcessingGuard({
+    enabled: process.env.MEDICINE_CATALOGUE_PROCESSING_ENABLED !== 'false' && !operatorControl.operatorPaused,
     heapUsedPercent: resources.process.heapUsedPercent,
     rssUsedPercent: resources.process.rssUsedPercent,
     cpuLoadPercent: resources.host.cpuLoadPercent
@@ -402,6 +418,8 @@ async function processNextCatalogueImportJob() {
   try {
     workerSlotId = await acquireCatalogueWorkerSlot();
     if (workerSlotId === null) return;
+    const latestControl = await getCatalogueOperatorControl();
+    if (latestControl.operatorPaused || process.env.MEDICINE_CATALOGUE_PROCESSING_ENABLED === 'false') return;
     job = await CatalogueImportJob.findOneAndUpdate({
       $or: [{ status: 'QUEUED' }, { status: 'PROCESSING', leaseExpiresAt: { $lt: new Date() } }]
     }, { $set: { status: 'PROCESSING', stage: 'ANALYZING', leaseExpiresAt: new Date(Date.now() + 15 * 60 * 1000), startedAt: new Date(), errorMessage: '' }, $inc: { attempts: 1 } }, { sort: { createdAt: 1 }, new: true });
@@ -747,12 +765,14 @@ router.use((req, res, next) => req.service?.isPlatformUser === true
   : res.status(403).json({ code: 'PLATFORM_ADMIN_REQUIRED', message: 'Only a platform administrator can publish the shared medicine master catalogue.' }));
 
 router.get('/imports/processing-guard', asyncHandler(async (_req, res) => {
-  const [queuedJobs, activeJobs] = await Promise.all([
+  const [queuedJobs, activeJobs, operatorControl] = await Promise.all([
     CatalogueImportJob.countDocuments({ status: 'QUEUED' }),
-    CatalogueImportJob.countDocuments({ status: 'PROCESSING' })
+    CatalogueImportJob.countDocuments({ status: 'PROCESSING' }),
+    getCatalogueOperatorControl()
   ]);
   const resources = getCatalogueProcessingResourceSnapshot();
   const protection = evaluateCatalogueProcessingGuard({
+    enabled: process.env.MEDICINE_CATALOGUE_PROCESSING_ENABLED !== 'false' && !operatorControl.operatorPaused,
     heapUsedPercent: resources.process.heapUsedPercent,
     rssUsedPercent: resources.process.rssUsedPercent,
     cpuLoadPercent: resources.host.cpuLoadPercent,
@@ -760,7 +780,11 @@ router.get('/imports/processing-guard', asyncHandler(async (_req, res) => {
   });
   return res.json({
     enabled: process.env.MEDICINE_CATALOGUE_PROCESSING_ENABLED !== 'false',
-    state: protection.allowed ? 'READY' : 'PROTECTED',
+    operatorPaused: Boolean(operatorControl.operatorPaused),
+    pauseReason: operatorControl.pauseReason || '',
+    updatedBy: operatorControl.updatedBy || '',
+    history: (operatorControl.history || []).slice(-20).reverse(),
+    state: protection.allowed ? 'READY' : operatorControl.operatorPaused || process.env.MEDICINE_CATALOGUE_PROCESSING_ENABLED === 'false' ? 'PAUSED' : 'PROTECTED',
     reasons: protection.reasons,
     limits: catalogueProcessingLimits,
     queue: { queuedJobs, activeJobs, maxQueuedJobs: catalogueProcessingLimits.maxQueuedJobs },
@@ -768,10 +792,42 @@ router.get('/imports/processing-guard', asyncHandler(async (_req, res) => {
   });
 }));
 
+router.post('/imports/processing-guard/control', asyncHandler(async (req, res) => {
+  const action = String(req.body?.action || '').toLowerCase();
+  const reason = String(req.body?.reason || '').trim().slice(0, 500);
+  const actor = String(req.service?.userId || req.service?.name || 'platform-admin').slice(0, 160);
+  if (!['pause', 'resume'].includes(action)) {
+    return res.status(400).json({ code: 'INVALID_GUARD_ACTION', message: 'Action must be pause or resume.' });
+  }
+  if (reason.length < 8) {
+    return res.status(400).json({ code: 'GUARD_REASON_REQUIRED', message: 'Provide an operational reason of at least 8 characters.' });
+  }
+  const confirmation = action === 'pause' ? 'PAUSE CATALOGUE PROCESSING' : 'RESUME CATALOGUE PROCESSING';
+  if (req.body?.confirmation !== confirmation) {
+    return res.status(400).json({ code: 'CONFIRMATION_REQUIRED', message: 'The exact confirmation phrase is required.' });
+  }
+  const operatorPaused = action === 'pause';
+  const event = { action: action.toUpperCase(), reason, actor, at: new Date() };
+  const control = await CatalogueProcessingControl.findOneAndUpdate(
+    { _id: 'global' },
+    {
+      $set: { operatorPaused, pauseReason: operatorPaused ? reason : '', updatedBy: actor },
+      $push: { history: { $each: [event], $slice: -50 } }
+    },
+    { upsert: true, new: true, setDefaultsOnInsert: true }
+  ).lean();
+  console.info(JSON.stringify({ event: 'medicine_catalogue_processing_control_changed', action: action.toUpperCase(), actor, reason, requestId: req.requestId, at: event.at.toISOString() }));
+  return res.json({ success: true, operatorPaused: Boolean(control.operatorPaused), pauseReason: control.pauseReason || '', updatedBy: control.updatedBy || '', history: (control.history || []).slice(-20).reverse() });
+}));
+
 const enforceCatalogueQueueCapacity = asyncHandler(async (_req, res, next) => {
-  const queuedJobs = await CatalogueImportJob.countDocuments({ status: 'QUEUED' });
+  const [queuedJobs, operatorControl] = await Promise.all([
+    CatalogueImportJob.countDocuments({ status: 'QUEUED' }),
+    getCatalogueOperatorControl()
+  ]);
   const resources = getCatalogueProcessingResourceSnapshot();
   const protection = evaluateCatalogueProcessingGuard({
+    enabled: process.env.MEDICINE_CATALOGUE_PROCESSING_ENABLED !== 'false' && !operatorControl.operatorPaused,
     heapUsedPercent: resources.process.heapUsedPercent,
     rssUsedPercent: resources.process.rssUsedPercent,
     cpuLoadPercent: resources.host.cpuLoadPercent,
@@ -1577,7 +1633,7 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
 }));
 
 export async function initializeMedicineCatalogueModels() {
-  await Promise.all([MedicineMaster.init(), CatalogueImport.init(), CatalogueImportChunk.init(), CatalogueImportJob.init(), CatalogueWorkerSlot.init()]);
+  await Promise.all([MedicineMaster.init(), CatalogueImport.init(), CatalogueImportChunk.init(), CatalogueImportJob.init(), CatalogueWorkerSlot.init(), CatalogueProcessingControl.init()]);
   await Promise.all(Array.from({ length: catalogueProcessingLimits.maxConcurrentJobs }, async (_, slotId) => {
     try {
       await CatalogueWorkerSlot.updateOne(
