@@ -59,6 +59,7 @@ function encryptionKey(version = null) {
     if (key.length !== 32) throw new Error(`Credential encryption key ${selectedVersion} must decode to 32 bytes.`);
     return { key, version: selectedVersion };
   }
+  if (version && version !== KEY_VERSION) throw new Error(`Legacy credential key cannot decrypt version ${version}.`);
   const encoded = String(process.env.INFRASTRUCTURE_CREDENTIAL_ENCRYPTION_KEY || '').trim();
   if (!encoded) throw new Error('Credential vault is locked: configure INFRASTRUCTURE_CREDENTIAL_ENCRYPTION_KEYS.');
   const key = Buffer.from(encoded, 'base64');
