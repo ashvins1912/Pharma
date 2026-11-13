@@ -32,11 +32,29 @@ const normaliseRenderService = item => {
     usage: { cpu: null, memoryBytes: null, memoryLimitBytes: null, outboundBytes: null, diskBytes: null, source: 'Metrics API is not included in Render service-list responses; connect an OpenTelemetry/Prometheus metrics adapter to populate usage.' }
   };
 };
+async function loadNormalizedMetrics() {
+  const endpoint = process.env.INFRASTRUCTURE_METRICS_ENDPOINT;
+  if (!endpoint) return [];
+  const response = await fetch(endpoint, {
+    headers: process.env.INFRASTRUCTURE_METRICS_TOKEN
+      ? { Authorization: `Bearer ${process.env.INFRASTRUCTURE_METRICS_TOKEN}`, Accept: 'application/json' }
+      : { Accept: 'application/json' },
+    signal: AbortSignal.timeout(8000)
+  });
+  if (!response.ok) throw new Error(`Metrics adapter returned HTTP ${response.status}`);
+  const payload = await response.json();
+  return Array.isArray(payload?.resources) ? payload.resources : [];
+}
 async function listRenderServices() {
   if (!renderConfigured()) return [];
-  const result = await renderRequest('/services?limit=100');
+  const [result, samples] = await Promise.all([renderRequest('/services?limit=100'), loadNormalizedMetrics()]);
   const entries = Array.isArray(result) ? result : (result?.services || result?.items || []);
-  return entries.map(normaliseRenderService).filter(item => item.id);
+  const byId = new Map(samples.filter(sample => sample?.provider === 'render' && sample?.resourceId).map(sample => [sample.resourceId, sample]));
+  return entries.map(normaliseRenderService).filter(item => item.id).map(item => {
+    const sample = byId.get(item.id);
+    if (!sample) return item;
+    return { ...item, usage: { cpu: sample.cpu ?? null, memoryBytes: sample.memoryBytes ?? null, memoryLimitBytes: sample.memoryLimitBytes ?? null, outboundBytes: sample.outboundBytes ?? null, diskBytes: sample.diskBytes ?? null, observedAt: sample.observedAt || null, source: sample.source || 'Configured normalized metrics adapter' } };
+  });
 }
 async function getMongoUsage() {
   const db = mongoose.connection?.db;
@@ -62,6 +80,10 @@ async function getMongoUsage() {
 }
 router.get('/status', async (_req, res) => {
   const providers = [];
+  let metricsError = null;
+  if (process.env.INFRASTRUCTURE_METRICS_ENDPOINT) {
+    try { await loadNormalizedMetrics(); } catch (error) { metricsError = error.message; }
+  }
   if (renderConfigured()) {
     try { providers.push({ id: 'render', name: 'Render', status: 'CONNECTED', resources: await listRenderServices() }); }
     catch (error) { providers.push({ id: 'render', name: 'Render', status: 'ERROR', error: error.message, resources: [] }); }
@@ -76,6 +98,7 @@ router.get('/status', async (_req, res) => {
     metrics: {
       provider: process.env.INFRASTRUCTURE_METRICS_PROVIDER || null,
       endpointConfigured: Boolean(process.env.INFRASTRUCTURE_METRICS_ENDPOINT),
+      error: metricsError,
       note: 'Memory, CPU and network/bandwidth values are shown only when a metrics adapter supplies normalized samples. Never infer zero usage from missing telemetry.'
     },
     supportedAdapters: ['render', 'aws', 'azure', 'gcp', 'mongodb', 'atlas']
