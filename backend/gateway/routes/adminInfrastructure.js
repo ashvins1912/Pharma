@@ -223,7 +223,8 @@ router.post('/resources/:resourceId/:action', async (req, res) => {
     let resource;
     if (provider === 'render') {
       if (!renderConfigured()) return res.status(503).json({ success: false, message: 'Render provider is not configured.' });
-      const serviceResponse = await renderRequest(`/services/${encodeURIComponent(resourceId)}`);\n      resource = normaliseRenderService(serviceResponse);
+      const serviceResponse = await renderRequest(`/services/${encodeURIComponent(resourceId)}`);
+      resource = normaliseRenderService(serviceResponse);
       if (!resource) return res.status(404).json({ success: false, message: 'Resource was not found in the configured Render workspace.' });
       if (!resource.capabilities[action]) return res.status(409).json({ success: false, message: `The ${action} action is not supported for this resource or current state.` });
       const endpoint = action === 'start' ? 'resume' : action === 'stop' ? 'suspend' : 'restart';
