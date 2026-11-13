@@ -7,6 +7,7 @@ import { requireServiceScope } from './service-auth.js';
 import { config } from './config.js';
 import { scoreMedicineMatch } from './medicine-match-scoring.js';
 import { buildNameNgramIdf, CharacterNgramCandidateIndex } from '@pharma/algorithm-kernel';
+import { catalogueProcessingLimits, evaluateCatalogueProcessingGuard, getCatalogueProcessingResourceSnapshot } from './guards/catalogue-processing-guard.js';
 export { scoreMedicineMatch };
 
 const router = express.Router();
@@ -346,6 +347,35 @@ const catalogueImportJobSchema = new mongoose.Schema({
 }, { timestamps: true });
 catalogueImportJobSchema.index({ status: 1, leaseExpiresAt: 1, createdAt: 1 });
 const CatalogueImportJob = mongoose.models.MedicineCatalogueImportJob || mongoose.model('MedicineCatalogueImportJob', catalogueImportJobSchema);
+const catalogueWorkerSlotSchema = new mongoose.Schema({
+  slotId: { type: Number, required: true, unique: true },
+  ownerId: { type: String, default: '' },
+  leaseExpiresAt: { type: Date, default: new Date(0), index: true }
+}, { timestamps: true });
+const CatalogueWorkerSlot = mongoose.models.MedicineCatalogueWorkerSlot || mongoose.model('MedicineCatalogueWorkerSlot', catalogueWorkerSlotSchema);
+const catalogueWorkerOwnerId = randomUUID();
+async function acquireCatalogueWorkerSlot() {
+  const now = new Date();
+  const slot = await CatalogueWorkerSlot.findOneAndUpdate(
+    { slotId: { $lt: catalogueProcessingLimits.maxConcurrentJobs }, leaseExpiresAt: { $lte: now } },
+    { $set: { ownerId: catalogueWorkerOwnerId, leaseExpiresAt: new Date(now.getTime() + catalogueProcessingLimits.workerLeaseMs) } },
+    { sort: { slotId: 1 }, new: true }
+  ).lean();
+  return slot?.slotId ?? null;
+}
+async function renewCatalogueWorkerSlot(slotId) {
+  await CatalogueWorkerSlot.updateOne(
+    { slotId, ownerId: catalogueWorkerOwnerId },
+    { $set: { leaseExpiresAt: new Date(Date.now() + catalogueProcessingLimits.workerLeaseMs) } }
+  );
+}
+async function releaseCatalogueWorkerSlot(slotId) {
+  if (slotId === null || slotId === undefined) return;
+  await CatalogueWorkerSlot.updateOne(
+    { slotId, ownerId: catalogueWorkerOwnerId },
+    { $set: { ownerId: '', leaseExpiresAt: new Date(0) } }
+  );
+}
 let catalogueImportBucket;
 let catalogueImportWorkerTimer;
 let catalogueImportWorkerBusy = false;
@@ -358,15 +388,30 @@ const streamToBuffer = async stream => {
 };
 async function processNextCatalogueImportJob() {
   if (catalogueImportWorkerBusy || mongoose.connection.readyState !== 1) return;
+  const resources = getCatalogueProcessingResourceSnapshot();
+  const protection = evaluateCatalogueProcessingGuard({
+    heapUsedPercent: resources.process.heapUsedPercent,
+    rssUsedPercent: resources.process.rssUsedPercent,
+    cpuLoadPercent: resources.host.cpuLoadPercent
+  });
+  if (!protection.allowed) return;
   catalogueImportWorkerBusy = true;
   let job;
   let heartbeat;
+  let workerSlotId = null;
   try {
+    workerSlotId = await acquireCatalogueWorkerSlot();
+    if (workerSlotId === null) return;
     job = await CatalogueImportJob.findOneAndUpdate({
       $or: [{ status: 'QUEUED' }, { status: 'PROCESSING', leaseExpiresAt: { $lt: new Date() } }]
     }, { $set: { status: 'PROCESSING', stage: 'ANALYZING', leaseExpiresAt: new Date(Date.now() + 15 * 60 * 1000), startedAt: new Date(), errorMessage: '' }, $inc: { attempts: 1 } }, { sort: { createdAt: 1 }, new: true });
     if (!job) return;
-    heartbeat = setInterval(() => { void CatalogueImportJob.updateOne({ jobId: job.jobId, status: 'PROCESSING' }, { $set: { leaseExpiresAt: new Date(Date.now() + 15 * 60 * 1000) } }).catch(() => {}); }, 60000);
+    heartbeat = setInterval(() => {
+      void Promise.all([
+        CatalogueImportJob.updateOne({ jobId: job.jobId, status: 'PROCESSING' }, { $set: { leaseExpiresAt: new Date(Date.now() + 15 * 60 * 1000) } }),
+        renewCatalogueWorkerSlot(workerSlotId)
+      ]).catch(() => {});
+    }, 30000);
     heartbeat.unref?.();
     const buffer = await streamToBuffer(getCatalogueImportBucket().openDownloadStream(job.fileId));
     const fakeResponse = {
@@ -391,11 +436,15 @@ async function processNextCatalogueImportJob() {
     if (job) await CatalogueImportJob.updateOne({ jobId: job.jobId }, { $set: {
       status: 'FAILED', stage: 'FAILED', leaseExpiresAt: null, errorMessage: String(error.message || 'Import processing failed.').slice(0, 1000), completedAt: new Date()
     } });
-  } finally { if (heartbeat) clearInterval(heartbeat); catalogueImportWorkerBusy = false; }
+  } finally {
+    if (heartbeat) clearInterval(heartbeat);
+    await releaseCatalogueWorkerSlot(workerSlotId).catch(() => {});
+    catalogueImportWorkerBusy = false;
+  }
 }
 export function startMedicineCatalogueImportWorker() {
   if (catalogueImportWorkerTimer) return;
-  catalogueImportWorkerTimer = setInterval(() => { void processNextCatalogueImportJob(); }, 1500);
+  catalogueImportWorkerTimer = setInterval(() => { void processNextCatalogueImportJob(); }, catalogueProcessingLimits.pollIntervalMs);
   catalogueImportWorkerTimer.unref?.();
 }
 export function stopMedicineCatalogueImportWorker() {
@@ -697,6 +746,49 @@ router.use((req, res, next) => req.service?.isPlatformUser === true
   ? next()
   : res.status(403).json({ code: 'PLATFORM_ADMIN_REQUIRED', message: 'Only a platform administrator can publish the shared medicine master catalogue.' }));
 
+router.get('/imports/processing-guard', asyncHandler(async (_req, res) => {
+  const [queuedJobs, activeJobs] = await Promise.all([
+    CatalogueImportJob.countDocuments({ status: 'QUEUED' }),
+    CatalogueImportJob.countDocuments({ status: 'PROCESSING' })
+  ]);
+  const resources = getCatalogueProcessingResourceSnapshot();
+  const protection = evaluateCatalogueProcessingGuard({
+    heapUsedPercent: resources.process.heapUsedPercent,
+    rssUsedPercent: resources.process.rssUsedPercent,
+    cpuLoadPercent: resources.host.cpuLoadPercent,
+    queuedJobs
+  });
+  return res.json({
+    enabled: process.env.MEDICINE_CATALOGUE_PROCESSING_ENABLED !== 'false',
+    state: protection.allowed ? 'READY' : 'PROTECTED',
+    reasons: protection.reasons,
+    limits: catalogueProcessingLimits,
+    queue: { queuedJobs, activeJobs, maxQueuedJobs: catalogueProcessingLimits.maxQueuedJobs },
+    resources
+  });
+}));
+
+const enforceCatalogueQueueCapacity = asyncHandler(async (_req, res, next) => {
+  const queuedJobs = await CatalogueImportJob.countDocuments({ status: 'QUEUED' });
+  const resources = getCatalogueProcessingResourceSnapshot();
+  const protection = evaluateCatalogueProcessingGuard({
+    heapUsedPercent: resources.process.heapUsedPercent,
+    rssUsedPercent: resources.process.rssUsedPercent,
+    cpuLoadPercent: resources.host.cpuLoadPercent,
+    queuedJobs
+  });
+  if (protection.reasons.includes('QUEUE_CAPACITY_REACHED')) {
+    res.set('Retry-After', '30');
+    return res.status(429).json({ code: 'CATALOGUE_QUEUE_FULL', message: 'The medicine catalogue processing queue is full. Retry after existing jobs complete.', queuedJobs, maxQueuedJobs: catalogueProcessingLimits.maxQueuedJobs });
+  }
+  const resourceReasons = protection.reasons.filter(reason => reason !== 'QUEUE_CAPACITY_REACHED');
+  if (resourceReasons.length) {
+    res.set('Retry-After', '30');
+    return res.status(503).json({ code: 'CATALOGUE_PROCESSING_PROTECTED', message: 'Catalogue uploads are temporarily paused by the resource protection guard.', reasons: resourceReasons });
+  }
+  return next();
+});
+
 async function processCatalogueImportPreview(req, res) {
   if (!req.file) return res.status(400).json({ message: 'Select a JSON file to upload.' });
   let payload;
@@ -903,7 +995,7 @@ async function processCatalogueImportPreview(req, res) {
   }
 
 }
-router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (req, res) => {
+router.post('/imports/preview', enforceCatalogueQueueCapacity, upload.single('jsonFile'), asyncHandler(async (req, res) => {
   if (!req.file) return res.status(400).json({ message: 'Select a JSON file to upload.' });
   const jobId = randomUUID();
   await CatalogueImportJob.create({
@@ -1485,7 +1577,18 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
 }));
 
 export async function initializeMedicineCatalogueModels() {
-  await Promise.all([MedicineMaster.init(), CatalogueImport.init(), CatalogueImportChunk.init(), CatalogueImportJob.init()]);
+  await Promise.all([MedicineMaster.init(), CatalogueImport.init(), CatalogueImportChunk.init(), CatalogueImportJob.init(), CatalogueWorkerSlot.init()]);
+  await Promise.all(Array.from({ length: catalogueProcessingLimits.maxConcurrentJobs }, async (_, slotId) => {
+    try {
+      await CatalogueWorkerSlot.updateOne(
+        { slotId },
+        { $setOnInsert: { slotId, ownerId: '', leaseExpiresAt: new Date(0) } },
+        { upsert: true }
+      );
+    } catch (error) {
+      if (error.code !== 11000) throw error;
+    }
+  }));
   startMedicineCatalogueImportWorker();
 }
 
