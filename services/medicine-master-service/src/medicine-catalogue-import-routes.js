@@ -742,6 +742,7 @@ router.get('/imports/processing-guard', asyncHandler(async (_req, res) => {
   const resources = getCatalogueProcessingResourceSnapshot();
   const protection = evaluateCatalogueProcessingGuard({
     heapUsedPercent: resources.process.heapUsedPercent,
+    rssUsedPercent: resources.process.rssUsedPercent,
     cpuLoadPercent: resources.host.cpuLoadPercent,
     queuedJobs
   });
@@ -760,6 +761,7 @@ const enforceCatalogueQueueCapacity = asyncHandler(async (_req, res, next) => {
   const resources = getCatalogueProcessingResourceSnapshot();
   const protection = evaluateCatalogueProcessingGuard({
     heapUsedPercent: resources.process.heapUsedPercent,
+    rssUsedPercent: resources.process.rssUsedPercent,
     cpuLoadPercent: resources.host.cpuLoadPercent,
     queuedJobs
   });
