@@ -9,37 +9,32 @@ Configure these in the backend API service's secret environment (for Render, the
 | Variable | Purpose |
 | --- | --- |
 | `RENDER_API_KEY` | Render API key. Enables listing Render services and service lifecycle actions. |
-| `INFRASTRUCTURE_METRICS_ENDPOINT` | Optional HTTPS endpoint returning normalized resource metrics JSON. |
-| `INFRASTRUCTURE_METRICS_TOKEN` | Optional bearer token sent to the metrics endpoint. |
-| `INFRASTRUCTURE_METRICS_PROVIDER` | Optional display label for the configured metrics source. |
+| `INFRASTRUCTURE_CONTROL_PLANE_URL` | Optional HTTPS base URL for the normalized AWS/Azure/GCP adapter service. |
+| `INFRASTRUCTURE_CONTROL_PLANE_TOKEN` | Optional bearer token for that control-plane service. |
 
 After changing backend environment variables, redeploy/restart the backend API service.
 
-## Normalized metrics adapter response
+## Native Render metrics
 
-The metrics endpoint must return JSON in this shape:
+When `RENDER_API_KEY` is configured, the backend reads Render's native Metrics API:
+- CPU: `/v1/metrics/cpu`
+- Memory: `/v1/metrics/memory`
+- Outbound bandwidth: `/v1/metrics/bandwidth`
 
-```json
-{
-  "resources": [
-    {
-      "provider": "render",
-      "resourceId": "srv-xxxxxxxx",
-      "cpu": 23.4,
-      "memoryBytes": 536870912,
-      "memoryLimitBytes": 1073741824,
-      "outboundBytes": 104857600,
-      "diskBytes": 209715200,
-      "observedAt": "2026-11-13T12:00:00.000Z",
-      "source": "OpenTelemetry"
-    }
-  ]
-}
-```
+CPU and memory display the latest available sample. Bandwidth sums available hourly data points across the last 24 hours. Render's bandwidth graph has hourly resolution and its samples can arrive with a delay, so the current 24-hour total may be incomplete. Memory limit and disk usage are left unreported unless a future adapter supplies them; the UI does not invent plan limits. See https://render.com/docs/service-metrics and https://api-docs.render.com/reference/get-memory.
 
-`outboundBytes` should represent bandwidth consumed over the measurement window, not a cumulative counter unless the adapter computes a delta. Unknown metrics must be omitted/null, never reported as zero. Resource IDs must match provider resource IDs.
+## AWS, Azure and GCP control-plane adapter
 
-Render's service-list API does not return live CPU/RAM/egress samples. Render documents CPU, memory, disk and outbound bandwidth metrics and supports streaming metrics to OpenTelemetry-compatible destinations on eligible plans. Connect that stream to an authenticated normalizer that serves the response above. See https://render.com/docs/service-metrics and https://render.com/docs/metrics-streams.
+For multi-cloud support, deploy a small private adapter service that owns the AWS/Azure/GCP SDK clients and credentials. Configure its base URL and bearer token using the two environment variables above. The app backend calls only this fixed server-side URL; cloud credentials are never sent to the browser.
+
+The adapter must implement:
+
+- `GET /v1/resources` → `{ "resources": [ ...normalized resources... ] }`
+- `POST /v1/resources/:resourceId/actions` with `{ "provider": "aws|azure|gcp", "action": "start|stop|restart" }`
+
+Each resource should have `id`, `provider`, `name`, `type`, `region`, `plan`, `status`, `capabilities`, and a `usage` object containing optional `cpu`, `cpuUnit`, `memoryBytes`, `memoryLimitBytes`, `outboundBytes`, `bandwidthWindow`, `diskBytes`, `observedAt`, and `source`. Unknown measurements must be null/omitted, not zero. The backend filters providers to AWS, Azure and GCP, re-fetches the resource before every action, checks the advertised capability, requires typed confirmation, and writes a structured audit log.
+
+The adapter service must independently enforce least-privilege cloud IAM, validate the requested provider/resource pair, reject unsupported lifecycle actions, and return only resources the connected account is authorized to manage. Do not expose a generic arbitrary-command endpoint.
 
 ## Lifecycle safety
 
