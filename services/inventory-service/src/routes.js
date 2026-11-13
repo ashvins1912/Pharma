@@ -50,11 +50,19 @@ async function getDatabaseCleanupPlan() {
   const stagedBatches = await StagedImportBatch.find({
     status: { $in: ['PUBLISHED', 'REVERTED'] }, completedAt: { $lt: dates.staged }
   }).select('batchId').lean();
-  const batchIds = stagedBatches.map(item => item.batchId);
+  const stagedBatchIds = stagedBatches.map(item => item.batchId);
+  const terminalBatches = await ImportBatch.find({
+    status: { $in: ['COMPLETED', 'COMPLETED_WITH_ERRORS', 'REVERTED'] }, updatedAt: { $lt: dates.history }
+  }).select('batchId').lean();
+  const terminalBatchIds = terminalBatches.map(item => item.batchId);
+  const terminalJobs = await ImportJob.find({
+    status: { $in: ['COMPLETED', 'COMPLETED_WITH_ERRORS', 'FAILED'] }, completedAt: { $lt: dates.history }
+  }).select('_id').lean();
+  const terminalJobIds = terminalJobs.map(item => item._id);
   const [stagedRows, snapshots, failures, releasedReservations, activeReservations] = await Promise.all([
-    cleanupEstimate(StagedImportRow, { batchId: { $in: batchIds } }),
-    cleanupEstimate(ImportBatchSnapshot, { status: { $in: ['COMPLETED', 'COMPLETED_WITH_ERRORS', 'REVERTED'] }, updatedAt: { $lt: dates.history } }),
-    cleanupEstimate(ImportFailure, { createdAt: { $lt: dates.history } }),
+    cleanupEstimate(StagedImportRow, { batchId: { $in: stagedBatchIds } }),
+    cleanupEstimate(ImportBatchSnapshot, { batchId: { $in: terminalBatchIds } }),
+    cleanupEstimate(ImportFailure, { jobId: { $in: terminalJobIds } }),
     Reservation.countDocuments({ status: { $in: ['RELEASED', 'DEDUCTED'] }, updatedAt: { $lt: dates.history } }),
     Reservation.countDocuments({ status: 'RESERVED' })
   ]);
@@ -62,8 +70,8 @@ async function getDatabaseCleanupPlan() {
     retention: { stagedRowsDays: STAGED_RETENTION_DAYS, importHistoryDays: CLEANUP_RETENTION_DAYS },
     collections: [
       { name: 'stagedimportrows', ...stagedRows, rule: 'Rows belonging only to PUBLISHED/REVERTED batches completed more than 7 days ago' },
-      { name: 'inventoryimportbatchsnapshots', ...snapshots, rule: 'Terminal import snapshots older than 30 days' },
-      { name: 'inventoryimportfailures', ...failures, rule: 'Import failure diagnostics older than 30 days' },
+      { name: 'inventoryimportbatchsnapshots', ...snapshots, rule: 'Snapshots belonging to terminal import batches older than 30 days' },
+      { name: 'inventoryimportfailures', ...failures, rule: 'Failure diagnostics belonging to terminal import jobs older than 30 days' },
       { name: 'inventoryreservations', count: releasedReservations, estimatedBytes: null, activeCount: activeReservations, deletedCount: 0, rule: 'Never deleted by cleanup; reservation/order reconciliation data is retained' }
     ]
   };
@@ -79,14 +87,15 @@ router.post('/admin/database-cleanup/execute', requireServiceScope('platform.dat
     return res.status(400).json({ success: false, code: 'CONFIRMATION_REQUIRED', message: 'Type the exact confirmation phrase to execute cleanup.' });
   }
   const dates = cleanupCutoffs();
-  const eligible = await StagedImportBatch.find({
-    status: { $in: ['PUBLISHED', 'REVERTED'] }, completedAt: { $lt: dates.staged }
-  }).select('batchId').lean();
-  const batchIds = eligible.map(item => item.batchId);
+  const [stagedBatches, terminalBatches, terminalJobs] = await Promise.all([
+    StagedImportBatch.find({ status: { $in: ['PUBLISHED', 'REVERTED'] }, completedAt: { $lt: dates.staged } }).distinct('batchId'),
+    ImportBatch.find({ status: { $in: ['COMPLETED', 'COMPLETED_WITH_ERRORS', 'REVERTED'] }, updatedAt: { $lt: dates.history } }).distinct('batchId'),
+    ImportJob.find({ status: { $in: ['COMPLETED', 'COMPLETED_WITH_ERRORS', 'FAILED'] }, completedAt: { $lt: dates.history } }).distinct('_id')
+  ]);
   const operations = [
-    ['stagedimportrows', () => StagedImportRow.deleteMany({ batchId: { $in: batchIds } })],
-    ['inventoryimportbatchsnapshots', () => ImportBatchSnapshot.deleteMany({ status: { $in: ['COMPLETED', 'COMPLETED_WITH_ERRORS', 'REVERTED'] }, updatedAt: { $lt: dates.history } })],
-    ['inventoryimportfailures', () => ImportFailure.deleteMany({ createdAt: { $lt: dates.history } })]
+    ['stagedimportrows', () => StagedImportRow.deleteMany({ batchId: { $in: stagedBatches } })],
+    ['inventoryimportbatchsnapshots', () => ImportBatchSnapshot.deleteMany({ batchId: { $in: terminalBatches } })],
+    ['inventoryimportfailures', () => ImportFailure.deleteMany({ jobId: { $in: terminalJobs } })]
   ];
   const results = [];
   for (const [collection, run] of operations) {
