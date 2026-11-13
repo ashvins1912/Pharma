@@ -272,9 +272,11 @@ router.post('/resources/:resourceId/:action', async (req, res) => {
       });
     }
     const actor = req.user?.sub || req.user?.id || 'super-admin';
-    console.info(JSON.stringify({ event: 'infrastructure_resource_lifecycle', provider, resourceId, action, actor, at: new Date().toISOString() }));
+    const requestId = req.context?.requestId || req.gatewayRequestId || req.headers['x-request-id'] || null;
+    console.info(JSON.stringify({ event: 'infrastructure_resource_lifecycle', outcome: 'ACCEPTED', provider, resourceId, action, actor, requestId, at: new Date().toISOString() }));
     return res.json({ success: true, provider, resourceId, action, acceptedAt: new Date().toISOString(), actor, message: 'Provider accepted the lifecycle request. Refresh status to verify the resulting state.' });
   } catch (error) {
+    console.error(JSON.stringify({ event: 'infrastructure_resource_lifecycle', outcome: 'FAILED', provider, resourceId, action, actor: req.user?.sub || req.user?.id || 'super-admin', requestId: req.context?.requestId || req.gatewayRequestId || req.headers['x-request-id'] || null, error: error.message, at: new Date().toISOString() }));
     return res.status(error.statusCode || 502).json({ success: false, message: error.message });
   }
 });
