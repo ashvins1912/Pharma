@@ -5,7 +5,8 @@ import express from 'express';
 import multer from 'multer';
 import mongoose from 'mongoose';
 import { config } from './config.js';
-import { ImportJob, Audit } from './models.js';
+import { ImportJob, Audit, Reservation, ImportBatch, ImportBatchSnapshot, ImportFailure } from './models.js';
+import { StagedImportBatch, StagedImportRow } from './staged-import-models.js';
 import {
   buildFailureWorkbook,
   createImportJob,
@@ -32,6 +33,7 @@ import { publishInventoryChanged } from './realtimeEvents.js';
 import { queueMedicineMatch } from './medicine-match-queue.js';
 
 const router = express.Router();
+const asyncHandler = handler => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
 const CLEANUP_RETENTION_DAYS = 30;
 const STAGED_RETENTION_DAYS = 7;
 const cleanupCutoffs = () => ({
@@ -110,9 +112,6 @@ router.post('/admin/database-cleanup/execute', requireServiceScope('platform.dat
   return res.status(failed ? 207 : 200).json({ success: !failed, service: 'inventory-service', executedAt: new Date(), actor: req.service?.userId || req.service?.name || 'super-admin', results, reservationsDeleted: 0 });
 }));
 
-const asyncHandler = handler => (req, res, next) => {
-  Promise.resolve(handler(req, res, next)).catch(next);
-};
 const getInventoryScope = (req, fallback = {}) => {
   const serviceScope = req.service?.name === 'api-gateway' ? req.service : (req.service || {});
   const tenantId = serviceScope.tenantId
