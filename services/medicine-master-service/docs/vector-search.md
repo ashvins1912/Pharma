@@ -40,7 +40,7 @@ gcloud run deploy pharma-medicine-embedding \
   --region REGION --port 8080 --no-allow-unauthenticated \
   --memory 2Gi --cpu 2 --concurrency 8 --min 0 --max 5
 ```
-Configure `MEDICINE_EMBEDDING_TOKEN` through Secret Manager, not a command-line literal. Grant the Medicine Master caller permission to invoke the service (Cloud Run IAM) and use an HTTPS URL. If IAM is used, add an ID-token transport adapter; do not make the service public just to avoid authentication. The included bearer-token mode is suitable when the HTTPS endpoint is protected by a private ingress/proxy or equivalent network policy. Set `MEDICINE_VECTOR_INFERENCE_URL` to the Cloud Run URL.
+Configure `MEDICINE_EMBEDDING_TOKEN` through Secret Manager (for example `--set-secrets MEDICINE_EMBEDDING_TOKEN=pharma-medicine-embedding-token:latest`), never as a literal command-line value. This deployment uses Cloud Run HTTPS plus the service's constant-time-checked high-entropy bearer token at the application layer; the endpoint is not unauthenticated even though Cloud Run invocation is public. Rotate the token in Secret Manager and the Medicine Master environment together. For organizations requiring Cloud Run IAM-only ingress, add an OIDC ID-token transport adapter before switching to `--no-allow-unauthenticated`. Set `MEDICINE_VECTOR_INFERENCE_URL` to the Cloud Run URL.
 
 ## GitHub Actions catalogue indexing
 
@@ -49,7 +49,7 @@ Workflow: `.github/workflows/medicine-vector-index.yml`. It supports manual disp
 - `MEDICINE_VECTOR_INFERENCE_URL`
 - `MEDICINE_VECTOR_INFERENCE_TOKEN`
 
-The workflow runs the existing reindex script from a GitHub-hosted runner and sends batches to the isolated local-ONNX service. It is not a real-time queue. Run manually after shared catalogue imports/updates and keep a scheduled reconciliation. Atlas network access must be restricted; if GitHub-hosted runner IP allowlisting is not feasible, use a self-hosted ephemeral runner with a stable egress IP rather than opening Atlas broadly.
+The workflow runs the existing reindex script from a GitHub-hosted runner and sends batches to the isolated local-ONNX service. It is not a real-time queue. Run manually after shared catalogue imports/updates and keep a weekly scheduled full reconciliation (the current script rebuilds the full projection; it is not an incremental event consumer). Atlas network access must be restricted; if GitHub-hosted runner IP allowlisting is not feasible, use a self-hosted ephemeral runner with a stable egress IP rather than opening Atlas broadly.
 
 Dry-run:
 ```bash
