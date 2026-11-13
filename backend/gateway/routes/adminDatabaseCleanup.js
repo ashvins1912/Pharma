@@ -1,5 +1,4 @@
 import express from 'express';
-import mongoose from 'mongoose';
 import { authenticateUser, requireSuperAdmin } from '../../middleware/auth.js';
 import Notification from '../../models/Notification.js';
 import NotificationDeliveryEvent from '../../models/NotificationDeliveryEvent.js';
@@ -16,7 +15,7 @@ const estimate = async (model, filter) => {
 };
 const plan = async () => {
   const before = cutoff();
-  const notifications = { read: true, readAt: { $lt: before } };
+  const notifications = { $or: [\n    { read: true, readAt: { $lt: before } },\n    { status: { $in: ['DELIVERED', 'Delivered'] }, createdAt: { $lt: before } }\n  ] };
   const events = { status: { $in: ['DELIVERED', 'SUCCESS', 'COMPLETED'] }, occurredAt: { $lt: before } };
   const [notificationStats, eventStats] = await Promise.all([
     estimate(Notification, notifications), estimate(NotificationDeliveryEvent, events)
@@ -49,7 +48,7 @@ router.post('/execute', async (req, res) => {
   }
   const before = cutoff();
   const filters = [
-    [Notification, { read: true, readAt: { $lt: before } }],
+    [Notification, { $or: [\n      { read: true, readAt: { $lt: before } },\n      { status: { $in: ['DELIVERED', 'Delivered'] }, createdAt: { $lt: before } }\n    ] }],
     [NotificationDeliveryEvent, { status: { $in: ['DELIVERED', 'SUCCESS', 'COMPLETED'] }, occurredAt: { $lt: before } }]
   ];
   const results = [];
