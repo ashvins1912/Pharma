@@ -1419,20 +1419,24 @@ const catalogueCleanupPlan = async () => {
   const failedJobs = await CatalogueImportJob.find({ status: 'FAILED', completedAt: { $lt: failedCutoff } }).select('jobId fileId fileSize').lean();
   const jobs = [...readyJobs, ...failedJobs];
   const jobFileIds = jobs.map(job => job.fileId).filter(Boolean);
-  const [chunkStats, jobBytes] = await Promise.all([
+  const [chunkStats, jobStats] = await Promise.all([
     CatalogueImportChunk.aggregate([
       { $match: { batchId: { $in: publishedIds } } },
-      { $group: { _id: null, count: { $sum: 1 }, bytes: { $sum: { $bsonSize: '$$ROOT' } } } }
+      { $group: { _id: null, count: { $sum: 1 }, bytes: { $sum: { $bsonSize: '$ROOT' } } } }
     ]),
-    Promise.resolve(jobs.reduce((sum, job) => sum + (Number(job.fileSize) || 0), 0))
+    CatalogueImportJob.aggregate([
+      { $match: { jobId: { $in: jobs.map(job => job.jobId) } } },
+      { $group: { _id: null, count: { $sum: 1 }, bytes: { $sum: { $bsonSize: '$ROOT' } } } }
+    ])
   ]);
+  const gridFsBytes = jobs.reduce((sum, job) => sum + (Number(job.fileSize) || 0), 0);
   return {
     retention: { publishedImportHours: 1, failedJobHours: 24 },
     protected: { medicineMasterCatalogue: 'Never deleted', importBatchReports: 'Retained', 'READY batches awaiting publish': 'Retained' },
     collections: [
       { name: 'medicinecatalogueimportchunks', count: chunkStats[0]?.count || 0, estimatedBytes: chunkStats[0]?.bytes || 0, rule: 'Chunks belonging only to PUBLISHED batches older than 1 hour' },
-      { name: 'medicinecatalogueimportjobs', count: jobs.length, estimatedBytes: jobBytes, rule: 'READY jobs for published batches older than 1 hour and FAILED jobs older than 24 hours' },
-      { name: 'medicineCatalogueUploads.files', count: jobs.length, estimatedBytes: jobBytes, rule: 'GridFS uploads referenced by eligible terminal jobs' }
+      { name: 'medicinecatalogueimportjobs', count: jobStats[0]?.count || 0, estimatedBytes: jobStats[0]?.bytes || 0, rule: 'READY jobs for published batches older than 1 hour and FAILED jobs older than 24 hours' },
+      { name: 'medicineCatalogueUploads.files', count: jobFileIds.length, estimatedBytes: gridFsBytes, rule: 'GridFS uploads referenced by eligible terminal jobs' }
     ],
     eligibleJobIds: jobs.map(job => job.jobId),
     eligibleFileIds: jobFileIds.map(id => String(id))
