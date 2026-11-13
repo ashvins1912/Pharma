@@ -82,10 +82,6 @@ app.use('/api/v1/admin/feature-health', featureHealthModule.default);
 app.use('/api/v1/admin/service-logs', serviceLogsModule.default);
 app.use('/api/v1/admin/database-cleanup/notifications', cleanupModule.default);
 app.use('/api/v1/admin/payments', paymentReminderModule.default);
-app.use('/api/v1/admin/medicine-requests', medicineRequestModule.default);
-app.use('/api/v1/admin/riders', riderAdminModule.default);
-app.use('/api/v1/admin/assignment', assignmentAdminModule.default);
-app.use('/api/v1/admin/whatsapp', whatsappModule.default);
 // Existing browser clients still call these legacy paths; preserve them during migration.
 app.use('/api/admin/whatsapp', whatsappModule.default);
 app.use('/api/admin/riders', riderAdminModule.default);
