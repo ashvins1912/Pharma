@@ -149,3 +149,34 @@ The existing MongoDB integration reads stats from the application's active Mongo
 ## Adding a new service provider
 
 Implement the protocol endpoints and normalized resource records in the adapter, register its credentials in managed secret storage, and return its provider ID in each resource. No application code change or provider allow-list update is required for a new provider. Only add a new typed action to the app when the UI needs to expose an operation beyond start/stop/restart.
+
+
+## Implemented Super Admin credential vault and verification API
+
+The application-side security routes are mounted at `/api/v1/admin/infrastructure/security` and are protected by the existing authenticated Super Admin middleware.
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /integrations` | List saved integrations and safe metadata; encrypted credential envelopes are never returned. |
+| `POST /integrations` | Save a new integration and encrypt its credential payload before persistence. |
+| `POST /integrations/:id/verify` | Decrypt server-side only and call the configured private adapter verification endpoint. |
+| `POST /integrations/:id/revoke` | Disable the integration and remove its encrypted credential payload from active use. |
+| `GET /integrations/:id/audit` | Retrieve integration audit evidence. |
+
+The adapter must implement `POST /v1/connections/verify` and return boolean `authenticated`, `discoveryPassed`, `tlsVerified`, plus `grantedScopes`. The application records the result and policy evidence. Verification is deliberately read-only; it does not execute lifecycle actions.
+
+### Credential encryption key
+
+Configure `INFRASTRUCTURE_CREDENTIAL_ENCRYPTION_KEY` as a base64-encoded, cryptographically random 32-byte key in the backend secret manager. Generate one with:
+
+```bash
+openssl rand -base64 32
+```
+
+Do not commit this key, put it in MongoDB, share it in chat, or reuse the MongoDB connection password. Back it up securely with controlled access. Losing the key makes saved credentials unrecoverable. For higher-assurance deployments, replace the environment-key provider with KMS/HSM envelope encryption and key-version-aware rotation before production use.
+
+Credentials are encrypted using AES-256-GCM with a fresh random 96-bit IV and authentication tag for each saved payload. The current implementation stores the encrypted envelope in the MongoDB integration record; plaintext is only materialised in backend memory for the verification request and is never included in API responses or audit details. The adapter transport must be HTTPS in production.
+
+### Important implementation boundary
+
+Saved credentials support re-verification without re-entry, but the application does not silently bypass user authentication, Super Admin authorisation, provider scopes, or policy gates. The verification API currently requires the private control plane's `/v1/connections/verify` implementation. A successful read-only verification is not approval for production lifecycle actions. The UI workflow, independent approver workflow, scheduled re-verification, KMS integration, immutable/WORM audit export and full policy-evidence lifecycle remain follow-on work and must not be represented as complete until implemented and tested.
