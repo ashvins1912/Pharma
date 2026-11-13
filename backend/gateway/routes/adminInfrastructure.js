@@ -182,6 +182,16 @@ router.get('/status', async (_req, res) => {
     try { providers.push({ id: 'render', name: 'Render', status: 'CONNECTED', resources: await listRenderServices() }); }
     catch (error) { providers.push({ id: 'render', name: 'Render', status: 'ERROR', error: error.message, resources: [] }); }
   } else providers.push({ id: 'render', name: 'Render', status: 'NOT_CONFIGURED', message: 'Set RENDER_API_KEY in the backend secret environment.' });
+  if (controlPlaneConfigured()) {
+    try {
+      const external = await listExternalResources();
+      providers.push({ id: 'external-clouds', name: 'AWS · Azure · GCP', status: 'CONNECTED', resources: external });
+    } catch (error) {
+      providers.push({ id: 'external-clouds', name: 'AWS · Azure · GCP', status: 'ERROR', error: error.message, resources: [] });
+    }
+  } else {
+    providers.push({ id: 'external-clouds', name: 'AWS · Azure · GCP', status: 'NOT_CONFIGURED', message: 'Configure the generic infrastructure control-plane URL and token to connect AWS, Azure or GCP.' });
+  }
   let mongo;
   try { mongo = await getMongoUsage(); }
   catch (error) { mongo = { configured: false, status: 'ERROR', message: error.message }; }
@@ -200,21 +210,37 @@ router.get('/status', async (_req, res) => {
 });
 router.post('/resources/:resourceId/:action', async (req, res) => {
   const { resourceId, action } = req.params;
-  if (!['start', 'stop', 'restart'].includes(action)) return res.status(400).json({ success: false, message: 'Unsupported lifecycle action.' });
-  const provider = String(req.body?.provider || 'render').toLowerCase();\n  if (!['render', 'aws', 'azure', 'gcp'].includes(provider)) return res.status(400).json({ success: false, message: 'Unsupported infrastructure provider.' });
+  if (!['start', 'stop', 'restart'].includes(action)) {
+    return res.status(400).json({ success: false, message: 'Unsupported infrastructure lifecycle action.' });
+  }
+  const provider = String(req.body?.provider || 'render').toLowerCase();
+  if (!['render', 'aws', 'azure', 'gcp'].includes(provider)) {
+    return res.status(400).json({ success: false, message: 'Unsupported infrastructure provider.' });
+  }
   if (req.body?.confirmation !== `${action.toUpperCase()} RESOURCE`) {
     return res.status(400).json({ success: false, code: 'CONFIRMATION_REQUIRED', message: `Type ${action.toUpperCase()} RESOURCE to confirm.` });
   }
   try {
-    const resources = await listRenderServices();
-    const resource = resources.find(item => item.id === resourceId);
-    if (!resource) return res.status(404).json({ success: false, message: 'Resource was not found in the configured Render workspace.' });
-    if (!resource.capabilities[action]) return res.status(409).json({ success: false, message: `The ${action} action is not supported for this resource or current state.` });
-    const endpoint = action === 'start' ? 'resume' : action === 'stop' ? 'suspend' : 'restart';
-    await renderRequest(`/services/${encodeURIComponent(resourceId)}/${endpoint}`, { method: 'POST' });
+    let resource;
+    if (provider === 'render') {
+      if (!renderConfigured()) return res.status(503).json({ success: false, message: 'Render provider is not configured.' });
+      resource = (await listRenderServices()).find(item => item.id === resourceId);
+      if (!resource) return res.status(404).json({ success: false, message: 'Resource was not found in the configured Render workspace.' });
+      if (!resource.capabilities[action]) return res.status(409).json({ success: false, message: `The ${action} action is not supported for this resource or current state.` });
+      const endpoint = action === 'start' ? 'resume' : action === 'stop' ? 'suspend' : 'restart';
+      await renderRequest(`/services/${encodeURIComponent(resourceId)}/${endpoint}`, { method: 'POST' });
+    } else {
+      if (!controlPlaneConfigured()) return res.status(503).json({ success: false, message: 'External cloud control plane is not configured.' });
+      resource = (await listExternalResources()).find(item => item.id === resourceId && item.provider === provider);
+      if (!resource) return res.status(404).json({ success: false, message: 'Resource was not found for the selected cloud provider.' });
+      if (!resource.capabilities[action]) return res.status(409).json({ success: false, message: `The ${action} action is not supported for this resource or current state.` });
+      await controlPlaneRequest(`/v1/resources/${encodeURIComponent(resourceId)}/actions`, {
+        method: 'POST', body: JSON.stringify({ action, provider })
+      });
+    }
     const actor = req.user?.sub || req.user?.id || 'super-admin';
-    console.info(JSON.stringify({ event: 'infrastructure_resource_lifecycle', provider: 'render', resourceId, action, actor, at: new Date().toISOString() }));
-    return res.json({ success: true, provider: 'render', resourceId, action, acceptedAt: new Date().toISOString(), actor, message: 'Provider accepted the lifecycle request. Refresh status to verify the resulting state.' });
+    console.info(JSON.stringify({ event: 'infrastructure_resource_lifecycle', provider, resourceId, action, actor, at: new Date().toISOString() }));
+    return res.json({ success: true, provider, resourceId, action, acceptedAt: new Date().toISOString(), actor, message: 'Provider accepted the lifecycle request. Refresh status to verify the resulting state.' });
   } catch (error) {
     return res.status(error.statusCode || 502).json({ success: false, message: error.message });
   }
