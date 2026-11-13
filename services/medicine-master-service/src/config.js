@@ -25,7 +25,6 @@ export const config = {
   vectorCollection: process.env.MEDICINE_VECTOR_COLLECTION || 'medicine_master_vector_index',
   vectorStateCollection: process.env.MEDICINE_VECTOR_STATE_COLLECTION || 'medicine_master_vector_sync_state',
   vectorIndex: process.env.MEDICINE_VECTOR_INDEX || 'medicine_master_vector_idx',
-  vectorSyncIntervalMs: positiveInteger(process.env.MEDICINE_VECTOR_SYNC_INTERVAL_MS, 30000, 3600000),
   loggingEnabled: process.env.LOGGING_ENABLED !== 'false'
 };
 
