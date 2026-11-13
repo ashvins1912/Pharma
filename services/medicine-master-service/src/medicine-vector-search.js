@@ -5,7 +5,7 @@ import { config } from './config.js';
 const STATE_ID = 'medicine-master-vector-v1';
 const FIELDS = ['brandName','genericName','productName','composition','strength','dosageForm','manufacturer','therapeuticClass','chemicalClass','actionClass','uses','indications'];
 const clean = value => String(value ?? '').replace(/\s+/g,' ').trim().slice(0,500);
-let modelPromise, timer, busy = false, stopped = false;
+
 
 export function buildMedicineEmbeddingText(record = {}) {
   const values = [];
@@ -24,21 +24,32 @@ const collection = name => {
   if (!mongoose.connection.db) throw new Error('MongoDB is not connected.');
   return mongoose.connection.db.collection(name);
 };
-async function getModel() {
-  if (!modelPromise) modelPromise = import('@huggingface/transformers').then(({pipeline}) =>
-    pipeline('feature-extraction', config.vectorModel));
-  try { return await modelPromise; } catch (error) { modelPromise = null; throw error; }
-}
 export async function embedMedicineTexts(texts) {
   if (!Array.isArray(texts) || !texts.length) return [];
-  const input = texts.map(value => clean(value).slice(0,4000));
+  if (texts.length > 32) throw new Error('Embedding batch cannot exceed 32 texts.');
+  const input = texts.map(value => clean(value).slice(0, 4000));
   if (input.some(value => !value)) throw new Error('Embedding input cannot be empty.');
-  const output = await (await getModel())(input,{pooling:'mean',normalize:true});
-  const rows = output.tolist();
-  if (!Array.isArray(rows) || rows.length !== input.length ||
-      rows.some(row => !Array.isArray(row) || row.length !== config.vectorDimensions ||
-        row.some(value => !Number.isFinite(Number(value))))) throw new Error('Local embedding output has invalid dimensions or values.');
-  return rows.map(row => row.map(Number));
+  if (!config.vectorInferenceUrl || !config.vectorInferenceToken) throw new Error('Isolated embedding inference is not configured.');
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), config.vectorInferenceTimeoutMs);
+  try {
+    const response = await fetch(new URL('/v1/embeddings', config.vectorInferenceUrl), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer ' + config.vectorInferenceToken },
+      body: JSON.stringify({ texts: input }),
+      signal: controller.signal
+    });
+    if (!response.ok) throw new Error('Embedding inference returned HTTP ' + response.status);
+    const payload = await response.json();
+    const rows = payload?.embeddings;
+    if (payload?.model !== config.vectorModel || payload?.dimensions !== config.vectorDimensions ||
+        !Array.isArray(rows) || rows.length !== input.length ||
+        rows.some(row => !Array.isArray(row) || row.length !== config.vectorDimensions ||
+          row.some(value => !Number.isFinite(Number(value))))) {
+      throw new Error('Embedding inference returned an incompatible model or vector shape.');
+    }
+    return rows.map(row => row.map(Number));
+  } finally { clearTimeout(timeout); }
 }
 export async function upsertMedicineVectorDocuments(records,{embed=embedMedicineTexts}={}) {
   const rows = (records || []).filter(row => row?.medicineId && typeof row.medicineId === 'string');
@@ -120,29 +131,3 @@ export async function searchMedicineMaster({query,limit=15,model=mongoose.models
   return {query:clean(query),searchMode:vectorAvailable?'HYBRID':'KEYWORD_FALLBACK',vectorAvailable,results,totalReturned:results.length,
     notice:'Catalogue discovery only; similarity does not establish clinical equivalence or authorize substitution.'};
 }
-async function syncChanged() {
-  if(busy||stopped||!config.vectorSearchEnabled||mongoose.connection.readyState!==1)return;
-  busy=true;
-  try{
-    const states=collection(config.vectorStateCollection),state=await states.findOne({_id:STATE_ID});
-    if(state?.status!=='READY'||state.model!==config.vectorModel||state.dimensions!==config.vectorDimensions)return;
-    const filter = state.lastUpdatedAt ? { $or: [
-      { updatedAt: { $gt: state.lastUpdatedAt } },
-      { updatedAt: state.lastUpdatedAt, _id: { $gt: state.lastId } }
-    ] } : {};
-    const rows=await mongoose.models.MedicineMaster.find(filter).sort({updatedAt:1,_id:1}).limit(32).lean();
-    if(!rows.length)return;
-    const indexable = rows.filter(row => buildMedicineEmbeddingText(row));
-    if (indexable.length) await upsertMedicineVectorDocuments(indexable);
-    // Advance over non-searchable source records too, so one empty record cannot
-    // permanently stall the bounded incremental scan.
-    const last=rows.at(-1);
-    await states.updateOne({_id:STATE_ID,status:'READY'},{$set:{lastUpdatedAt:last.updatedAt||new Date(),lastId:last._id,updatedAt:new Date()}});
-  }catch(error){console.error('[MedicineVectorSearch] sync failed:',error.code||error.name);}
-  finally{busy=false;}
-}
-export function startMedicineVectorSyncWorker(){
-  if(!config.vectorSearchEnabled||timer)return;stopped=false;void syncChanged();
-  timer=setInterval(()=>void syncChanged(),config.vectorSyncIntervalMs);timer.unref?.();
-}
-export function stopMedicineVectorSyncWorker(){stopped=true;if(timer)clearInterval(timer);timer=null;}
