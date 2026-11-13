@@ -1,0 +1,35 @@
+name: Medicine search 40-user acceptance
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  load-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: staging
+    env:
+      MEDICINE_SEARCH_URL: ${{ secrets.MEDICINE_SEARCH_URL }}
+      MEDICINE_SEARCH_TOKEN: ${{ secrets.MEDICINE_SEARCH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate staging target
+        run: |
+          test -n "$MEDICINE_SEARCH_URL"
+          test -n "$MEDICINE_SEARCH_TOKEN"
+          case "$MEDICINE_SEARCH_URL" in https://*) ;; *) echo "HTTPS staging URL required"; exit 1;; esac
+      - name: Run 40 concurrent users for 3 minutes
+        run: |
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:/work" -w /work \
+            -e MEDICINE_SEARCH_URL -e MEDICINE_SEARCH_TOKEN \
+            grafana/k6:0.54.0 run \
+            --summary-export=/work/medicine-search-load-summary.json \
+            tests/load/medicine-search-40-vus.js
+      - name: Upload measured acceptance results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: medicine-search-40-vu-results
+          path: medicine-search-load-summary.json
+          if-no-files-found: warn
