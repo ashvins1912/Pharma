@@ -13,7 +13,7 @@ export const catalogueProcessingLimits = Object.freeze({
   maxRssMb: boundedInteger(process.env.MEDICINE_CATALOGUE_MAX_RSS_MB, 1024, 256, 16_384),
   maxRssPercent: boundedInteger(process.env.MEDICINE_CATALOGUE_MAX_RSS_PERCENT, 80, 50, 95),
   maxCpuLoadPercent: boundedInteger(process.env.MEDICINE_CATALOGUE_MAX_CPU_LOAD_PERCENT, 85, 25, 100),
-  workerLeaseMs: boundedInteger(process.env.MEDICINE_CATALOGUE_WORKER_LEASE_MS, 90_000, 30_000, 300_000),
+  workerLeaseMs: boundedInteger(process.env.MEDICINE_CATALOGUE_WORKER_LEASE_MS, 900_000, 30_000, 3_600_000),
   pollIntervalMs: boundedInteger(process.env.MEDICINE_CATALOGUE_WORKER_POLL_MS, 1_500, 500, 30_000)
 });
 
