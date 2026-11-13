@@ -1577,7 +1577,10 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
 }));
 
 export async function initializeMedicineCatalogueModels() {
-  await Promise.all([MedicineMaster.init(), CatalogueImport.init(), CatalogueImportChunk.init(), CatalogueImportJob.init(), CatalogueWorkerSlot.init()]);\n  await Promise.all(Array.from({ length: catalogueProcessingLimits.maxConcurrentJobs }, (_, slotId) =>\n    CatalogueWorkerSlot.updateOne({ slotId }, { $setOnInsert: { slotId, ownerId: '', leaseExpiresAt: new Date(0) } }, { upsert: true })\n  ));
+  await Promise.all([MedicineMaster.init(), CatalogueImport.init(), CatalogueImportChunk.init(), CatalogueImportJob.init(), CatalogueWorkerSlot.init()]);
+  await Promise.all(Array.from({ length: catalogueProcessingLimits.maxConcurrentJobs }, (_, slotId) =>
+    CatalogueWorkerSlot.updateOne({ slotId }, { $setOnInsert: { slotId, ownerId: '', leaseExpiresAt: new Date(0) } }, { upsert: true })
+  ));
   startMedicineCatalogueImportWorker();
 }
 
