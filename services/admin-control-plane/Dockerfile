@@ -1,11 +1,9 @@
 FROM node:22-alpine
-WORKDIR /app
-COPY package*.json ./
-COPY backend/package*.json ./backend/
-COPY services/admin-control-plane/package.json ./services/admin-control-plane/
+WORKDIR /workspace
+# Build with the repository root as the Docker build context so npm workspaces
+# and the backend modules reused by the admin service are available.
+COPY . .
 RUN npm install --omit=dev
-COPY backend ./backend
-COPY services/admin-control-plane ./services/admin-control-plane
 ENV NODE_ENV=production
-WORKDIR /app/services/admin-control-plane
-CMD ["npm", "start"]
+EXPOSE 10000
+CMD ["npm", "--workspace", "services/admin-control-plane", "start"]
