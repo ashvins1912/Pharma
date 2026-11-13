@@ -22,7 +22,7 @@ async function main(){
   await flush();
   // Never advertise READY until Atlas confirms the named Vector Search index is queryable.
   const searchIndexes = await vectors.listSearchIndexes(config.vectorIndex).toArray();
-  if (!searchIndexes.some(index => index.name === config.vectorIndex && index.queryable === true)) {
+  if (!searchIndexes.some(index => index.name === config.vectorIndex && index.status === 'READY' && index.queryable === true)) {
     throw new Error('Atlas Vector Search index is not queryable: ' + config.vectorIndex);
   }
   await states.updateOne({_id:stateId},{$set:{status:'READY',indexedCount:indexed,model:config.vectorModel,modelRevision:config.vectorModelRevision,dimensions:config.vectorDimensions,completedAt:new Date(),updatedAt:new Date()}});
