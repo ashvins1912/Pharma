@@ -44,8 +44,6 @@ services:
         sync: false
       - key: RENDER_API_KEY
         sync: false
-
-services:
   - type: web
     name: ashvin-pharma-api
     env: node
