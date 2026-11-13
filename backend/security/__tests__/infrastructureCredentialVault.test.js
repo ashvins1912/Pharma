@@ -27,3 +27,18 @@ test('public integration serializer never returns encrypted credential envelope'
   assert.equal(safe.secretEnvelope, undefined);
   assert.equal(safe.provider, 'example');
 });
+
+
+test('versioned key ring decrypts older envelopes after active key rotation', () => {
+  const oldKey = crypto.randomBytes(32).toString('base64');
+  const newKey = crypto.randomBytes(32).toString('base64');
+  delete process.env.INFRASTRUCTURE_CREDENTIAL_ENCRYPTION_KEY;
+  process.env.INFRASTRUCTURE_CREDENTIAL_ENCRYPTION_KEYS = JSON.stringify({ activeVersion: 'v1', keys: { v1: oldKey } });
+  const oldEnvelope = encryptCredentialPayload({ token: 'old-secret' });
+  process.env.INFRASTRUCTURE_CREDENTIAL_ENCRYPTION_KEYS = JSON.stringify({ activeVersion: 'v2', keys: { v1: oldKey, v2: newKey } });
+  const newEnvelope = encryptCredentialPayload({ token: 'new-secret' });
+  assert.equal(oldEnvelope.keyVersion, 'v1');
+  assert.equal(newEnvelope.keyVersion, 'v2');
+  assert.deepEqual(decryptCredentialPayload(oldEnvelope), { token: 'old-secret' });
+  assert.deepEqual(decryptCredentialPayload(newEnvelope), { token: 'new-secret' });
+});
