@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: pharma-medicine-embedding
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerContext: .
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /ready
+    envVars:
+      - key: MEDICINE_VECTOR_MODEL
+        value: onnx-community/all-MiniLM-L6-v2-ONNX
+      - key: MEDICINE_VECTOR_MODEL_REVISION
+        sync: false
+      - key: MEDICINE_VECTOR_DIMENSIONS
+        value: "384"
+      - key: MEDICINE_EMBEDDING_TOKEN
+        sync: false
+      - key: MEDICINE_EMBEDDING_MAX_CONCURRENT
+        value: "2"
