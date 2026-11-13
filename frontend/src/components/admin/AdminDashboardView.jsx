@@ -789,7 +789,7 @@ export default function AdminDashboardView() {
         <div className="admin-screen admin-screen--database-cleanup"><DatabaseCleanupTask /></div>
       )}
       {adminTab === 'infrastructureOperations' && isSuperAdmin && (
-        <div className="admin-screen admin-screen--infrastructure-operations"><InfrastructureOperations /></div>
+        <div className="admin-screen admin-screen--infrastructure-operations"><InfrastructureOperations onOpenDatabaseCleanup={() => setAdminTab('databaseCleanup')} /></div>
       )}
       {adminTab === 'members' && canManageMembers && <div className="admin-screen admin-screen--members"><TenantStaffManager tenantId={activeTenantId} /></div>}
       {adminTab === 'serviceLogs' && isSuperAdmin && <div className="admin-screen admin-screen--service-logs"><ServiceLogsTab /></div>}
