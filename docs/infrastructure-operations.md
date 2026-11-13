@@ -1,53 +1,81 @@
-# Super Admin infrastructure operations
+# Universal infrastructure and remote-service adapters
 
-The Super Admin workspace is provider-neutral. The initial lifecycle adapter is Render; the normalized resource contract is designed for additional AWS, Azure, GCP and other provider adapters. MongoDB usage is read from the gateway's active Mongoose connection.
+Super Admin infrastructure operations use a provider-neutral adapter model. Render is supported natively. Any additional cloud, hosting platform, VPS, container platform, managed database, remote compute service or other operational service can be integrated behind one private remote control-plane adapter.
 
-## Backend secrets and configuration
+## Configuration
 
-Configure these in the backend API service's secret environment (for Render, the backend service's Environment page). Never put provider credentials in Vite/frontend variables.
+Set these secrets on the backend service only:
 
 | Variable | Purpose |
 | --- | --- |
-| `RENDER_API_KEY` | Render API key. Enables listing Render services and service lifecycle actions. |
-| `INFRASTRUCTURE_CONTROL_PLANE_URL` | Optional HTTPS base URL for the normalized AWS/Azure/GCP adapter service. |
-| `INFRASTRUCTURE_CONTROL_PLANE_TOKEN` | Optional bearer token for that control-plane service. |
+| `RENDER_API_KEY` | Enables native Render service discovery, metrics and supported lifecycle operations. |
+| `INFRASTRUCTURE_CONTROL_PLANE_URL` | Fixed base URL of your private universal adapter service. |
+| `INFRASTRUCTURE_CONTROL_PLANE_TOKEN` | Bearer token used by the backend to authenticate to that adapter. |
 
-After changing backend environment variables, redeploy/restart the backend API service.
+Production requires HTTPS and a token. Never put credentials in frontend/Vite variables, resource records, URLs, or browser requests. Restart/redeploy the backend after changing secrets.
 
-## Native Render metrics
+## Universal adapter protocol
 
-When `RENDER_API_KEY` is configured, the backend reads Render's native Metrics API:
-- CPU: `/v1/metrics/cpu`
-- Memory: `/v1/metrics/memory`
-- Outbound bandwidth: `/v1/metrics/bandwidth`
+The application does not hardcode a list of cloud vendors. The adapter may return any provider identifier matching `[a-z][a-z0-9_-]{0,63}` (except `render`, reserved for the native adapter). It can represent AWS, Azure, GCP, DigitalOcean, Hetzner, Fly.io, Kubernetes, Docker hosts, VPS providers, PaaS platforms, managed databases or an internal service.
 
-CPU is averaged across the latest available instance samples and memory is summed across the latest available instance samples. Bandwidth sums available hourly data points across the last 24 hours. Render's bandwidth graph has hourly resolution and its samples can arrive with a delay, so the current 24-hour total may be incomplete. Memory limit and disk usage are left unreported unless a future adapter supplies them; the UI does not invent plan limits. See https://render.com/docs/service-metrics and https://api-docs.render.com/reference/get-memory.
+Implement:
 
-## AWS, Azure and GCP control-plane adapter
+- `GET /v1/resources` — return `{ "resources": [ ... ] }`.
+- `POST /v1/resources/:resourceId/actions` — accept `{ "provider": "provider-id", "action": "start|stop|restart" }` when supported.
 
-For multi-cloud support, deploy a small private adapter service that owns the AWS/Azure/GCP SDK clients and credentials. Configure its base URL and bearer token using the two environment variables above. Production requires HTTPS and a bearer token. The app backend calls only this fixed server-side URL; cloud credentials are never sent to the browser.
+Example resource:
 
-The adapter must implement:
+```json
+{
+  "id": "stable-provider-resource-id",
+  "provider": "my-hosting-platform",
+  "name": "production-api",
+  "type": "web_service",
+  "region": "ap-south-1",
+  "plan": "standard",
+  "status": "RUNNING",
+  "dashboardUrl": "https://provider.example/console/resource",
+  "capabilities": { "start": false, "stop": true, "restart": true },
+  "usage": {
+    "cpu": 12.4,
+    "cpuUnit": "%",
+    "memoryBytes": 536870912,
+    "memoryLimitBytes": 1073741824,
+    "outboundBytes": 123456789,
+    "bandwidthWindow": "24h",
+    "diskBytes": 4294967296,
+    "estimatedCost": 18.5,
+    "costCurrency": "USD",
+    "costWindow": "current billing month",
+    "observedAt": "2026-11-13T12:00:00.000Z",
+    "source": "Provider Metrics API"
+  }
+}
+```
 
-- `GET /v1/resources` → `{ "resources": [ ...normalized resources... ] }`
-- `POST /v1/resources/:resourceId/actions` with `{ "provider": "aws|azure|gcp", "action": "start|stop|restart" }`
+All usage fields are optional. Unknown or unavailable measurements must be omitted or null, never represented as zero. Costs must be provider-reported estimates with ISO-4217 currency codes. Keep units explicit and consistent. IDs must be stable within a provider; provider + resource ID form the identity.
 
-Each resource should have `id`, `provider`, `name`, `type`, `region`, `plan`, `status`, `capabilities`, and a `usage` object containing optional `cpu`, `cpuUnit`, `memoryBytes`, `memoryLimitBytes`, `outboundBytes`, `bandwidthWindow`, `diskBytes`, `estimatedCost`, `costCurrency`, `costWindow`, `observedAt`, and `source`. Billing estimates are shown only when the provider adapter supplies a finite amount and ISO 4217 currency; no costs are inferred from compute plans. Unknown measurements must be null/omitted, not zero. The backend filters providers to AWS, Azure and GCP, re-fetches the resource before every action, checks the advertised capability, requires typed confirmation, and writes a structured audit log.
+## Security and safety requirements for adapter implementers
 
-The adapter service must independently enforce least-privilege cloud IAM, validate the requested provider/resource pair, reject unsupported lifecycle actions, and return only resources the connected account is authorized to manage. Do not expose a generic arbitrary-command endpoint.
+- The adapter is a private service with its own provider SDKs, API clients and credentials.
+- It must independently enforce least-privilege IAM and tenant/account boundaries.
+- Validate provider/resource pairs and allow-list lifecycle actions; never implement arbitrary shell, SQL, HTTP proxy, URL fetch, or command execution endpoints.
+- Return only resources the connected principal is authorized to inspect or operate.
+- The app backend uses a fixed configured base URL (not a URL supplied by the browser), bearer authentication, request timeout, normalized provider IDs, resource re-discovery, capability checks and typed confirmation.
+- Audit each action in the adapter, including actor/context passed by a trusted server-side identity mechanism, target, provider, action, result and timestamp.
+- A successful action response means accepted, not completed; poll resource status to verify the final state.
+- Treat dashboard URLs as display metadata only; never fetch them server-side.
 
-## Lifecycle safety
+The initial protocol exposes start/stop/restart. Other operations (deploy, scale, pause, resume, rotate credentials, backup, restore, purge) should be added as explicit typed capabilities and validated action schemas, not arbitrary action strings.
 
-- Start/stop/restart actions are Super Admin only and require typed confirmation.
-- Render lifecycle controls currently apply only to supported compute services (web/private services and background workers); databases and static sites are not stopped through this UI.
-- The API re-fetches the provider resource list and checks action capability before issuing a lifecycle request.
-- A successful API response means the provider accepted the request, not that the resource reached its final state. Refresh status to verify.
-- Keep production databases and dependencies running while stopping application services. MongoDB itself is read-only in this module.
+## Metrics
 
-## MongoDB
+Render uses its native metrics endpoints for CPU, memory and outbound bandwidth. The universal adapter returns normalized metrics for all other services. Each provider can report CPU, memory, memory limit, outbound bandwidth and its measurement window, disk, cost and observation timestamp. Missing metrics remain visibly unreported. Totals include only comparable reported samples.
 
-MongoDB status is read from the gateway's active Mongoose connection. The UI reports database data, storage, index sizes and collection-level counts/footprints. This is observational; it does not compact the cluster or guarantee reclaimed Atlas disk allocation. Use the separate Database Cleanup task for retention-controlled cleanup.
+## MongoDB and databases
 
-## Adding another cloud provider
+The existing MongoDB integration reads stats from the application's active Mongoose connection and is observational. Other managed databases can be surfaced as resources through the universal adapter with provider-reported storage, metrics and explicitly supported lifecycle capabilities. Database deletion, cleanup, backup and restore must be separate retention/approval workflows; do not expose them as generic stop/start actions.
 
-Implement a server-side adapter exposing a common resource shape (`id`, `name`, `provider`, `type`, `region`, `plan`, `status`, `capabilities`, `usage`) and lifecycle methods. Register it in the infrastructure route without exposing credentials to the browser. Provider actions must be allow-listed, capability-checked, audited, and require explicit confirmation.
+## Adding a new service provider
+
+Implement the two protocol endpoints and normalized resource records in the adapter, register its credentials there, and return its provider ID in each resource. No application code change or provider allow-list update is required for a new provider. Only add a new typed action to the app when the UI needs to expose an operation beyond start/stop/restart.
