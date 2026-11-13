@@ -5,7 +5,7 @@ const callerScopes = {
   'order-service': new Set(['inventory.read', 'inventory.reserve', 'inventory.release', 'inventory.deduct']),
   'medicine-request-service': new Set(['inventory.read']),
   'backend-platform': new Set(['inventory.read', 'inventory.adjust', 'inventory.write', 'inventory.reserve', 'inventory.release', 'inventory.deduct']),
-  'api-gateway': new Set(['inventory.read', 'inventory.import', 'inventory.adjust', 'inventory.catalogue.import', 'inventory.catalogue.read'])
+  'api-gateway': new Set(['inventory.read', 'inventory.import', 'inventory.adjust', 'inventory.catalogue.import', 'inventory.catalogue.read', 'platform.database.cleanup'])
 };
 
 export function createServiceToken({ caller, scopes, expiresInSeconds = 60, userId }) {
