@@ -77,7 +77,8 @@ const sumMetricBytes = (series, resourceId) => {
 };
 async function renderMetric(metric, resourceIds, startTime, endTime) {
   if (!resourceIds.length) return [];
-  const params = new URLSearchParams({ startTime, endTime, resolutionSeconds: '60' });
+  const params = new URLSearchParams({ startTime, endTime });
+  if (metric !== 'bandwidth') params.set('resolutionSeconds', '60');
   resourceIds.forEach(id => params.append('resource', id));
   return renderRequest(`/metrics/${metric}?${params.toString()}`);
 }
