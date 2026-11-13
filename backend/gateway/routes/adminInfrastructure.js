@@ -40,14 +40,17 @@ const unitBytes = (value, unit) => {
   const factors = { b: 1, byte: 1, bytes: 1, kb: 1000, kib: 1024, mb: 1000 ** 2, mib: 1024 ** 2, gb: 1000 ** 3, gib: 1024 ** 3, tb: 1000 ** 4, tib: 1024 ** 4 };
   return factors[u] ? n * factors[u] : null;
 };
-const latestMetric = (series, resourceId) => {
-  const matching = (Array.isArray(series) ? series : []).filter(item =>
-    (item.labels || []).some(label => ['service', 'resource'].includes(label.field) && label.value === resourceId)
-  );
-  const points = matching.flatMap(item => (item.values || []).map(point => ({ ...point, unit: point.unit || item.unit || null })))
-    .filter(point => Number.isFinite(Number(point.value)))
-    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-  return points[0] || null;
+const metricPoints = (series, resourceId) => (Array.isArray(series) ? series : [])
+  .filter(item => (item.labels || []).some(label => ['service', 'resource'].includes(label.field) && label.value === resourceId))
+  .flatMap(item => (item.values || []).map(point => ({ ...point, unit: point.unit || item.unit || null })))
+  .filter(point => Number.isFinite(Number(point.value)))
+  .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+const latestMetric = (series, resourceId) => metricPoints(series, resourceId).at(-1) || null;
+const sumMetricBytes = (series, resourceId) => {
+  const points = metricPoints(series, resourceId);
+  if (!points.length) return null;
+  const converted = points.map(point => unitBytes(point.value, point.unit));
+  return converted.every(value => value !== null) ? converted.reduce((sum, value) => sum + value, 0) : null;
 };
 async function renderMetric(metric, resourceIds, startTime, endTime) {
   if (!resourceIds.length) return [];
@@ -71,7 +74,7 @@ async function listRenderServices() {
   const resources = entries.map(normaliseRenderService).filter(item => item.id);
   const ids = resources.map(item => item.id);
   const end = new Date();
-  const start = new Date(end.getTime() - 60 * 60 * 1000);
+  const start = new Date(end.getTime() - 24 * 60 * 60 * 1000);
   const [cpuResult, memoryResult, bandwidthResult] = await Promise.allSettled([
     renderMetric('cpu', ids, start.toISOString(), end.toISOString()),
     renderMetric('memory', ids, start.toISOString(), end.toISOString()),
@@ -83,7 +86,7 @@ async function listRenderServices() {
     const memory = memoryResult.status === 'fulfilled' ? latestMetric(memoryResult.value, resource.id) : null;
     const bandwidth = bandwidthResult.status === 'fulfilled' ? latestMetric(bandwidthResult.value, resource.id) : null;
     const memoryBytes = memory ? unitBytes(memory.value, memory.unit) : null;
-    const outboundBytes = bandwidth ? unitBytes(bandwidth.value, bandwidth.unit) : null;
+    const outboundBytes = sumMetricBytes(bandwidthResult.status === 'fulfilled' ? bandwidthResult.value : [], resource.id);
     return {
       ...resource,
       usage: {
@@ -94,11 +97,11 @@ async function listRenderServices() {
         memoryLimitBytes: null,
         outboundBytes,
         bandwidthUnit: bandwidth?.unit || null,
-        bandwidthWindow: bandwidth ? 'Latest Render API data point (hourly metric)' : null,
+        bandwidthWindow: bandwidth ? 'Total of available hourly points · last 24 hours' : null,
         diskBytes: null,
         observedAt: [cpu?.timestamp, memory?.timestamp, bandwidth?.timestamp].filter(Boolean).sort().at(-1) || null,
         metricsStatus: metricStatus,
-        source: 'Render native Metrics API (CPU, memory and outbound bandwidth)'
+        source: 'Render native Metrics API · CPU/memory latest sample; bandwidth summed from hourly points over 24 hours'
       }
     };
   });
