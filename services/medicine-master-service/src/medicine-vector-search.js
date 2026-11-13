@@ -80,7 +80,7 @@ export function rankMedicineSearchResults({query,vectorRows=[],keywordRows=[],li
   for (const row of keywordRows) if (row?.medicineId&&!row.isArchived) rows.set(String(row.medicineId),row);
   return [...rows.values()].map(row=>{
     const lexical=lexicalScore(q,row), vector=scores.get(String(row.medicineId))||0, exact=lexical>=.96;
-    const score=vector?Math.min(1,lexical*.55+vector*.45+(exact?.15:0)):lexical;
+    const score=vector?Math.min(1,lexical*.55+vector*.45+(exact ? 0.15 : 0)):lexical;
     return {medicineId:row.medicineId,brandName:row.brandName||'',productName:row.productName||'',
       genericName:row.genericName||'',composition:row.composition||'',strength:row.strength||'',
       dosageForm:row.dosageForm||'',manufacturer:row.manufacturer||'',therapeuticClass:row.therapeuticClass||'',
@@ -126,7 +126,8 @@ async function syncChanged() {
   try{
     const states=collection(config.vectorStateCollection),state=await states.findOne({_id:STATE_ID});
     if(state?.status!=='READY'||state.model!==config.vectorModel||state.dimensions!==config.vectorDimensions)return;
-    const filter=state.lastUpdatedAt?{$or:[{updatedAt:{$gt:state.lastUpdatedAt}},{updatedAt:state.lastUpdatedAt,_id:{$gt:state.lastId}}]}:{};
+    const overlapStart = state.lastUpdatedAt ? new Date(new Date(state.lastUpdatedAt).getTime() - 1000) : null;
+    const filter = overlapStart ? { updatedAt: { $gte: overlapStart } } : {};
     const rows=await mongoose.models.MedicineMaster.find(filter).sort({updatedAt:1,_id:1}).limit(32).lean();
     if(!rows.length)return;
     await upsertMedicineVectorDocuments(rows);
