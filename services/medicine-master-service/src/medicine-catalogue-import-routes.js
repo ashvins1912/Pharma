@@ -812,8 +812,7 @@ router.post('/imports/processing-guard/control', asyncHandler(async (req, res) =
     { _id: 'global' },
     {
       $set: { operatorPaused, pauseReason: operatorPaused ? reason : '', updatedBy: actor },
-      $push: { history: { $each: [event], $slice: -50 } },
-      $setOnInsert: { _id: 'global' }
+      $push: { history: { $each: [event], $slice: -50 } }
     },
     { upsert: true, new: true, setDefaultsOnInsert: true }
   ).lean();
