@@ -1,0 +1,99 @@
+import crypto from 'node:crypto';
+import mongoose from 'mongoose';
+
+const ALGORITHM = 'aes-256-gcm';
+const KEY_VERSION = 'v1';
+const COLLECTION = 'infrastructure_integrations';
+const AUDIT_COLLECTION = 'infrastructure_security_audit';
+
+const integrationSchema = new mongoose.Schema({
+  name: { type: String, required: true, maxlength: 120 },
+  provider: { type: String, required: true, match: /^[a-z][a-z0-9_-]{0,63}$/ },
+  environment: { type: String, enum: ['development', 'staging', 'production'], required: true },
+  authMethod: { type: String, required: true, maxlength: 40 },
+  endpoint: { type: String, maxlength: 500, default: null },
+  secretEnvelope: {
+    algorithm: { type: String, required: true },
+    keyVersion: { type: String, required: true },
+    iv: { type: String, required: true },
+    authTag: { type: String, required: true },
+    ciphertext: { type: String, required: true }
+  },
+  requestedScopes: { type: [String], default: [] },
+  grantedScopes: { type: [String], default: [] },
+  requestedCapabilities: { type: [String], default: ['read', 'monitor'] },
+  state: { type: String, default: 'PENDING_VERIFICATION' },
+  complianceState: { type: String, default: 'NOT_ASSESSED' },
+  verification: { type: mongoose.Schema.Types.Mixed, default: null },
+  policyEvidence: { type: [mongoose.Schema.Types.Mixed], default: [] },
+  createdBy: { type: String, required: true },
+  updatedBy: { type: String, required: true },
+  lastVerifiedAt: { type: Date, default: null },
+  revokedAt: { type: Date, default: null },
+  secretRotatedAt: { type: Date, default: null }
+}, { timestamps: true, minimize: false, strict: true });
+integrationSchema.index({ provider: 1, environment: 1, createdAt: -1 });
+const auditSchema = new mongoose.Schema({
+  integrationId: { type: String, required: true, index: true, immutable: true },
+  actor: { type: String, required: true, immutable: true },
+  event: { type: String, required: true, immutable: true },
+  outcome: { type: String, required: true, immutable: true },
+  details: { type: mongoose.Schema.Types.Mixed, default: {}, immutable: true },
+  requestId: { type: String, default: null, immutable: true },
+  occurredAt: { type: Date, default: Date.now, immutable: true }
+}, { versionKey: false, strict: true });
+auditSchema.index({ occurredAt: -1 });
+const Integration = mongoose.models.InfrastructureIntegration || mongoose.model('InfrastructureIntegration', integrationSchema, COLLECTION);
+const Audit = mongoose.models.InfrastructureSecurityAudit || mongoose.model('InfrastructureSecurityAudit', auditSchema, AUDIT_COLLECTION);
+
+function encryptionKey(version = null) {
+  const rawRing = String(process.env.INFRASTRUCTURE_CREDENTIAL_ENCRYPTION_KEYS || '').trim();
+  if (rawRing) {
+    let ring;
+    try { ring = JSON.parse(rawRing); } catch { throw new Error('Credential key ring must be valid JSON.'); }
+    const activeVersion = String(ring.activeVersion || '');
+    const selectedVersion = version || activeVersion;
+    const encoded = ring.keys?.[selectedVersion];
+    if (!selectedVersion || !encoded) throw new Error(`Credential encryption key version ${selectedVersion || '(missing)'} is unavailable.`);
+    const key = Buffer.from(String(encoded), 'base64');
+    if (key.length !== 32) throw new Error(`Credential encryption key ${selectedVersion} must decode to 32 bytes.`);
+    return { key, version: selectedVersion };
+  }
+  if (version && version !== KEY_VERSION) throw new Error(`Legacy credential key cannot decrypt version ${version}.`);
+  const encoded = String(process.env.INFRASTRUCTURE_CREDENTIAL_ENCRYPTION_KEY || '').trim();
+  if (!encoded) throw new Error('Credential vault is locked: configure INFRASTRUCTURE_CREDENTIAL_ENCRYPTION_KEYS.');
+  const key = Buffer.from(encoded, 'base64');
+  if (key.length !== 32) throw new Error('Credential vault key must be a base64-encoded 32-byte key.');
+  return { key, version: KEY_VERSION };
+}
+
+export function encryptCredentialPayload(payload) {
+  const iv = crypto.randomBytes(12);
+  const active = encryptionKey();
+  const cipher = crypto.createCipheriv(ALGORITHM, active.key, iv);
+  const ciphertext = Buffer.concat([cipher.update(JSON.stringify(payload), 'utf8'), cipher.final()]);
+  return { algorithm: ALGORITHM, keyVersion: active.version, iv: iv.toString('base64'), authTag: cipher.getAuthTag().toString('base64'), ciphertext: ciphertext.toString('base64') };
+}
+
+export function decryptCredentialPayload(envelope) {
+  if (!envelope || envelope.algorithm !== ALGORITHM || typeof envelope.keyVersion !== 'string' || !envelope.keyVersion) throw new Error('Unsupported credential envelope.');
+  const selected = encryptionKey(envelope.keyVersion);
+  const decipher = crypto.createDecipheriv(ALGORITHM, selected.key, Buffer.from(envelope.iv, 'base64'));
+  decipher.setAuthTag(Buffer.from(envelope.authTag, 'base64'));
+  const clear = Buffer.concat([decipher.update(Buffer.from(envelope.ciphertext, 'base64')), decipher.final()]);
+  return JSON.parse(clear.toString('utf8'));
+}
+
+export function publicIntegration(doc) {
+  const item = doc.toObject ? doc.toObject() : doc;
+  const { secretEnvelope, __v, ...safe } = item;
+  return safe;
+}
+
+export async function writeInfrastructureAudit({ integrationId, actor, event, outcome, details = {}, requestId = null }) {
+  const safeDetails = { ...details };
+  for (const key of Object.keys(safeDetails)) if (/secret|token|password|credential|authorization|private.?key/i.test(key)) safeDetails[key] = '[REDACTED]';
+  await Audit.create({ integrationId: String(integrationId), actor: String(actor), event, outcome, details: safeDetails, requestId });
+}
+
+export { Integration as InfrastructureIntegration, Audit as InfrastructureSecurityAudit };

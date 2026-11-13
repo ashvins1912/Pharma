@@ -47,6 +47,7 @@ export function loadConfig(environment = process.env) {
     || (production ? '' : 'http://localhost:3000,http://localhost:5173,http://0.0.0.0:3000');
   const allowedOrigins = originsValue.split(',').map(origin => origin.trim()).filter(Boolean);
   const backendApiUrl = parseOrigin(environment.BACKEND_API_URL || (production ? '' : 'http://localhost:8090'));
+  const adminServiceUrl = parseOrigin(environment.ADMIN_SERVICE_URL || '');
   const inventoryServiceUrl = parseOrigin(environment.INVENTORY_SERVICE_URL || '');
   const medicineMasterServiceUrl = parseOrigin(environment.MEDICINE_MASTER_SERVICE_URL || '');
   const orderServiceUrl = parseOrigin(environment.ORDER_SERVICE_URL || '');
@@ -70,6 +71,7 @@ export function loadConfig(environment = process.env) {
   if (allowedOrigins.some(origin => !isExactBrowserOrigin(origin, production))) {
     errors.push('CORS_ALLOWED_ORIGINS entries must be exact HTTP(S) origins; production origins must use HTTPS.');
   }
+  if (environment.ADMIN_SERVICE_URL && !adminServiceUrl) errors.push('ADMIN_SERVICE_URL must be an HTTP(S) origin without credentials, path, query, or fragment.');
   if (!backendApiUrl) {
     errors.push('BACKEND_API_URL must be an HTTP(S) origin without credentials, path, query, or fragment.');
   }
@@ -128,6 +130,7 @@ export function loadConfig(environment = process.env) {
   return {
     port,
     backendApiUrl,
+    adminServiceUrl,
     inventoryServiceUrl,
     medicineMasterServiceUrl,
     orderServiceUrl,
@@ -142,6 +145,7 @@ export function loadConfig(environment = process.env) {
     loggingEnabled,
     healthServices: [
       { name: 'backend-api', baseUrl: backendApiUrl, healthPath: '/api/v1/health', critical: true },
+      ...(adminServiceUrl ? [{ name: 'admin-control-plane', baseUrl: adminServiceUrl, healthPath: '/ready', critical: false }] : []),
       ...(inventoryServiceUrl ? [{ name: 'inventory-service', baseUrl: inventoryServiceUrl, healthPath: '/ready', critical: false }] : []),
       ...(medicineMasterServiceUrl ? [{ name: 'medicine-master-service', baseUrl: medicineMasterServiceUrl, healthPath: '/ready', critical: false }] : []),
       ...(orderServiceUrl ? [{ name: 'order-service', baseUrl: orderServiceUrl, healthPath: '/ready', critical: false }] : []),

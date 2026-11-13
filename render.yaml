@@ -1,5 +1,50 @@
 services:
   - type: web
+    name: ashvin-pharma-admin-control-plane
+    env: node
+    region: oregon
+    plan: free
+    buildCommand: npm install
+    startCommand: npm --workspace services/admin-control-plane start
+    healthCheckPath: /ready
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: ADMIN_MONGO_URI
+        sync: false
+      - key: GATEWAY_AUTH_SECRET
+        sync: false
+      - key: REQUIRE_GATEWAY_TRUST
+        value: "true"
+      - key: PHARMA_JWT_PUBLIC_KEY
+        sync: false
+      - key: PHARMA_JWT_PRIVATE_KEY
+        sync: false
+      - key: PHARMA_JWT_ISSUER
+        value: pharma-auth
+      - key: PHARMA_JWT_AUDIENCE
+        value: pharma-api
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SERVICE_AUTH_SECRET
+        sync: false
+      - key: ENCRYPTION_SECRET_KEY
+        sync: false
+      - key: CORS_ALLOWED_ORIGINS
+        value: https://pharma-1-278k.onrender.com,https://pharma-ui.onrender.com
+      - key: INFRASTRUCTURE_CREDENTIAL_ENCRYPTION_KEYS
+        sync: false
+      - key: INFRASTRUCTURE_CONTROL_PLANE_URL
+        sync: false
+      - key: INFRASTRUCTURE_CONTROL_PLANE_TOKEN
+        sync: false
+      - key: RENDER_API_KEY
+        sync: false
+  - type: web
     name: ashvin-pharma-api
     env: node
     region: oregon

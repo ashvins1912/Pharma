@@ -140,3 +140,26 @@ test('Medicine Master service URL and audience are validated and registered inde
   assert.equal(config.medicineMasterJwtAudience, 'medicine-master-service');
   assert.ok(config.healthServices.some(service => service.name === 'medicine-master-service' && service.healthPath === '/ready'));
 });
+
+
+test('standalone admin control plane URL is validated and registered for health monitoring', () => {
+  assert.throws(() => loadConfig({
+    NODE_ENV: 'test',
+    BACKEND_API_URL: 'http://backend.example.com',
+    ADMIN_SERVICE_URL: 'http://admin.example.com/private',
+    CORS_ALLOWED_ORIGINS: 'http://app.example.com'
+  }), /ADMIN_SERVICE_URL/);
+
+  const config = loadConfig({
+    NODE_ENV: 'test',
+    BACKEND_API_URL: 'http://backend.example.com',
+    ADMIN_SERVICE_URL: 'https://admin.example.com',
+    CORS_ALLOWED_ORIGINS: 'http://app.example.com'
+  });
+  assert.equal(config.adminServiceUrl, 'https://admin.example.com');
+  assert.ok(config.healthServices.some(service =>
+    service.name === 'admin-control-plane'
+    && service.baseUrl === 'https://admin.example.com'
+    && service.healthPath === '/ready'
+  ));
+});
