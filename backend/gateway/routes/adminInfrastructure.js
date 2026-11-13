@@ -45,7 +45,27 @@ const metricPoints = (series, resourceId) => (Array.isArray(series) ? series : [
   .flatMap(item => (item.values || []).map(point => ({ ...point, unit: point.unit || item.unit || null })))
   .filter(point => Number.isFinite(Number(point.value)))
   .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+const latestPerSeries = (series, resourceId) => (Array.isArray(series) ? series : [])
+  .filter(item => (item.labels || []).some(label => ['service', 'resource'].includes(label.field) && label.value === resourceId))
+  .map(item => (item.values || [])
+    .filter(point => Number.isFinite(Number(point.value)))
+    .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+    .at(-1))
+  .filter(Boolean);
 const latestMetric = (series, resourceId) => metricPoints(series, resourceId).at(-1) || null;
+const sumLatestMetricBytes = (series, resourceId) => {
+  const points = latestPerSeries(series, resourceId);
+  if (!points.length) return null;
+  const converted = points.map(point => unitBytes(point.value, point.unit));
+  return converted.every(value => value !== null) ? converted.reduce((sum, value) => sum + value, 0) : null;
+};
+const sumLatestMetricValue = (series, resourceId) => {
+  const points = latestPerSeries(series, resourceId);
+  if (!points.length) return null;
+  const units = new Set(points.map(point => point.unit || ''));
+  if (units.size !== 1) return null;
+  return { value: points.reduce((sum, point) => sum + Number(point.value), 0), unit: points[0].unit || null, timestamp: points.map(point => point.timestamp).sort().at(-1) };
+};
 const sumMetricBytes = (series, resourceId) => {
   const points = metricPoints(series, resourceId);
   if (!points.length) return null;
@@ -84,10 +104,10 @@ async function listRenderServices() {
   ]);
   const metricStatus = { cpu: cpuResult.status, memory: memoryResult.status, bandwidth: bandwidthResult.status };
   return resources.map(resource => {
-    const cpu = cpuResult.status === 'fulfilled' ? latestMetric(cpuResult.value, resource.id) : null;
+    const cpu = cpuResult.status === 'fulfilled' ? sumLatestMetricValue(cpuResult.value, resource.id) : null;
     const memory = memoryResult.status === 'fulfilled' ? latestMetric(memoryResult.value, resource.id) : null;
     const bandwidth = bandwidthResult.status === 'fulfilled' ? latestMetric(bandwidthResult.value, resource.id) : null;
-    const memoryBytes = memory ? unitBytes(memory.value, memory.unit) : null;
+    const memoryBytes = memoryResult.status === 'fulfilled' ? sumLatestMetricBytes(memoryResult.value, resource.id) : null;
     const outboundBytes = sumMetricBytes(bandwidthResult.status === 'fulfilled' ? bandwidthResult.value : [], resource.id);
     return {
       ...resource,
@@ -104,7 +124,7 @@ async function listRenderServices() {
         estimatedCost: null, costCurrency: null, costWindow: null,
         observedAt: [cpu?.timestamp, memory?.timestamp, bandwidth?.timestamp].filter(Boolean).sort().at(-1) || null,
         metricsStatus: metricStatus,
-        source: 'Render native Metrics API · CPU/memory latest sample; bandwidth summed from hourly points over 24 hours'
+        source: 'Render native Metrics API · CPU/memory latest samples aggregated across instances; bandwidth summed from hourly points over 24 hours'
       }
     };
   });
