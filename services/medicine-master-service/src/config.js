@@ -20,6 +20,7 @@ export const config = {
   vectorInferenceToken: process.env.MEDICINE_VECTOR_INFERENCE_TOKEN || '',
   vectorInferenceTimeoutMs: positiveInteger(process.env.MEDICINE_VECTOR_INFERENCE_TIMEOUT_MS, 1800, 10000),
   vectorModel: process.env.MEDICINE_VECTOR_MODEL || 'onnx-community/all-MiniLM-L6-v2-ONNX',
+  vectorModelRevision: process.env.MEDICINE_VECTOR_MODEL_REVISION || 'main',
   vectorDimensions: positiveInteger(process.env.MEDICINE_VECTOR_DIMENSIONS, 384, 4096),
   vectorCollection: process.env.MEDICINE_VECTOR_COLLECTION || 'medicine_master_vector_index',
   vectorStateCollection: process.env.MEDICINE_VECTOR_STATE_COLLECTION || 'medicine_master_vector_sync_state',
