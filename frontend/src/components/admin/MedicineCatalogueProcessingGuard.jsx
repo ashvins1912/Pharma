@@ -127,7 +127,7 @@ export default function MedicineCatalogueProcessingGuard() {
         </div>
         <div className="mt-4 flex flex-wrap gap-2">
           <button type="button" onClick={() => runControl('pause')} disabled={Boolean(busy) || paused} className="rounded-xl bg-rose-700 px-4 py-2.5 text-sm font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-40">{busy === 'pause' ? 'Pausing…' : 'Pause processing'}</button>
-          <button type="button" onClick={() => runControl('resume')} disabled={Boolean(busy) || !paused || snapshot?.enabled === false} className="rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-40">{busy === 'resume' ? 'Resuming…' : 'Resume processing'}</button>
+          <button type="button" onClick={() => runControl('resume')} disabled={Boolean(busy) || !snapshot?.operatorPaused} className="rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-40">{busy === 'resume' ? 'Resuming…' : 'Resume processing'}</button>
         </div>
         {snapshot?.enabled === false && <p className="mt-3 text-xs text-amber-700">The environment setting MEDICINE_CATALOGUE_PROCESSING_ENABLED=false is active. Change the deployment configuration before resuming.</p>}
       </section>
