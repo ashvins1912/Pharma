@@ -1422,11 +1422,11 @@ const catalogueCleanupPlan = async () => {
   const [chunkStats, jobStats] = await Promise.all([
     CatalogueImportChunk.aggregate([
       { $match: { batchId: { $in: publishedIds } } },
-      { $group: { _id: null, count: { $sum: 1 }, bytes: { $sum: { $bsonSize: '$ROOT' } } } }
+      { $group: { _id: null, count: { $sum: 1 }, bytes: { $sum: { $bsonSize: '$$ROOT' } } } }
     ]),
     CatalogueImportJob.aggregate([
       { $match: { jobId: { $in: jobs.map(job => job.jobId) } } },
-      { $group: { _id: null, count: { $sum: 1 }, bytes: { $sum: { $bsonSize: '$ROOT' } } } }
+      { $group: { _id: null, count: { $sum: 1 }, bytes: { $sum: { $bsonSize: '$$ROOT' } } } }
     ])
   ]);
   const gridFsBytes = jobs.reduce((sum, job) => sum + (Number(job.fileSize) || 0), 0);
