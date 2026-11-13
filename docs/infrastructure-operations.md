@@ -167,15 +167,21 @@ The adapter must implement `POST /v1/connections/verify` and return boolean `aut
 
 ### Credential encryption key
 
-Configure `INFRASTRUCTURE_CREDENTIAL_ENCRYPTION_KEY` as a base64-encoded, cryptographically random 32-byte key in the backend secret manager. Generate one with:
+Configure `INFRASTRUCTURE_CREDENTIAL_ENCRYPTION_KEYS` in the backend secret manager as a JSON key ring with an active version and one or more base64-encoded, cryptographically random 32-byte keys. Example structure (replace all example values with generated keys):
+
+```json
+{ "activeVersion": "v2", "keys": { "v1": "<base64-32-byte-key>", "v2": "<base64-32-byte-key>" } }
+```
+
+Generate each key with:
 
 ```bash
 openssl rand -base64 32
 ```
 
-Do not commit this key, put it in MongoDB, share it in chat, or reuse the MongoDB connection password. Back it up securely with controlled access. Losing the key makes saved credentials unrecoverable. For higher-assurance deployments, replace the environment-key provider with KMS/HSM envelope encryption and key-version-aware rotation before production use.
+Do not commit these keys, put them in MongoDB, share them in chat, or reuse the MongoDB connection password. Back them up securely with controlled access. Losing a key makes credentials encrypted under that version unrecoverable. To rotate, add a new key version while retaining the old key, set `activeVersion` to the new version, re-encrypt stored envelopes through a controlled migration, then remove the old key only after verifying no records still use it. The legacy single-key variable `INFRASTRUCTURE_CREDENTIAL_ENCRYPTION_KEY` remains supported as version `v1` for migration only. For higher-assurance deployments, use KMS/HSM envelope encryption and workload identity.
 
-Credentials are encrypted using AES-256-GCM with a fresh random 96-bit IV and authentication tag for each saved payload. The current implementation stores the encrypted envelope in the MongoDB integration record; plaintext is only materialised in backend memory for the verification request and is never included in API responses or audit details. The adapter transport must be HTTPS in production.
+Credentials are encrypted using AES-256-GCM with a fresh random 96-bit IV and authentication tag for each saved payload. The envelope records its key version so a managed key ring can support staged rotation. Audit event fields are marked immutable at the Mongoose schema layer; production-grade tamper evidence still requires restricted database roles, append-only/WORM export and independent retention. The current implementation stores the encrypted envelope in the MongoDB integration record; plaintext is only materialised in backend memory for the verification request and is never included in API responses or audit details. The adapter transport must be HTTPS in production.
 
 ### Important implementation boundary
 
