@@ -1436,7 +1436,7 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
             { $inc: { activeSyncs: -1 }, $set: { updatedAt: new Date() } }
           );
           await MedicineNameNgramIndexState.updateOne(
-            { _id: 'brandName-v1', activeSyncs: 0, backfillCompletedAt: { $ne: null } },
+            { _id: 'brandName-v1', activeSyncs: 0, backfillCompletedAt: { $ne: null }, status: 'SYNCING' },
             { $set: { status: 'READY', updatedAt: new Date() } }
           );
         }
