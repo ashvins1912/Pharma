@@ -6,6 +6,7 @@ import { config, validateConfig } from './config.js';
 import medicineCatalogueImportRoutes, { initializeMedicineCatalogueModels, stopMedicineCatalogueImportWorker } from './medicine-catalogue-import-routes.js';
 import medicineCatalogueRoutes from './medicine-catalogue-routes.js';
 import { initializeMedicineMatchReferenceModel, startMedicineMatchWorker, stopMedicineMatchWorker } from './medicine-match-reference.js';
+import { startMedicineVectorSyncWorker, stopMedicineVectorSyncWorker } from './medicine-vector-search.js';
 
 validateConfig();
 const app = express();
@@ -51,6 +52,7 @@ await mongoose.connect(config.mongoUri, {
 });
 await Promise.all([initializeMedicineCatalogueModels(), initializeMedicineMatchReferenceModel()]);
 startMedicineMatchWorker();
+startMedicineVectorSyncWorker();
 
 const server = app.listen(config.port, '0.0.0.0', () => {
   console.info(`Medicine Master Service listening on port ${config.port}; database ${config.dbName}`);
@@ -61,6 +63,7 @@ const shutdown = async () => {
   shuttingDown = true;
   stopMedicineCatalogueImportWorker();
   stopMedicineMatchWorker();
+  stopMedicineVectorSyncWorker();
   await new Promise(resolve => server.close(resolve));
   await mongoose.disconnect();
 };
