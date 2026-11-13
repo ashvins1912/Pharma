@@ -126,8 +126,10 @@ async function syncChanged() {
   try{
     const states=collection(config.vectorStateCollection),state=await states.findOne({_id:STATE_ID});
     if(state?.status!=='READY'||state.model!==config.vectorModel||state.dimensions!==config.vectorDimensions)return;
-    const overlapStart = state.lastUpdatedAt ? new Date(new Date(state.lastUpdatedAt).getTime() - 1000) : null;
-    const filter = overlapStart ? { updatedAt: { $gte: overlapStart } } : {};
+    const filter = state.lastUpdatedAt ? { $or: [
+      { updatedAt: { $gt: state.lastUpdatedAt } },
+      { updatedAt: state.lastUpdatedAt, _id: { $gt: state.lastId } }
+    ] } : {};
     const rows=await mongoose.models.MedicineMaster.find(filter).sort({updatedAt:1,_id:1}).limit(32).lean();
     if(!rows.length)return;
     await upsertMedicineVectorDocuments(rows);
