@@ -138,7 +138,7 @@ router.post('/integrations/:id/revoke', async (req, res) => {
   const actor = actorOf(req);
   integration.revokedAt = new Date();
   integration.state = 'REVOKED';
-  integration.secretEnvelope = { algorithm: 'aes-256-gcm', keyVersion: 'revoked', iv: '-', authTag: '-', ciphertext: '-' };
+  integration.set('secretEnvelope', undefined);
   integration.updatedBy = actor;
   await integration.save();
   await writeInfrastructureAudit({ integrationId: integration._id, actor, event: 'CREDENTIAL_REVOKED', outcome: 'SUCCESS', details: { provider: integration.provider }, requestId: requestIdOf(req) });
