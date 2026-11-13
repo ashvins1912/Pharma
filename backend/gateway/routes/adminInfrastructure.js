@@ -135,6 +135,7 @@ async function listRenderServices() {
 }
 const numberOrNull = value => value != null && Number.isFinite(Number(value)) ? Number(value) : null;
 const controlPlaneConfigured = () => Boolean(String(process.env.INFRASTRUCTURE_CONTROL_PLANE_URL || '').trim());
+const validProviderId = value => /^[a-z][a-z0-9_-]{0,63}$/.test(String(value || '').toLowerCase());
 const controlPlaneRequest = async (path, options = {}) => {
   const base = String(process.env.INFRASTRUCTURE_CONTROL_PLANE_URL || '').replace(/\/+$/, '');
   if (!base) throw new Error('External infrastructure control plane is not configured.');
@@ -162,9 +163,8 @@ const controlPlaneRequest = async (path, options = {}) => {
 async function listExternalResources() {
   if (!controlPlaneConfigured()) return [];
   const payload = await controlPlaneRequest('/v1/resources');
-  const supported = new Set(['aws', 'azure', 'gcp']);
   return (Array.isArray(payload?.resources) ? payload.resources : []).filter(item =>
-    item && typeof item.id === 'string' && supported.has(String(item.provider || '').toLowerCase())
+    item && typeof item.id === 'string' && item.id.length <= 256 && validProviderId(item.provider) && String(item.provider).toLowerCase() !== 'render'
   ).map(item => ({
     id: item.id, name: item.name || item.id, provider: String(item.provider).toLowerCase(),
     type: item.type || 'compute', region: item.region || null, plan: item.plan || null,
@@ -218,12 +218,18 @@ router.get('/status', async (_req, res) => {
   if (controlPlaneConfigured()) {
     try {
       const external = await listExternalResources();
-      providers.push({ id: 'external-clouds', name: 'AWS · Azure · GCP', status: 'CONNECTED', resources: external });
+      const grouped = new Map();
+      external.forEach(resource => {
+        if (!grouped.has(resource.provider)) grouped.set(resource.provider, []);
+        grouped.get(resource.provider).push(resource);
+      });
+      for (const [providerId, resources] of grouped) providers.push({ id: providerId, name: providerId.toUpperCase(), status: 'CONNECTED', resources, adapter: 'remote-control-plane' });
+      if (!grouped.size) providers.push({ id: 'remote-adapters', name: 'Remote adapters', status: 'CONNECTED', resources: [], message: 'The control plane is connected but has not registered any resources.' });
     } catch (error) {
-      providers.push({ id: 'external-clouds', name: 'AWS · Azure · GCP', status: 'ERROR', error: error.message, resources: [] });
+      providers.push({ id: 'remote-adapters', name: 'Remote adapters', status: 'ERROR', error: error.message, resources: [] });
     }
   } else {
-    providers.push({ id: 'external-clouds', name: 'AWS · Azure · GCP', status: 'NOT_CONFIGURED', message: 'Configure the generic infrastructure control-plane URL and token to connect AWS, Azure or GCP.' });
+    providers.push({ id: 'remote-adapters', name: 'Remote adapters', status: 'NOT_CONFIGURED', message: 'Configure the generic remote control-plane URL and token to connect any supported service provider.' });
   }
   let mongo;
   try { mongo = await getMongoUsage(); }
@@ -236,8 +242,8 @@ router.get('/status', async (_req, res) => {
       liveRenderMetrics: renderConfigured(),
       note: 'Render CPU, memory and bandwidth are read from the native Render Metrics API. Additional cloud providers implement the same normalized adapter contract; missing samples remain unreported.'
     },
-    providerAdapterContract: ['render', 'aws', 'azure', 'gcp'],
-    databaseAdapters: ['mongodb', 'atlas']
+    providerAdapterContract: ['render', 'any provider registered by the remote control plane'],
+    databaseAdapters: ['mongodb', 'any database adapter registered by the remote control plane']
   });
 });
 router.post('/resources/:resourceId/:action', async (req, res) => {
@@ -246,7 +252,7 @@ router.post('/resources/:resourceId/:action', async (req, res) => {
     return res.status(400).json({ success: false, message: 'Unsupported infrastructure lifecycle action.' });
   }
   const provider = String(req.body?.provider || 'render').toLowerCase();
-  if (!['render', 'aws', 'azure', 'gcp'].includes(provider)) {
+  if (!validProviderId(provider)) {
     return res.status(400).json({ success: false, message: 'Unsupported infrastructure provider.' });
   }
   if (req.body?.confirmation !== `${action.toUpperCase()} RESOURCE`) {
@@ -262,10 +268,10 @@ router.post('/resources/:resourceId/:action', async (req, res) => {
       if (!resource.capabilities[action]) return res.status(409).json({ success: false, message: `The ${action} action is not supported for this resource or current state.` });
       const endpoint = action === 'start' ? 'resume' : action === 'stop' ? 'suspend' : 'restart';
       await renderRequest(`/services/${encodeURIComponent(resourceId)}/${endpoint}`, { method: 'POST' });
-    } else {
-      if (!controlPlaneConfigured()) return res.status(503).json({ success: false, message: 'External cloud control plane is not configured.' });
+    } else if (provider !== 'render') {
+      if (!controlPlaneConfigured()) return res.status(503).json({ success: false, message: 'Remote service control plane is not configured.' });
       resource = (await listExternalResources()).find(item => item.id === resourceId && item.provider === provider);
-      if (!resource) return res.status(404).json({ success: false, message: 'Resource was not found for the selected cloud provider.' });
+      if (!resource) return res.status(404).json({ success: false, message: 'Resource was not found for the selected provider.' });
       if (!resource.capabilities[action]) return res.status(409).json({ success: false, message: `The ${action} action is not supported for this resource or current state.` });
       await controlPlaneRequest(`/v1/resources/${encodeURIComponent(resourceId)}/actions`, {
         method: 'POST', body: JSON.stringify({ action, provider })
