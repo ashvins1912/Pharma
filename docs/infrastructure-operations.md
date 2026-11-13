@@ -32,7 +32,7 @@ The adapter must implement:
 - `GET /v1/resources` → `{ "resources": [ ...normalized resources... ] }`
 - `POST /v1/resources/:resourceId/actions` with `{ "provider": "aws|azure|gcp", "action": "start|stop|restart" }`
 
-Each resource should have `id`, `provider`, `name`, `type`, `region`, `plan`, `status`, `capabilities`, and a `usage` object containing optional `cpu`, `cpuUnit`, `memoryBytes`, `memoryLimitBytes`, `outboundBytes`, `bandwidthWindow`, `diskBytes`, `observedAt`, and `source`. Unknown measurements must be null/omitted, not zero. The backend filters providers to AWS, Azure and GCP, re-fetches the resource before every action, checks the advertised capability, requires typed confirmation, and writes a structured audit log.
+Each resource should have `id`, `provider`, `name`, `type`, `region`, `plan`, `status`, `capabilities`, and a `usage` object containing optional `cpu`, `cpuUnit`, `memoryBytes`, `memoryLimitBytes`, `outboundBytes`, `bandwidthWindow`, `diskBytes`, `estimatedCost`, `costCurrency`, `costWindow`, `observedAt`, and `source`. Billing estimates are shown only when the provider adapter supplies a finite amount and ISO 4217 currency; no costs are inferred from compute plans. Unknown measurements must be null/omitted, not zero. The backend filters providers to AWS, Azure and GCP, re-fetches the resource before every action, checks the advertised capability, requires typed confirmation, and writes a structured audit log.
 
 The adapter service must independently enforce least-privilege cloud IAM, validate the requested provider/resource pair, reject unsupported lifecycle actions, and return only resources the connected account is authorized to manage. Do not expose a generic arbitrary-command endpoint.
 
