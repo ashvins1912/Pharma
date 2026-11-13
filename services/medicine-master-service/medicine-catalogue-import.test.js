@@ -3,9 +3,39 @@ import test from 'node:test';
 
 process.env.SERVICE_AUTH_SECRET = 'test-service-secret-with-more-than-thirty-two-characters';
 
-const { detectMedicineDataset, normalizeMedicineRecord, consolidate, assessMedicineQuality, parseJsonArrayRecords, scoreMedicineMatch, mergeStagedMedicine } = await import('./src/medicine-catalogue-import-routes.js');
+const { detectMedicineDataset, normalizeMedicineRecord, consolidate, assessMedicineQuality, parseJsonArrayRecords, scoreMedicineMatch, mergeStagedMedicine, collectCatalogueCandidates, fuzzyCandidatePrefixes } = await import('./src/medicine-catalogue-import-routes.js');
 const { requireServiceScope } = await import('./src/service-auth.js');
 const jwt = (await import('jsonwebtoken')).default;
+
+test('candidate pagination retrieves every matching master row beyond the former 5,000-row cap', async () => {
+  const rows = Array.from({ length: 6123 }, (_, index) => ({ _id: index + 1, medicineId: `MASTER-${index + 1}` }));
+  const requestedCursors = [];
+  const result = await collectCatalogueCandidates(async ({ after, limit }) => {
+    requestedCursors.push(after);
+    return rows.filter(row => after === null || row._id > after).slice(0, limit);
+  }, 750);
+
+  assert.equal(result.length, rows.length);
+  assert.equal(result[0].medicineId, 'MASTER-1');
+  assert.equal(result.at(-1).medicineId, 'MASTER-6123');
+  assert.ok(requestedCursors.length > 1);
+});
+
+test('candidate pagination fails closed if a full page cannot advance its cursor', async () => {
+  await assert.rejects(
+    collectCatalogueCandidates(async () => [{ _id: 'same' }, { _id: 'same' }], 2),
+    /pagination did not advance/i
+  );
+});
+
+test('fuzzy candidate prefix collection does not truncate imports after 120 prefixes', () => {
+  const prefixes = Array.from({ length: 140 }, (_, index) => {
+    const first = String.fromCharCode(97 + Math.floor(index / 26));
+    const second = String.fromCharCode(97 + (index % 26));
+    return { brandName: `${first}${second} medicine` };
+  });
+  assert.equal(fuzzyCandidatePrefixes(prefixes).length, 140);
+});
 
 test('streams JSON arrays one object at a time and preserves escaped/nested content', () => {
   const input = Buffer.from('[{\"id\":\"1\",\"name\":\"A \\\"quoted\\\" tablet\",\"nested\":[{\"x\":1}]},{\"id\":\"2\",\"name\":\"B tablet\"}]');
