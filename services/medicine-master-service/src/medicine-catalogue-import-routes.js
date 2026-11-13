@@ -347,6 +347,35 @@ const catalogueImportJobSchema = new mongoose.Schema({
 }, { timestamps: true });
 catalogueImportJobSchema.index({ status: 1, leaseExpiresAt: 1, createdAt: 1 });
 const CatalogueImportJob = mongoose.models.MedicineCatalogueImportJob || mongoose.model('MedicineCatalogueImportJob', catalogueImportJobSchema);
+const catalogueWorkerSlotSchema = new mongoose.Schema({
+  slotId: { type: Number, required: true, unique: true },
+  ownerId: { type: String, default: '' },
+  leaseExpiresAt: { type: Date, default: new Date(0), index: true }
+}, { timestamps: true });
+const CatalogueWorkerSlot = mongoose.models.MedicineCatalogueWorkerSlot || mongoose.model('MedicineCatalogueWorkerSlot', catalogueWorkerSlotSchema);
+const catalogueWorkerOwnerId = randomUUID();
+async function acquireCatalogueWorkerSlot() {
+  const now = new Date();
+  const slot = await CatalogueWorkerSlot.findOneAndUpdate(
+    { slotId: { $lt: catalogueProcessingLimits.maxConcurrentJobs }, leaseExpiresAt: { $lte: now } },
+    { $set: { ownerId: catalogueWorkerOwnerId, leaseExpiresAt: new Date(now.getTime() + catalogueProcessingLimits.workerLeaseMs) } },
+    { sort: { slotId: 1 }, new: true }
+  ).lean();
+  return slot?.slotId ?? null;
+}
+async function renewCatalogueWorkerSlot(slotId) {
+  await CatalogueWorkerSlot.updateOne(
+    { slotId, ownerId: catalogueWorkerOwnerId },
+    { $set: { leaseExpiresAt: new Date(Date.now() + catalogueProcessingLimits.workerLeaseMs) } }
+  );
+}
+async function releaseCatalogueWorkerSlot(slotId) {
+  if (slotId === null || slotId === undefined) return;
+  await CatalogueWorkerSlot.updateOne(
+    { slotId, ownerId: catalogueWorkerOwnerId },
+    { $set: { ownerId: '', leaseExpiresAt: new Date(0) } }
+  );
+}
 let catalogueImportBucket;
 let catalogueImportWorkerTimer;
 let catalogueImportWorkerBusy = false;
@@ -373,7 +402,7 @@ async function processNextCatalogueImportJob() {
       $or: [{ status: 'QUEUED' }, { status: 'PROCESSING', leaseExpiresAt: { $lt: new Date() } }]
     }, { $set: { status: 'PROCESSING', stage: 'ANALYZING', leaseExpiresAt: new Date(Date.now() + 15 * 60 * 1000), startedAt: new Date(), errorMessage: '' }, $inc: { attempts: 1 } }, { sort: { createdAt: 1 }, new: true });
     if (!job) return;
-    heartbeat = setInterval(() => { void CatalogueImportJob.updateOne({ jobId: job.jobId, status: 'PROCESSING' }, { $set: { leaseExpiresAt: new Date(Date.now() + 15 * 60 * 1000) } }).catch(() => {}); }, 60000);
+    heartbeat = setInterval(() => {\n      void Promise.all([\n        CatalogueImportJob.updateOne({ jobId: job.jobId, status: 'PROCESSING' }, { $set: { leaseExpiresAt: new Date(Date.now() + 15 * 60 * 1000) } }),\n        renewCatalogueWorkerSlot(workerSlotId)\n      ]).catch(() => {});\n    }, 30000);
     heartbeat.unref?.();
     const buffer = await streamToBuffer(getCatalogueImportBucket().openDownloadStream(job.fileId));
     const fakeResponse = {
@@ -398,7 +427,7 @@ async function processNextCatalogueImportJob() {
     if (job) await CatalogueImportJob.updateOne({ jobId: job.jobId }, { $set: {
       status: 'FAILED', stage: 'FAILED', leaseExpiresAt: null, errorMessage: String(error.message || 'Import processing failed.').slice(0, 1000), completedAt: new Date()
     } });
-  } finally { if (heartbeat) clearInterval(heartbeat); catalogueImportWorkerBusy = false; }
+  } finally {\n    if (heartbeat) clearInterval(heartbeat);\n    await releaseCatalogueWorkerSlot(workerSlotId).catch(() => {});\n    catalogueImportWorkerBusy = false;\n  }
 }
 export function startMedicineCatalogueImportWorker() {
   if (catalogueImportWorkerTimer) return;
@@ -1533,7 +1562,7 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
 }));
 
 export async function initializeMedicineCatalogueModels() {
-  await Promise.all([MedicineMaster.init(), CatalogueImport.init(), CatalogueImportChunk.init(), CatalogueImportJob.init()]);
+  await Promise.all([MedicineMaster.init(), CatalogueImport.init(), CatalogueImportChunk.init(), CatalogueImportJob.init(), CatalogueWorkerSlot.init()]);\n  await Promise.all(Array.from({ length: catalogueProcessingLimits.maxConcurrentJobs }, (_, slotId) =>\n    CatalogueWorkerSlot.updateOne({ slotId }, { $setOnInsert: { slotId, ownerId: '', leaseExpiresAt: new Date(0) } }, { upsert: true })\n  ));
   startMedicineCatalogueImportWorker();
 }
 
