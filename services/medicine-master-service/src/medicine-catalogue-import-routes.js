@@ -1422,7 +1422,7 @@ const catalogueCleanupPlan = async () => {
   const [chunkStats, jobBytes] = await Promise.all([
     CatalogueImportChunk.aggregate([
       { $match: { batchId: { $in: publishedIds } } },
-      { $group: { _id: null, count: { $sum: 1 }, bytes: { $sum: { $bsonSize: '$ROOT' } } } }
+      { $group: { _id: null, count: { $sum: 1 }, bytes: { $sum: { $bsonSize: '$$ROOT' } } } }
     ]),
     Promise.resolve(jobs.reduce((sum, job) => sum + (Number(job.fileSize) || 0), 0))
   ]);
