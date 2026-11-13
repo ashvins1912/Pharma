@@ -112,6 +112,7 @@ const controlPlaneRequest = async (path, options = {}) => {
   if (!base) throw new Error('External infrastructure control plane is not configured.');
   const url = new URL(`${base}${path}`);
   if (process.env.NODE_ENV === 'production' && url.protocol !== 'https:') throw new Error('Infrastructure control plane must use HTTPS in production.');
+  if (process.env.NODE_ENV === 'production' && !process.env.INFRASTRUCTURE_CONTROL_PLANE_TOKEN) throw new Error('Infrastructure control plane bearer token is required in production.');
   const response = await fetch(url, {
     ...options,
     headers: {
