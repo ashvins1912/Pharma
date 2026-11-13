@@ -29,9 +29,10 @@ test('candidate pagination fails closed if a full page cannot advance its cursor
 });
 
 test('fuzzy candidate prefix collection does not truncate imports after 120 prefixes', () => {
+  const alphabet = 'abcdefghijklmnopqrstuvwxyz0123456789';
   const prefixes = Array.from({ length: 140 }, (_, index) => {
-    const first = String.fromCharCode(97 + Math.floor(index / 26));
-    const second = String.fromCharCode(97 + (index % 26));
+    const first = alphabet[Math.floor(index / alphabet.length)];
+    const second = alphabet[index % alphabet.length];
     return { brandName: `${first}${second} medicine` };
   });
   assert.equal(fuzzyCandidatePrefixes(prefixes).length, 140);
