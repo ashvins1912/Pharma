@@ -29,7 +29,7 @@ const normaliseRenderService = item => {
     status: isSuspended ? 'SUSPENDED' : (service.serviceDetails?.url ? 'ACTIVE' : (service.status || 'UNKNOWN')),
     suspended: isSuspended,
     dashboardUrl: service.dashboardUrl || null,
-    capabilities: { start: isSuspended, stop: !isSuspended && ['web_service', 'private_service', 'background_worker'].includes(service.type), restart: ['web_service', 'private_service', 'background_worker'].includes(service.type) },
+    capabilities: { start: isSuspended, stop: !isSuspended && ['web_service', 'private_service', 'background_worker'].includes(service.type), restart: !isSuspended && ['web_service', 'private_service', 'background_worker'].includes(service.type) },
     usage: { cpu: null, memoryBytes: null, memoryLimitBytes: null, outboundBytes: null, diskBytes: null, source: 'Metrics API is not included in Render service-list responses; connect an OpenTelemetry/Prometheus metrics adapter to populate usage.' }
   };
 };
