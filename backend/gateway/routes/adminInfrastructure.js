@@ -178,7 +178,7 @@ async function getMongoUsage() {
 }
 router.get('/status', async (_req, res) => {
   const providers = [];
-    if (renderConfigured()) {
+  if (renderConfigured()) {
     try { providers.push({ id: 'render', name: 'Render', status: 'CONNECTED', resources: await listRenderServices() }); }
     catch (error) { providers.push({ id: 'render', name: 'Render', status: 'ERROR', error: error.message, resources: [] }); }
   } else providers.push({ id: 'render', name: 'Render', status: 'NOT_CONFIGURED', message: 'Set RENDER_API_KEY in the backend secret environment.' });
@@ -200,7 +200,6 @@ router.get('/status', async (_req, res) => {
     success: true, checkedAt: new Date().toISOString(),
     providers, databases: [{ id: 'mongodb', provider: 'mongodb', name: 'MongoDB', ...mongo }],
     metrics: {
-      provider: process.env.INFRASTRUCTURE_METRICS_PROVIDER || null,
       liveRenderMetrics: renderConfigured(),
       note: 'Render CPU, memory and bandwidth are read from the native Render Metrics API. Additional cloud providers implement the same normalized adapter contract; missing samples remain unreported.'
     },
@@ -224,7 +223,7 @@ router.post('/resources/:resourceId/:action', async (req, res) => {
     let resource;
     if (provider === 'render') {
       if (!renderConfigured()) return res.status(503).json({ success: false, message: 'Render provider is not configured.' });
-      resource = (await listRenderServices()).find(item => item.id === resourceId);
+      const serviceResponse = await renderRequest(`/services/${encodeURIComponent(resourceId)}`);\n      resource = normaliseRenderService(serviceResponse);
       if (!resource) return res.status(404).json({ success: false, message: 'Resource was not found in the configured Render workspace.' });
       if (!resource.capabilities[action]) return res.status(409).json({ success: false, message: `The ${action} action is not supported for this resource or current state.` });
       const endpoint = action === 'start' ? 'resume' : action === 'stop' ? 'suspend' : 'restart';
