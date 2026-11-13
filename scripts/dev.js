@@ -2,11 +2,16 @@ import { spawn } from 'node:child_process';
 
 let shuttingDown = false;
 
-const processes = [
+const definitions = [
   ['backend', ['--prefix', 'backend', 'run', 'dev'], { PORT: '8090' }],
   ['api-gateway', ['--prefix', 'api-gateway', 'run', 'dev'], { PORT: '8080' }],
   ['frontend', ['--prefix', 'frontend', 'run', 'dev'], {}]
-].map(([name, args, overrides]) => {
+];
+if (process.env.START_ADMIN_SERVICE === 'true') {
+  definitions.splice(2, 0, ['admin-control-plane', ['--workspace', 'services/admin-control-plane', 'run', 'dev'], { PORT: process.env.ADMIN_PORT || '8091' }]);
+}
+
+const processes = definitions.map(([name, args, overrides]) => {
   const child = spawn('npm', args, {
     stdio: 'inherit',
     env: { ...process.env, ...overrides }
