@@ -32,6 +32,75 @@ import { publishInventoryChanged } from './realtimeEvents.js';
 import { queueMedicineMatch } from './medicine-match-queue.js';
 
 const router = express.Router();
+const CLEANUP_RETENTION_DAYS = 30;
+const STAGED_RETENTION_DAYS = 7;
+const cleanupCutoffs = () => ({
+  staged: new Date(Date.now() - STAGED_RETENTION_DAYS * 86400000),
+  history: new Date(Date.now() - CLEANUP_RETENTION_DAYS * 86400000)
+});
+const cleanupEstimate = async (model, filter) => {
+  const [count, sizes] = await Promise.all([
+    model.countDocuments(filter),
+    model.aggregate([{ $match: filter }, { $group: { _id: null, bytes: { $sum: { $bsonSize: '$ROOT' } } } }])
+  ]);
+  return { count, estimatedBytes: sizes[0]?.bytes || 0 };
+};
+async function getDatabaseCleanupPlan() {
+  const dates = cleanupCutoffs();
+  const stagedBatches = await StagedImportBatch.find({
+    status: { $in: ['PUBLISHED', 'REVERTED'] }, completedAt: { $lt: dates.staged }
+  }).select('batchId').lean();
+  const batchIds = stagedBatches.map(item => item.batchId);
+  const [stagedRows, snapshots, failures, releasedReservations, activeReservations] = await Promise.all([
+    cleanupEstimate(StagedImportRow, { batchId: { $in: batchIds } }),
+    cleanupEstimate(ImportBatchSnapshot, { status: { $in: ['COMPLETED', 'COMPLETED_WITH_ERRORS', 'REVERTED'] }, updatedAt: { $lt: dates.history } }),
+    cleanupEstimate(ImportFailure, { createdAt: { $lt: dates.history } }),
+    Reservation.countDocuments({ status: { $in: ['RELEASED', 'DEDUCTED'] }, updatedAt: { $lt: dates.history } }),
+    Reservation.countDocuments({ status: 'RESERVED' })
+  ]);
+  return {
+    retention: { stagedRowsDays: STAGED_RETENTION_DAYS, importHistoryDays: CLEANUP_RETENTION_DAYS },
+    collections: [
+      { name: 'stagedimportrows', ...stagedRows, rule: 'Rows belonging only to PUBLISHED/REVERTED batches completed more than 7 days ago' },
+      { name: 'inventoryimportbatchsnapshots', ...snapshots, rule: 'Terminal import snapshots older than 30 days' },
+      { name: 'inventoryimportfailures', ...failures, rule: 'Import failure diagnostics older than 30 days' },
+      { name: 'inventoryreservations', count: releasedReservations, estimatedBytes: null, activeCount: activeReservations, deletedCount: 0, rule: 'Never deleted by cleanup; reservation/order reconciliation data is retained' }
+    ]
+  };
+}
+router.get('/admin/database-cleanup/status', requireServiceScope('platform.database.cleanup'), asyncHandler(async (_req, res) => {
+  return res.json({ success: true, service: 'inventory-service', ...(await getDatabaseCleanupPlan()) });
+}));
+router.post('/admin/database-cleanup/preview', requireServiceScope('platform.database.cleanup'), asyncHandler(async (_req, res) => {
+  return res.json({ success: true, service: 'inventory-service', ...(await getDatabaseCleanupPlan()) });
+}));
+router.post('/admin/database-cleanup/execute', requireServiceScope('platform.database.cleanup'), asyncHandler(async (req, res) => {
+  if (req.body?.confirmation !== 'DELETE ELIGIBLE INVENTORY IMPORT DATA') {
+    return res.status(400).json({ success: false, code: 'CONFIRMATION_REQUIRED', message: 'Type the exact confirmation phrase to execute cleanup.' });
+  }
+  const dates = cleanupCutoffs();
+  const eligible = await StagedImportBatch.find({
+    status: { $in: ['PUBLISHED', 'REVERTED'] }, completedAt: { $lt: dates.staged }
+  }).select('batchId').lean();
+  const batchIds = eligible.map(item => item.batchId);
+  const operations = [
+    ['stagedimportrows', () => StagedImportRow.deleteMany({ batchId: { $in: batchIds } })],
+    ['inventoryimportbatchsnapshots', () => ImportBatchSnapshot.deleteMany({ status: { $in: ['COMPLETED', 'COMPLETED_WITH_ERRORS', 'REVERTED'] }, updatedAt: { $lt: dates.history } })],
+    ['inventoryimportfailures', () => ImportFailure.deleteMany({ createdAt: { $lt: dates.history } })]
+  ];
+  const results = [];
+  for (const [collection, run] of operations) {
+    try {
+      const result = await run();
+      results.push({ collection, status: 'COMPLETED', deletedCount: result.deletedCount || 0 });
+    } catch (error) {
+      results.push({ collection, status: 'FAILED', deletedCount: 0, error: error.message, code: error.code || null });
+    }
+  }
+  const failed = results.some(item => item.status === 'FAILED');
+  return res.status(failed ? 207 : 200).json({ success: !failed, service: 'inventory-service', executedAt: new Date(), actor: req.service?.userId || req.service?.name || 'super-admin', results, reservationsDeleted: 0 });
+}));
+
 const asyncHandler = handler => (req, res, next) => {
   Promise.resolve(handler(req, res, next)).catch(next);
 };
