@@ -32,3 +32,28 @@ test('catalogue projection excludes tenant and patient fields',()=>{
  const text=buildMedicineEmbeddingText({brandName:'Dolo',tenantId:'tenant-secret',branchStock:12,patientName:'Private Patient',prescriptionText:'Rx private'});
  assert.equal(text,'Dolo');
 });
+
+import {config} from './src/config.js';
+import {embedMedicineTexts} from './src/medicine-vector-search.js';
+
+test('query embeddings use the isolated authenticated inference endpoint',async()=>{
+ const oldUrl=config.vectorInferenceUrl,oldToken=config.vectorInferenceToken,oldFetch=globalThis.fetch;
+ config.vectorInferenceUrl='https://embedding.example';config.vectorInferenceToken='unit-test-token';
+ let request;
+ globalThis.fetch=async(url,options)=>{request={url:String(url),options};return {ok:true,json:async()=>({model:config.vectorModel,dimensions:config.vectorDimensions,embeddings:[new Array(config.vectorDimensions).fill(0.1)]})};};
+ try{
+  const rows=await embedMedicineTexts(['paracetamol 650']);
+  assert.equal(rows.length,1);assert.equal(rows[0].length,config.vectorDimensions);
+  assert.equal(request.url,'https://embedding.example/v1/embeddings');
+  assert.equal(request.options.headers.authorization,'Bearer unit-test-token');
+  assert.deepEqual(JSON.parse(request.options.body),{texts:['paracetamol 650']});
+ }finally{config.vectorInferenceUrl=oldUrl;config.vectorInferenceToken=oldToken;globalThis.fetch=oldFetch;}
+});
+
+test('isolated inference model/dimension mismatch is rejected',async()=>{
+ const oldUrl=config.vectorInferenceUrl,oldToken=config.vectorInferenceToken,oldFetch=globalThis.fetch;
+ config.vectorInferenceUrl='https://embedding.example';config.vectorInferenceToken='unit-test-token';
+ globalThis.fetch=async()=>({ok:true,json:async()=>({model:'different-model',dimensions:config.vectorDimensions,embeddings:[new Array(config.vectorDimensions).fill(0)]})});
+ try{await assert.rejects(()=>embedMedicineTexts(['query']),/incompatible model or vector shape/);}
+ finally{config.vectorInferenceUrl=oldUrl;config.vectorInferenceToken=oldToken;globalThis.fetch=oldFetch;}
+});
