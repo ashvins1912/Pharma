@@ -49,11 +49,15 @@ async function aws(credentials, integration = {}) {
   if (signed.sessionToken) headers['x-amz-security-token'] = signed.sessionToken;
   const response = await fetch('https://' + signed.host + '/', { method: 'POST', headers, body: signed.body, redirect: 'error', signal: AbortSignal.timeout(15000) });
   const xml = await response.text();
-  if (!response.ok || !/<Account>[^<]+<\/Account>/.test(xml) || !/<Arn>[^<]+<\/Arn>/.test(xml)) throw Object.assign(new Error('AWS STS GetCallerIdentity failed.'), { code: 'AWS_IDENTITY_FAILED' });
+  const account = xml.match(/<Account>([^<]+)<\/Account>/)?.[1];
+  if (!response.ok || !account || !/<Arn>[^<]+<\/Arn>/.test(xml)) throw Object.assign(new Error('AWS STS GetCallerIdentity failed.'), { code: 'AWS_IDENTITY_FAILED' });
+  const clusterArn = integration.targetConfig?.clusterArn;
+  if (clusterArn && clusterArn.split(':')[4] !== account) throw Object.assign(new Error('AWS credentials do not belong to the configured ECS cluster account.'), { code: 'AWS_TARGET_ACCOUNT_MISMATCH' });
   return { name: 'aws_identity', status: 'PASS', code: 'AWS_STS_IDENTITY_VERIFIED' };
 }
 async function azure(credentials, integration = {}) {
   const tenant = required(credentials.tenantId, 'azure.tenantId');
+  if (integration.targetConfig?.tenantId && integration.targetConfig.tenantId !== tenant) throw Object.assign(new Error('Azure credential tenant does not match the configured target tenant.'), { code: 'AZURE_TENANT_MISMATCH' });
   const client = required(credentials.clientId, 'azure.clientId');
   const secret = required(credentials.clientSecret, 'azure.clientSecret');
   const token = await jsonRequest('https://login.microsoftonline.com/' + encodeURIComponent(tenant) + '/oauth2/v2.0/token', {
