@@ -30,6 +30,23 @@ const artifactSchema = new mongoose.Schema({
 artifactSchema.index({ serviceName: 1, environment: 1, createdAt: -1 });
 const Artifact = mongoose.models.DevOpsArtifact || mongoose.model('DevOpsArtifact', artifactSchema, 'devops_artifacts');
 
+const providerPreflightSchema = new mongoose.Schema({
+  provider: { type: String, enum: ['aws','azure','gcp','kubernetes','launchdarkly'], required: true, index: true },
+  environment: { type: String, enum: ['staging'], required: true, default: 'staging' },
+  integrationId: { type: mongoose.Schema.Types.ObjectId, required: true, index: true },
+  artifactId: { type: mongoose.Schema.Types.ObjectId, default: null },
+  artifactDigest: { type: String, default: null, index: true },
+  targetDigest: { type: String, required: true },
+  serviceName: { type: String, default: null },
+  flagKey: { type: String, default: null },
+  status: { type: String, enum: ['PASS','FAIL','BLOCKED'], required: true, index: true },
+  evidenceRunId: { type: String, default: null },
+  checkedBy: { type: String, required: true },
+  checkedAt: { type: Date, default: Date.now, index: true }
+}, { timestamps: true, strict: true });
+providerPreflightSchema.index({ provider: 1, environment: 1, artifactDigest: 1, flagKey: 1, status: 1, checkedAt: -1 });
+const ProviderPreflight = mongoose.models.DevOpsProviderPreflight || mongoose.model('DevOpsProviderPreflight', providerPreflightSchema, 'devops_provider_preflights');
+
 const configurationSchema = new mongoose.Schema({
   serviceName: { type: String, required: true, index: true },
   environment: { type: String, enum: ['development', 'staging', 'production'], required: true, index: true },
@@ -55,6 +72,8 @@ const deploymentSchema = new mongoose.Schema({
   approvedAt: { type: Date, default: null },
   changeReference: { type: String, required: true },
   remoteDeploymentId: { type: String, default: null },
+  rollbackRequestId: { type: String, default: null },
+  rollbackAvailable: { type: Boolean, default: false },
   remoteStatus: { type: String, default: null },
   lastErrorCode: { type: String, default: null },
   rolloutStages: { type: [mongoose.Schema.Types.Mixed], default: [] }
@@ -72,7 +91,7 @@ const flagChangeSchema = new mongoose.Schema({
   approvedBy: { type: String, default: null },
   approvedAt: { type: Date, default: null },
   changeReference: { type: String, required: true },
-  status: { type: String, enum: ['PENDING_APPROVAL', 'APPROVED', 'SUBMITTED', 'FAILED'], default: 'PENDING_APPROVAL' },
+  status: { type: String, enum: ['PENDING_APPROVAL', 'APPROVED', 'SUBMITTED', 'SUCCEEDED', 'FAILED', 'ROLLED_BACK'], default: 'PENDING_APPROVAL' },
   remoteRequestId: { type: String, default: null },
   remoteStatus: { type: String, default: null }
 }, { timestamps: true, strict: true });
@@ -93,6 +112,7 @@ auditSchema.index({ occurredAt: -1 });
 const DevOpsAudit = mongoose.models.DevOpsAudit || mongoose.model('DevOpsAudit', auditSchema, 'devops_audit');
 
 const actorOf = req => String(req.user?.sub || req.user?.id || 'unknown-super-admin');
+const targetConfigDigest = value => crypto.createHash('sha256').update(JSON.stringify(value || {})).digest('hex');
 const requestIdOf = req => req.context?.requestId || req.gatewayRequestId || req.get('x-request-id') || null;
 const validId = value => mongoose.Types.ObjectId.isValid(String(value || ''));
 const safeName = /^[a-z0-9](?:[a-z0-9-]{0,50}[a-z0-9])?$/;
@@ -106,17 +126,17 @@ async function audit(req, event, outcome, targetType, targetId, details = {}) {
 }
 
 function controlPlaneBase() {
-  const raw = String(process.env.INFRASTRUCTURE_CONTROL_PLANE_URL || '').trim();
+  const raw = String(process.env.PRIVATE_DEVOPS_ADAPTER_URL || process.env.INFRASTRUCTURE_CONTROL_PLANE_URL || '').trim();
   if (!raw) throw new Error('Private DevOps control-plane adapter is not configured.');
   const url = new URL(raw);
-  if (process.env.NODE_ENV === 'production' && url.protocol !== 'https:') throw new Error('DevOps control-plane adapter must use HTTPS in production.');
+  if (url.protocol !== 'https:' && !(process.env.NODE_ENV !== 'production' && ['localhost','127.0.0.1','::1'].includes(url.hostname))) throw new Error('DevOps control-plane adapter must use HTTPS; loopback HTTP is permitted only outside production.');
   if (url.username || url.password || url.search || url.hash) throw new Error('DevOps control-plane URL must not contain credentials, query parameters or fragments.');
   return url.toString().replace(/\/$/, '');
 }
 
 async function adapterRequest(path, body) {
-  const token = String(process.env.INFRASTRUCTURE_CONTROL_PLANE_TOKEN || '').trim();
-  if (process.env.NODE_ENV === 'production' && token.length < 32) throw new Error('A strong private control-plane service token is required in production.');
+  const token = String(process.env.PRIVATE_DEVOPS_ADAPTER_TOKEN || process.env.INFRASTRUCTURE_CONTROL_PLANE_TOKEN || '').trim();
+  if (token.length < 32) throw new Error('A strong private control-plane service token of at least 32 characters is required.');
   const response = await fetch(new URL(path, controlPlaneBase()), {
     method: 'POST',
     headers: { Accept: 'application/json', 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
@@ -134,6 +154,33 @@ async function adapterRequest(path, body) {
     throw error;
   }
   return payload;
+}
+
+async function getProductionReleaseReadiness() {
+  const readiness = await adapterRequest('/v1/release-readiness', {});
+  for (const item of readiness.providers || []) {
+    const latest = await ProviderPreflight.findOne({ provider: item.provider, environment: 'staging' }).sort({ checkedAt: -1 }).lean();
+    const integration = latest ? await InfrastructureIntegration.findOne({ _id: latest.integrationId, revokedAt: null }).lean() : null;
+    const targetVerified = Boolean(latest && latest.status === 'PASS' && integration
+      && integration.provider === item.provider && integration.environment === 'staging'
+      && integration.verification?.authenticated === true
+      && integration.verification?.discoveryPassed === true
+      && targetConfigDigest(integration.targetConfig) === latest.targetDigest);
+    item.targetVerified = targetVerified;
+    item.preflight = Boolean(item.preflight && targetVerified);
+    item.ready = Boolean(item.preflight && item.deployment && item.rollback);
+  }
+  readiness.ready = Boolean((readiness.providers || []).length === 5 && readiness.providers.every(item => item.ready));
+  return readiness;
+}
+
+async function assertProductionReleaseReady() {
+  const readiness = await getProductionReleaseReadiness();
+  if (!readiness.ready) {
+    const missing = (readiness.providers || []).filter(item => !item.ready).map(item => item.provider + ': ' + ['preflight','targetVerified','deployment','rollback'].filter(key => !item[key]).join('/')).join('; ');
+    throw Object.assign(new Error('Production remains locked until all five providers pass staging preflight, target verification, deployment and rollback rehearsal. Outstanding: ' + (missing || 'provider evidence incomplete')), { code: 'PRODUCTION_STAGING_GATE_BLOCKED', statusCode: 423 });
+  }
+  return readiness;
 }
 
 async function loadDeployIntegration(integrationId, provider, environment, capability = 'deploy') {
@@ -157,6 +204,42 @@ router.get('/catalog', (_req, res) => res.json({
   strategies: Object.entries(DEPLOYMENT_STRATEGIES).map(([id, stages]) => ({ id, stages })),
   safety: { arbitraryShell: false, remoteTerminal: false, secretsInArtifacts: false, productionApprovalRequired: true }
 }));
+
+router.post('/providers/preflight', async (req, res) => {
+  try {
+    const provider = String(req.body?.provider || '').toLowerCase();
+    const environment = String(req.body?.environment || '').toLowerCase();
+    if (!['aws', 'azure', 'gcp', 'kubernetes', 'launchdarkly'].includes(provider)) return res.status(400).json({ success: false, code: 'UNSUPPORTED_PROVIDER' });
+    if (environment !== 'staging') return res.status(403).json({ success: false, code: 'STAGING_ONLY_PREFLIGHT' });
+    const capability = provider === 'launchdarkly' ? 'manage' : 'deploy';
+    if (provider === 'launchdarkly' && !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,99}$/.test(String(req.body?.flagKey || ''))) return res.status(400).json({ success: false, code: 'PREFLIGHT_FLAG_KEY_REQUIRED' });
+    const { integration, credentials } = await loadDeployIntegration(req.body?.integrationId, provider, environment, capability);
+    let artifact = null;
+    if (provider !== 'launchdarkly') {
+      if (!validId(req.body?.artifactId)) return res.status(400).json({ success: false, code: 'STAGING_ARTIFACT_REQUIRED', message: 'Select a validated staging artifact before running provider deployment preflight.' });
+      artifact = await Artifact.findById(req.body.artifactId).lean();
+      if (!artifact || artifact.validation?.status !== 'PASS' || artifact.provider !== provider || artifact.environment !== environment) return res.status(422).json({ success: false, code: 'STAGING_ARTIFACT_INVALID' });
+    }
+    const result = await adapterRequest('/v1/preflight', {
+      provider, environment, capabilities: integration.grantedScopes,
+      integration: { id: String(integration._id), provider, environment, endpoint: integration.endpoint, targetConfig: integration.targetConfig || {} },
+      credentials,
+      deployment: artifact ? { serviceName: artifact.serviceName, files: artifact.files, image: artifact.config?.image || null, artifactDigest: artifact.digest } : undefined,
+      flag: provider === 'launchdarkly' ? { key: String(req.body?.flagKey || '') } : undefined
+    });
+    const preflightStatus = result.success && result.evidence?.status === 'PASS' ? 'PASS' : result.evidence?.status === 'FAIL' ? 'FAIL' : 'BLOCKED';
+    await ProviderPreflight.create({
+      provider, environment, integrationId: integration._id, artifactId: artifact?._id || null,
+      artifactDigest: artifact?.digest || null, targetDigest: targetConfigDigest(integration.targetConfig), serviceName: artifact?.serviceName || null,
+      flagKey: provider === 'launchdarkly' ? String(req.body?.flagKey || '') : null,
+      status: preflightStatus, evidenceRunId: result.evidence?.runId || null, checkedBy: actorOf(req)
+    });
+    await audit(req, 'PROVIDER_STAGING_PREFLIGHT', preflightStatus, 'integration', integration._id, { provider, environment, evidenceRunId: result.evidence?.runId || null, evidenceStatus: result.evidence?.status || 'UNKNOWN', artifactDigest: artifact?.digest || null, flagKey: provider === 'launchdarkly' ? String(req.body?.flagKey || '') : null });
+    return res.status(result.success ? 200 : 424).json(result);
+  } catch (error) {
+    return res.status(error.statusCode || 400).json({ success: false, code: error.code || 'PROVIDER_PREFLIGHT_FAILED', message: error.message });
+  }
+});
 
 router.post('/artifacts/generate', async (req, res) => {
   try {
@@ -262,6 +345,19 @@ router.post('/deployments/plan', async (req, res) => {
     if (artifact.provider !== provider || artifact.environment !== environment) throw new Error('Deployment provider and environment must match the generated artifact.');
     if (!Object.hasOwn(DEPLOYMENT_STRATEGIES, strategy)) throw new Error('Unsupported deployment strategy.');
     const { integration } = await loadDeployIntegration(integrationId, provider, environment, 'deploy');
+    if (environment === 'production') await assertProductionReleaseReady();
+    if (['aws','azure','gcp','kubernetes'].includes(provider)) {
+      const stagedPreflight = await ProviderPreflight.findOne({ provider, environment: 'staging', artifactDigest: artifact.digest, serviceName: artifact.serviceName, status: 'PASS' }).sort({ checkedAt: -1 }).lean();
+      if (!stagedPreflight) throw Object.assign(new Error('A passing staging provider preflight for this exact artifact is required before creating a deployment plan.'), { code: 'STAGING_PREFLIGHT_REQUIRED', statusCode: 409 });
+      const stagedIntegration = await InfrastructureIntegration.findOne({ _id: stagedPreflight.integrationId, revokedAt: null }).lean();
+      if (!stagedIntegration || stagedIntegration.verification?.authenticated !== true || stagedIntegration.verification?.discoveryPassed !== true || targetConfigDigest(stagedIntegration.targetConfig) !== stagedPreflight.targetDigest) throw Object.assign(new Error('Staging provider target changed or its verification expired; run staging preflight again.'), { code: 'STAGING_PREFLIGHT_STALE', statusCode: 409 });
+      if (environment === 'staging' && String(stagedPreflight.integrationId) !== String(integration._id)) throw Object.assign(new Error('Run staging preflight again using the selected staging integration.'), { code: 'STAGING_PREFLIGHT_INTEGRATION_MISMATCH', statusCode: 409 });
+      if (environment === 'production') {
+        const stagedDeployment = await Deployment.findOne({ provider, environment: 'staging', serviceName: artifact.serviceName, integrationId: stagedPreflight.integrationId, status: 'SUCCEEDED' }).sort({ updatedAt: -1 }).lean();
+        const stagedArtifact = stagedDeployment ? await Artifact.findById(stagedDeployment.artifactId).lean() : null;
+        if (!stagedArtifact || stagedArtifact.digest !== artifact.digest) throw Object.assign(new Error('The exact artifact must complete successfully in staging against the preflighted target before production planning is enabled.'), { code: 'STAGING_DEPLOYMENT_REQUIRED', statusCode: 409 });
+      }
+    }
     const reference = String(changeReference || '').trim().slice(0, 120);
     if (!reference) throw new Error('A change/ticket reference is required for every deployment.');
     const deployment = await Deployment.create({
@@ -287,6 +383,7 @@ router.post('/deployments/:id/approve', async (req, res) => {
   const deployment = await Deployment.findById(req.params.id);
   if (!deployment) return res.status(404).json({ success: false, message: 'Deployment not found.' });
   if (deployment.status !== 'PENDING_APPROVAL') return res.status(409).json({ success: false, message: `Deployment is ${deployment.status}; only pending plans can be approved.` });
+  if (deployment.environment === 'production') { try { await assertProductionReleaseReady(); } catch (error) { return res.status(error.statusCode || 423).json({ success: false, code: error.code || 'PRODUCTION_STAGING_GATE_BLOCKED', message: error.message }); } }
   if (req.body?.confirmation !== 'APPROVE DEPLOYMENT') return res.status(400).json({ success: false, code: 'CONFIRMATION_REQUIRED', message: 'Type APPROVE DEPLOYMENT to continue.' });
   if (deployment.environment === 'production' && deployment.requestedBy === actorOf(req)) return res.status(403).json({ success: false, code: 'SEPARATION_OF_DUTIES_REQUIRED', message: 'A different Super Admin must approve production deployments.' });
   deployment.status = 'APPROVED';
@@ -302,27 +399,29 @@ router.post('/deployments/:id/execute', async (req, res) => {
   const deployment = await Deployment.findById(req.params.id);
   if (!deployment) return res.status(404).json({ success: false, message: 'Deployment not found.' });
   if (deployment.status !== 'APPROVED') return res.status(409).json({ success: false, message: 'Deployment must be approved before execution.' });
+  if (deployment.environment === 'production') { try { await assertProductionReleaseReady(); } catch (error) { return res.status(error.statusCode || 423).json({ success: false, code: error.code || 'PRODUCTION_STAGING_GATE_BLOCKED', message: error.message }); } }
   if (req.body?.confirmation !== 'EXECUTE DEPLOYMENT') return res.status(400).json({ success: false, code: 'CONFIRMATION_REQUIRED', message: 'Type EXECUTE DEPLOYMENT to continue.' });
   try {
     const { integration, credentials } = await loadDeployIntegration(deployment.integrationId, deployment.provider, deployment.environment, 'deploy');
     const artifact = await Artifact.findById(deployment.artifactId).lean();
     if (!artifact || artifact.validation?.status !== 'PASS') throw new Error('The validated deployment artifact is no longer available.');
     const result = await adapterRequest('/v1/deployments/execute', {
-      integration: { id: String(integration._id), provider: integration.provider, environment: integration.environment, endpoint: integration.endpoint },
+      integration: { id: String(integration._id), provider: integration.provider, environment: integration.environment, endpoint: integration.endpoint, targetConfig: integration.targetConfig || {} },
       credentials,
       deployment: {
         id: String(deployment._id), serviceName: deployment.serviceName, provider: deployment.provider,
         environment: deployment.environment, strategy: deployment.strategy, changeReference: deployment.changeReference,
-        artifactDigest: artifact.digest, files: artifact.files
+        artifactDigest: artifact.digest, image: artifact.config?.image || null, files: artifact.files
       }
     });
     if (!result.accepted || !result.deploymentId) throw new Error('Provider adapter did not return a confirmed deployment acceptance.');
-    deployment.status = 'SUBMITTED';
+    deployment.status = result.status === 'SUCCEEDED' ? 'SUCCEEDED' : 'SUBMITTED';
     deployment.remoteDeploymentId = String(result.deploymentId).slice(0, 180);
     deployment.remoteStatus = String(result.status || 'ACCEPTED').slice(0, 80);
+    deployment.rollbackAvailable = result.rollbackAvailable === true || result.job?.rollbackAvailable === true;
     await deployment.save();
     await audit(req, 'DEPLOYMENT_SUBMITTED', 'ACCEPTED', 'deployment', deployment._id, { provider: deployment.provider, remoteDeploymentId: deployment.remoteDeploymentId, changeReference: deployment.changeReference });
-    return res.json({ success: true, accepted: true, deployment, message: 'Provider accepted the deployment request. Poll provider status to verify completion; acceptance is not success.' });
+    return res.json({ success: true, accepted: true, deployment, message: deployment.status === 'SUCCEEDED' ? 'Provider deployment completed and the driver confirmed success.' : 'Provider accepted the deployment request. Poll provider status to verify completion; acceptance is not success.' });
   } catch (error) {
     deployment.lastErrorCode = error.code || 'DEPLOYMENT_SUBMISSION_FAILED';
     await deployment.save();
@@ -338,15 +437,16 @@ router.get('/deployments/:id/status', async (req, res) => {
   try {
     const { integration, credentials } = await loadDeployIntegration(deployment.integrationId, deployment.provider, deployment.environment, 'deploy');
     const result = await adapterRequest('/v1/deployments/status', {
-      integration: { id: String(integration._id), provider: integration.provider, environment: integration.environment, endpoint: integration.endpoint },
+      integration: { id: String(integration._id), provider: integration.provider, environment: integration.environment, endpoint: integration.endpoint, targetConfig: integration.targetConfig || {} },
       credentials,
-      deployment: { id: String(deployment._id), remoteDeploymentId: deployment.remoteDeploymentId }
+      deployment: { id: String(deployment._id), remoteDeploymentId: deployment.status === 'ROLLBACK_REQUESTED' && deployment.rollbackRequestId ? deployment.rollbackRequestId : deployment.remoteDeploymentId }
     });
     const allowed = new Set(['SUBMITTED', 'RUNNING', 'SUCCEEDED', 'FAILED', 'ROLLBACK_REQUESTED', 'ROLLED_BACK']);
     const state = String(result.status || '').toUpperCase();
     if (!allowed.has(state)) return res.status(502).json({ success: false, message: 'Provider returned an unsupported deployment state.' });
     deployment.status = state;
     deployment.remoteStatus = state;
+    if (state === 'ROLLED_BACK') deployment.rollbackRequestId = null;
     deployment.lastErrorCode = state === 'FAILED' ? String(result.errorCode || 'REMOTE_DEPLOYMENT_FAILED').slice(0, 100) : null;
     await deployment.save();
     await audit(req, 'DEPLOYMENT_STATUS_REFRESHED', state, 'deployment', deployment._id, { provider: deployment.provider, remoteDeploymentId: deployment.remoteDeploymentId });
@@ -360,17 +460,19 @@ router.post('/deployments/:id/rollback', async (req, res) => {
   if (!validId(req.params.id)) return res.status(400).json({ success: false, message: 'Invalid deployment ID.' });
   const deployment = await Deployment.findById(req.params.id);
   if (!deployment || !deployment.remoteDeploymentId) return res.status(404).json({ success: false, message: 'Submitted deployment not found.' });
+  if (deployment.rollbackAvailable !== true) return res.status(409).json({ success: false, code: 'ROLLBACK_SNAPSHOT_UNAVAILABLE', message: 'No previous successful artifact is available for a safe automatic rollback.' });
   if (!['SUBMITTED', 'RUNNING', 'SUCCEEDED', 'FAILED'].includes(deployment.status)) return res.status(409).json({ success: false, message: 'Deployment is not in a rollback-eligible state.' });
   if (req.body?.confirmation !== 'ROLLBACK DEPLOYMENT') return res.status(400).json({ success: false, code: 'CONFIRMATION_REQUIRED', message: 'Type ROLLBACK DEPLOYMENT to continue.' });
   try {
     const { integration, credentials } = await loadDeployIntegration(deployment.integrationId, deployment.provider, deployment.environment, 'deploy');
     const result = await adapterRequest('/v1/deployments/rollback', {
-      integration: { id: String(integration._id), provider: integration.provider, environment: integration.environment, endpoint: integration.endpoint },
+      integration: { id: String(integration._id), provider: integration.provider, environment: integration.environment, endpoint: integration.endpoint, targetConfig: integration.targetConfig || {} },
       credentials,
       deployment: { id: String(deployment._id), remoteDeploymentId: deployment.remoteDeploymentId, serviceName: deployment.serviceName, changeReference: deployment.changeReference }
     });
     if (!result.accepted) throw new Error('Provider adapter did not confirm rollback acceptance.');
-    deployment.status = 'ROLLBACK_REQUESTED';
+    deployment.rollbackRequestId = result.job?.jobId || result.requestId || result.deploymentId || null;
+    deployment.status = result.status === 'ROLLED_BACK' ? 'ROLLED_BACK' : 'ROLLBACK_REQUESTED';
     deployment.remoteStatus = String(result.status || 'ROLLBACK_ACCEPTED').slice(0, 80);
     await deployment.save();
     await audit(req, 'DEPLOYMENT_ROLLBACK_REQUESTED', 'ACCEPTED', 'deployment', deployment._id, { provider: deployment.provider, remoteDeploymentId: deployment.remoteDeploymentId });
@@ -399,6 +501,16 @@ router.post('/feature-flags/rollout', async (req, res) => {
     const reference = String(changeReference || '').trim().slice(0, 120);
     if (!reference) throw new Error('A change/ticket reference is required for feature flag changes.');
     const { integration } = await loadDeployIntegration(integrationId, 'launchdarkly', environment, 'manage');
+    if (environment === 'production') await assertProductionReleaseReady();
+    const stagedPreflight = await ProviderPreflight.findOne({ provider: 'launchdarkly', environment: 'staging', flagKey: key, status: 'PASS' }).sort({ checkedAt: -1 }).lean();
+    if (!stagedPreflight) throw Object.assign(new Error('A passing LaunchDarkly staging preflight for this flag is required before rollout planning.'), { code: 'LAUNCHDARKLY_STAGING_PREFLIGHT_REQUIRED', statusCode: 409 });
+    const stagedIntegration = await InfrastructureIntegration.findOne({ _id: stagedPreflight.integrationId, revokedAt: null }).lean();
+    if (!stagedIntegration || stagedIntegration.verification?.authenticated !== true || stagedIntegration.verification?.discoveryPassed !== true || targetConfigDigest(stagedIntegration.targetConfig) !== stagedPreflight.targetDigest) throw Object.assign(new Error('LaunchDarkly staging target changed or its verification expired; run preflight again.'), { code: 'LAUNCHDARKLY_PREFLIGHT_STALE', statusCode: 409 });
+    if (environment === 'staging' && String(stagedPreflight.integrationId) !== String(integration._id)) throw Object.assign(new Error('Run LaunchDarkly staging preflight again using the selected integration.'), { code: 'LAUNCHDARKLY_PREFLIGHT_INTEGRATION_MISMATCH', statusCode: 409 });
+    if (environment === 'production') {
+      const stagedChange = await FlagChange.findOne({ flagKey: key, environment: 'staging', integrationId: stagedPreflight.integrationId, strategy, rolloutPercent: strategy === 'kill_switch' ? 0 : percent, status: 'SUCCEEDED' }).sort({ updatedAt: -1 }).lean();
+      if (!stagedChange) throw Object.assign(new Error('The same LaunchDarkly flag strategy and percentage must complete in staging before production rollout planning.'), { code: 'LAUNCHDARKLY_STAGING_ROLLOUT_REQUIRED', statusCode: 409 });
+    }
     const change = await FlagChange.create({
       flagKey: key, environment, strategy,
       rolloutPercent: strategy === 'kill_switch' ? 0 : percent,
@@ -418,6 +530,7 @@ router.post('/feature-flags/changes/:id/approve', async (req, res) => {
   const change = await FlagChange.findById(req.params.id);
   if (!change) return res.status(404).json({ success: false, message: 'Feature-flag change not found.' });
   if (change.status !== 'PENDING_APPROVAL') return res.status(409).json({ success: false, message: 'Only pending feature-flag changes can be approved.' });
+  if (change.environment === 'production') { try { await assertProductionReleaseReady(); } catch (error) { return res.status(error.statusCode || 423).json({ success: false, code: error.code || 'PRODUCTION_STAGING_GATE_BLOCKED', message: error.message }); } }
   if (req.body?.confirmation !== 'APPROVE FEATURE FLAG CHANGE') return res.status(400).json({ success: false, code: 'CONFIRMATION_REQUIRED', message: 'Type APPROVE FEATURE FLAG CHANGE to continue.' });
   if (change.environment === 'production' && change.requestedBy === actorOf(req)) return res.status(403).json({ success: false, code: 'SEPARATION_OF_DUTIES_REQUIRED', message: 'A different Super Admin must approve production feature-flag changes.' });
   change.status = 'APPROVED';
@@ -433,16 +546,17 @@ router.post('/feature-flags/changes/:id/execute', async (req, res) => {
   const change = await FlagChange.findById(req.params.id);
   if (!change) return res.status(404).json({ success: false, message: 'Feature-flag change not found.' });
   if (change.status !== 'APPROVED') return res.status(409).json({ success: false, message: 'Feature-flag change must be approved before execution.' });
+  if (change.environment === 'production') { try { await assertProductionReleaseReady(); } catch (error) { return res.status(error.statusCode || 423).json({ success: false, code: error.code || 'PRODUCTION_STAGING_GATE_BLOCKED', message: error.message }); } }
   if (req.body?.confirmation !== 'EXECUTE FEATURE FLAG CHANGE') return res.status(400).json({ success: false, code: 'CONFIRMATION_REQUIRED', message: 'Type EXECUTE FEATURE FLAG CHANGE to continue.' });
   try {
     const { integration, credentials } = await loadDeployIntegration(change.integrationId, 'launchdarkly', change.environment, 'manage');
     const result = await adapterRequest('/v1/feature-flags/rollout', {
-      integration: { id: String(integration._id), provider: 'launchdarkly', environment: change.environment, endpoint: integration.endpoint },
+      integration: { id: String(integration._id), provider: 'launchdarkly', environment: change.environment, endpoint: integration.endpoint, targetConfig: integration.targetConfig || {} },
       credentials,
       flag: { key: change.flagKey, strategy: change.strategy, rolloutPercent: change.rolloutPercent, stages: DEPLOYMENT_STRATEGIES[change.strategy], changeReference: change.changeReference }
     });
     if (!result.accepted) throw new Error('LaunchDarkly adapter did not confirm the flag rollout request.');
-    change.status = 'SUBMITTED';
+    change.status = result.status === 'SUCCEEDED' ? 'SUCCEEDED' : 'SUBMITTED';
     change.remoteRequestId = String(result.requestId || '').slice(0, 180) || null;
     change.remoteStatus = String(result.status || 'ACCEPTED').slice(0, 80);
     await change.save();
@@ -457,6 +571,40 @@ router.post('/feature-flags/changes/:id/execute', async (req, res) => {
   }
 });
 
+
+router.post('/feature-flags/changes/:id/rollback', async (req, res) => {
+  if (!validId(req.params.id)) return res.status(400).json({ success: false, message: 'Invalid feature-flag change ID.' });
+  const change = await FlagChange.findById(req.params.id);
+  if (!change) return res.status(404).json({ success: false, message: 'Feature-flag change not found.' });
+  if (!['SUBMITTED','SUCCEEDED'].includes(change.status) || !change.remoteRequestId) return res.status(409).json({ success: false, code: 'FLAG_ROLLBACK_NOT_AVAILABLE', message: 'Only a submitted rollout with a recorded prior-state snapshot can be rolled back.' });
+  if (req.body?.confirmation !== 'ROLLBACK FEATURE FLAG CHANGE') return res.status(400).json({ success: false, code: 'CONFIRMATION_REQUIRED', message: 'Type ROLLBACK FEATURE FLAG CHANGE to continue.' });
+  try {
+    const { integration, credentials } = await loadDeployIntegration(change.integrationId, 'launchdarkly', change.environment, 'manage');
+    const result = await adapterRequest('/v1/feature-flags/rollback', {
+      integration: { id: String(integration._id), provider: 'launchdarkly', environment: change.environment, endpoint: integration.endpoint, targetConfig: integration.targetConfig || {} },
+      credentials, sourceRequestId: change.remoteRequestId, flag: { key: change.flagKey }
+    });
+    if (!result.success || result.status !== 'ROLLED_BACK') throw new Error('LaunchDarkly did not confirm prior-state restoration.');
+    change.status = 'ROLLED_BACK';
+    change.remoteStatus = 'ROLLED_BACK';
+    await change.save();
+    await audit(req, 'LAUNCHDARKLY_FLAG_ROLLED_BACK', 'SUCCESS', 'feature_flag', change._id, { flagKey: change.flagKey, environment: change.environment, sourceRequestId: change.remoteRequestId });
+    return res.json({ success: true, change, message: 'The captured LaunchDarkly flag state was restored.' });
+  } catch (error) {
+    await audit(req, 'LAUNCHDARKLY_FLAG_ROLLBACK_FAILED', 'FAILED', 'feature_flag', change._id, { errorCode: error.code || 'FLAG_ROLLBACK_FAILED' });
+    return res.status(error.statusCode || 502).json({ success: false, code: error.code || 'FLAG_ROLLBACK_FAILED', message: error.message });
+  }
+});
+
+router.get('/release-readiness', async (_req, res) => {
+  try {
+    const readiness = await getProductionReleaseReadiness();
+    res.set('Cache-Control', 'private, no-store');
+    return res.json(readiness);
+  } catch (error) {
+    return res.status(error.statusCode || 503).json({ success: false, ready: false, code: error.code || 'RELEASE_READINESS_UNAVAILABLE', message: error.message });
+  }
+});
 
 router.get('/audit', async (_req, res) => {
   const entries = await DevOpsAudit.find({}).sort({ occurredAt: -1 }).limit(200).lean();
