@@ -86,7 +86,7 @@ function safeChecks(checks) {
     name: String(check?.name || 'provider_check').slice(0,100),
     status: DRIVER_CHECK_STATES.has(String(check?.status || '').toUpperCase()) ? String(check.status).toUpperCase() : 'FAIL',
     ...(SAFE_CODE.test(String(check?.code || '')) ? {code:String(check.code)} : {}),
-    ...(typeof check?.message === 'string' ? {message:check.message.replace(/[\\r\\n]+/g,' ').slice(0,240)} : {})
+    ...(typeof check?.message === 'string' ? {message:check.message.replace(/[\r\n]+/g,' ').slice(0,240)} : {})
   }));
 }
 function publicJob(job) {
@@ -109,7 +109,7 @@ app.post('/v1/preflight',validateBase,async(req,res)=>{
   checks.push({name:'environment_policy',status:environment==='production'&&!productionEnabled()?'BLOCKED':'PASS'});
   let remote={};
   if(driver && checks[1].status==='PASS') {
-    try { remote=await driverCall(provider,'/v1/preflight',{provider,environment,capabilities,integration:{id:integration.id,endpoint:integration.endpoint},credentials}); checks.push(...safeChecks(remote.checks)); }
+    try { remote=await driverCall(provider,'/v1/preflight',{provider,environment,capabilities,integration:{id:integration.id,endpoint:integration.endpoint},credentials}); const providerChecks=safeChecks(remote.checks); checks.push(...providerChecks); if (!providerChecks.length) checks.push({name:'provider_evidence',status:'FAIL',code:'EMPTY_PROVIDER_EVIDENCE'}); }
     catch(error){checks.push({name:'provider_preflight',status:'FAIL',code:SAFE_CODE.test(String(error.code||''))?error.code:'PREFLIGHT_FAILED'});}
   }
   const passed=checks.length>0 && checks.every(c=>c.status==='PASS');
@@ -151,7 +151,7 @@ app.post('/v1/deployments/status',async(req,res)=>{
       const result=await driverCall(provider,'/v1/deployments/status',{jobId,credentials,integration:{id:integration.id,endpoint:integration.endpoint},providerOperationId:job.result?.providerOperationId});
       if(['RUNNING','SUCCEEDED','FAILED','ROLLED_BACK'].includes(result.status)) job.status=result.status;
       job.result={...(job.result||{}),providerStatus:['SUBMITTED','RUNNING','SUCCEEDED','FAILED','ROLLED_BACK'].includes(result.status)?result.status:'UNKNOWN',health:typeof result.health==='string'?result.health.slice(0,240):null};
-      job.errorCode=result.errorCode||null; job.updatedAt=new Date(); await job.save();
+      job.errorCode=SAFE_CODE.test(String(result.errorCode||''))?String(result.errorCode):null; job.updatedAt=new Date(); await job.save();
     } catch(error) { return res.status(502).json({success:false,code:error.code||'STATUS_RECONCILIATION_FAILED',job:publicJob(job)}); }
   }
   return res.json({success:true,status:job.status,errorCode:job.errorCode,job:publicJob(job)});
