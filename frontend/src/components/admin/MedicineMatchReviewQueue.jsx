@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { getReadableErrorMessage } from '../../utils/errorMessage';
 import apiClient from '../../api/apiClient';
 import { useToast } from '../../context/ToastContext';
 
@@ -43,11 +42,11 @@ export default function MedicineMatchReviewQueue() {
   const load = useCallback(async (page = 1) => {
     setLoading(true);
     try {
-      const response = await apiClient.get('/api/v1/inventory/catalogue/matches/review', { params: { page, limit: 100, status: 'PENDING', minConfidence: 80 } });
+      const response = await apiClient.get('/api/v1/inventory/catalogue/matches/review', { params: { page, limit: 100, status: 'PENDING' } });
       setItems(response.data?.items || []);
       setPagination(response.data?.pagination || { page, total: 0, totalPages: 0 });
     } catch (error) {
-      addToast(getReadableErrorMessage(error, 'Could not load possible catalogue matches.'), 'error');
+      addToast(error.response?.data?.message || 'Could not load possible catalogue matches.', 'error');
     } finally { setLoading(false); }
   }, [addToast]);
 
@@ -74,7 +73,7 @@ export default function MedicineMatchReviewQueue() {
         : `Discovery complete. ${Number(result.scanned || 0)} products scanned in the final batch.`, 'success');
       await load(1);
     } catch (error) {
-      addToast(getReadableErrorMessage(error, 'Could not discover existing Store products.'), 'error');
+      addToast(error.response?.data?.message || 'Could not discover existing Store products.', 'error');
     } finally { setDiscovering(false); }
   };
 
@@ -96,7 +95,7 @@ export default function MedicineMatchReviewQueue() {
       const response = await apiClient.get('/api/v1/inventory/catalogue/medicines', { params: { search: query, page: 1, limit: 10 } });
       setResults(current => ({ ...current, [id]: response.data?.items || [] }));
     } catch (error) {
-      addToast(getReadableErrorMessage(error, 'Could not search the Medicine Master catalogue.'), 'error');
+      addToast(error.response?.data?.message || 'Could not search the Medicine Master catalogue.', 'error');
     }
   };
   const chooseTarget = (id, medicine) => {
@@ -109,7 +108,7 @@ export default function MedicineMatchReviewQueue() {
       const response = await apiClient.get(`/api/v1/inventory/catalogue/medicines/${encodeURIComponent(medicineId)}`);
       const medicine = response.data?.medicine;
       if (medicine) chooseTarget(row.identityHash, medicine);
-    } catch (error) { addToast(getReadableErrorMessage(error, 'Could not load the suggested catalogue record.'), 'error'); }
+    } catch (error) { addToast(error.response?.data?.message || 'Could not load the suggested catalogue record.', 'error'); }
   };
 
   const approve = async row => {
@@ -125,14 +124,14 @@ export default function MedicineMatchReviewQueue() {
       setDrafts(current => { const next = { ...current }; delete next[row.identityHash]; return next; });
       await load(items.length === 1 && pagination.page > 1 ? pagination.page - 1 : (pagination.page || 1));
     } catch (error) {
-      addToast(getReadableErrorMessage(error, 'Could not approve this catalogue mapping.'), 'error');
+      addToast(error.response?.data?.message || 'Could not approve this catalogue mapping.', 'error');
     } finally { setSaving(false); }
   };
 
   return (
     <section className="overflow-hidden rounded-2xl border border-violet-200 bg-white shadow-sm">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-violet-100 bg-violet-50/70 px-4 py-4">
-        <div><h3 className="text-sm font-black text-slate-900">Possible catalogue matches · Admin mapping</h3><p className="mt-1 text-xs text-slate-600">Only candidates scoring 80% or higher are shown. Verify the medicine identity and explicitly approve the fields Store may display.</p></div>
+        <div><h3 className="text-sm font-black text-slate-900">Possible catalogue matches · Admin mapping</h3><p className="mt-1 text-xs text-slate-600">Review up to 100 product identities per page. Select a master record and explicitly approve the fields Store may display.</p></div>
         <div className="flex flex-wrap items-center gap-2">
           <button type="button" onClick={discoverExistingProducts} disabled={discovering || discoveryComplete} className="min-h-10 rounded-lg bg-violet-700 px-3 py-2 text-xs font-extrabold text-white hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-50">{discovering ? 'Scanning products…' : discoveryComplete ? 'Discovery complete' : discoveryCursor ? 'Scan next 500 products' : 'Discover existing Store products'}</button>
           <button type="button" onClick={() => load(pagination.page || 1)} disabled={loading} className="min-h-10 rounded-lg border border-violet-200 bg-white px-3 py-2 text-xs font-bold text-violet-700 disabled:opacity-50">{loading ? "Refreshing…" : "Refresh queue"}</button>
@@ -157,7 +156,7 @@ export default function MedicineMatchReviewQueue() {
               <div><label className="mb-1 block text-[10px] font-black uppercase tracking-wide text-slate-500">Find the correct Medicine Master record</label><div className="flex gap-2"><input value={searches[row.identityHash] || ''} onChange={event => setSearches(current => ({ ...current, [row.identityHash]: event.target.value }))} onKeyDown={event => { if (event.key === 'Enter') searchCatalogue(row); }} placeholder="Search brand, generic or composition" className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs"/><button type="button" onClick={() => searchCatalogue(row)} className="rounded-lg bg-indigo-700 hover:bg-indigo-800 px-3 py-2 text-xs font-bold text-white transition">Search</button></div>
                 {(results[row.identityHash] || []).length > 0 && <div className="mt-2 max-h-52 space-y-1 overflow-y-auto rounded-lg border bg-white p-2">{results[row.identityHash].map(medicine => <button key={medicine.medicineId} type="button" onClick={() => chooseTarget(row.identityHash, medicine)} className="block w-full rounded-lg p-2 text-left hover:bg-violet-50"><strong className="block text-xs text-slate-900">{medicine.brandName || medicine.productName}</strong><span className="text-[10px] text-slate-600">{[medicine.genericName, medicine.composition, medicine.strength, medicine.dosageForm].filter(Boolean).join(' · ')}</span><span className="block font-mono text-[9px] text-slate-400">{medicine.medicineId}</span></button>)}</div>}
               </div>
-              {row.candidates?.some(candidate => Number(candidate.score ?? row.confidence ?? 0) >= 80) && <div><p className="mb-2 text-[10px] font-black uppercase text-slate-500">Algorithm suggestions · verify before mapping</p><div className="flex flex-wrap gap-2">{row.candidates.filter(candidate => Number(candidate.score ?? row.confidence ?? 0) >= 80).map(candidate => <button key={candidate.medicineId} type="button" onClick={() => loadSuggestedTarget(row, candidate.medicineId)} className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-left text-[10px] hover:bg-amber-50"><strong className="block text-slate-800">{candidate.brandName || candidate.productName || candidate.medicineId}</strong><span className="text-slate-500">{candidate.score ?? row.confidence ?? 0}% · {candidate.matchReason || 'candidate'}</span></button>)}</div></div>}
+              {row.candidates?.length > 0 && <div><p className="mb-2 text-[10px] font-black uppercase text-slate-500">Algorithm suggestions · verify before mapping</p><div className="flex flex-wrap gap-2">{row.candidates.map(candidate => <button key={candidate.medicineId} type="button" onClick={() => loadSuggestedTarget(row, candidate.medicineId)} className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-left text-[10px] hover:bg-amber-50"><strong className="block text-slate-800">{candidate.brandName || candidate.productName || candidate.medicineId}</strong><span className="text-slate-500">{candidate.score ?? row.confidence ?? 0}% · {candidate.matchReason || 'candidate'}</span></button>)}</div></div>}
               {selected && <div className="rounded-lg border border-emerald-200 bg-white p-3"><p className="text-[10px] font-black uppercase text-emerald-700">Selected target</p><strong className="mt-1 block text-sm text-slate-900">{selected.brandName || selected.productName}</strong><p className="mt-1 text-xs text-slate-600">{[selected.genericName, selected.composition, selected.strength, selected.dosageForm].filter(Boolean).join(' · ')}</p><p className="mt-1 font-mono text-[9px] text-slate-400">{selected.medicineId}</p></div>}
               <div><div className="flex flex-wrap items-center justify-between gap-2"><div><h4 className="text-xs font-black text-slate-800">Fields allowed in Store</h4><p className="mt-1 text-[10px] text-slate-500">Only checked, populated fields are returned by the public product-detail match.</p></div><button type="button" onClick={() => updateDraft(row.identityHash, { fields: selected ? FIELDS.map(([key]) => key).filter(key => hasValue(selected[key])) : [] })} disabled={!selected} className="text-[10px] font-bold text-violet-700 disabled:opacity-40">Select all available</button></div>
                 <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">{FIELDS.map(([key, label]) => <label key={key} className={`flex min-w-0 items-start gap-2 rounded-lg border bg-white p-2 text-[10px] ${hasValue(selected?.[key]) ? 'border-slate-200' : 'border-slate-100 opacity-50'}`}><input type="checkbox" checked={(draft.fields || []).includes(key)} disabled={!selected || !hasValue(selected[key])} onChange={event => updateDraft(row.identityHash, { fields: event.target.checked ? [...(draft.fields || []), key] : (draft.fields || []).filter(field => field !== key) })} className="mt-0.5"/><span className="min-w-0"><strong className="block text-slate-700">{label}</strong><span className="mt-0.5 block break-words text-slate-500">{selected && hasValue(selected[key]) ? display(selected[key]) : 'Not available'}</span></span></label>)}</div>

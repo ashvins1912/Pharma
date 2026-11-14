@@ -38,7 +38,6 @@ All paths are API Gateway paths; the gateway preserves these paths while proxyin
 | POST | `/api/v1/inventory/catalogue/imports/merge` | Platform Super Admin |
 | POST | `/api/v1/inventory/catalogue/imports/remove-selected` | Platform Super Admin |
 | GET | `/api/v1/inventory/catalogue/imports` | Platform Super Admin |
-| GET | `/api/v1/inventory/catalogue/imports/processing-guard` | Platform Super Admin; queue and resource protection status |
 | GET | `/api/v1/inventory/catalogue/imports/jobs/:jobId` | Platform Super Admin |
 | POST | `/api/v1/inventory/catalogue/imports/jobs/:jobId/retry` | Platform Super Admin |
 | POST | `/api/v1/inventory/catalogue/imports/jobs/:jobId/restart` | Platform Super Admin |
@@ -61,15 +60,6 @@ Set values in Render **Environment** settings only. Never commit real values, pu
 | `SERVICE_JWT_ISSUER` | Same issuer as Gateway, currently `ashvin-pharmacy`. |
 | `MEDICINE_MASTER_SERVICE_JWT_AUDIENCE` | `medicine-master-service`. |
 | `MEDICINE_MASTER_IMPORT_MAX_FILE_BYTES` | Optional; default 115343360 (110 MiB). |
-| `MEDICINE_CATALOGUE_PROCESSING_ENABLED` | Optional; set `false` to pause new catalogue worker claims and uploads; default `true`. |
-| `MEDICINE_CATALOGUE_MAX_CONCURRENT_JOBS` | Optional; MongoDB-leased global worker slots across service instances; default `2`, range 1–8. |
-| `MEDICINE_CATALOGUE_MAX_QUEUED_JOBS` | Optional; reject new uploads with HTTP 429 at queue capacity; default `10`. |
-| `MEDICINE_CATALOGUE_MAX_HEAP_PERCENT` | Optional; pause worker claims at Node heap usage threshold; default `80`. |
-| `MEDICINE_CATALOGUE_MAX_RSS_MB` | Optional; process RSS budget used by the guard; default `1024` MiB. |
-| `MEDICINE_CATALOGUE_MAX_RSS_PERCENT` | Optional; pause worker claims at RSS budget threshold; default `80`. |
-| `MEDICINE_CATALOGUE_MAX_CPU_LOAD_PERCENT` | Optional; pause worker claims at normalized 1-minute host load threshold; default `85`. |
-| `MEDICINE_CATALOGUE_WORKER_LEASE_MS` | Optional; MongoDB worker-slot lease; default `900000` ms. |
-| `MEDICINE_CATALOGUE_WORKER_POLL_MS` | Optional; worker poll interval; default `1500` ms. |
 | `PORT` | Render supplied; blueprint sets 10000. |
 
 Use at least 32 random bytes for service signing secrets; never reuse database passwords as JWT secrets. Restrict MongoDB credentials to the required database/operations, enable TLS, and use provider network controls.
@@ -85,12 +75,6 @@ Use at least 32 random bytes for service signing secrets; never reuse database p
 5. Deploy Gateway, then Inventory. Keep the previous Inventory release available for rollback until reads, imports, match resolution, and queue processing are verified.
 6. Verify authenticated read, unauthenticated denial, non-admin mutation denial, Super Admin edit/archive, import preview/publish, and worker retry/restart. Confirm Inventory enqueues a reference and Medicine Master resolves it.
 7. Monitor 401/403/5xx rates, queue depth, import failures, MongoDB connection saturation, and readiness.
-
-## Catalogue processing protection
-
-The catalogue worker uses MongoDB-backed worker slots so the configured concurrency limit is shared across service instances using the same database. A worker renews its slot lease while processing and releases it on completion; abandoned slots become available after lease expiry. Worker claims pause when the operator disables processing or the process crosses its configured heap, RSS, or normalized host-load threshold. Upload admission is rejected with HTTP 429 when the queued-job cap is reached and HTTP 503 while resource protection is active. `GET /api/v1/inventory/catalogue/imports/processing-guard` reports queue depth, active jobs, configured limits, resource readings, and protection reasons for Super Admin monitoring. This endpoint reports live process/host metrics; it is not a historical metrics store. The queue-cap check is admission control, not a transactional reservation, so simultaneous uploads near the cap may briefly race.
-
-The existing 500-record staging chunks, 110 MiB upload cap, durable job leases, report fingerprint approval, live reconciliation, and publish safeguards remain in force. This guard does not kill active work or bypass publish approval; it prevents new work from starting under pressure.
 
 ## Health and operations
 

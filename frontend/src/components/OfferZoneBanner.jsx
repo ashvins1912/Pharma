@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { getReadableErrorMessage } from '../utils/errorMessage';
 import apiClient from '../api/apiClient';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
@@ -100,7 +99,7 @@ export default function OfferZoneBanner() {
         if (!active || sequence !== requestSequence.current) return;
         // Keep the last known-good campaign list during temporary auth/network/API
         // failures. An error is not proof that the pharmacy has no active offers.
-        setLoadError(getReadableErrorMessage(error, 'Surplus Savings are temporarily unavailable.'));
+        setLoadError(error?.response?.data?.message || error?.message || 'Surplus Savings are temporarily unavailable.');
       })
       .finally(() => {
         if (active && sequence === requestSequence.current) setLoading(false);
@@ -169,35 +168,35 @@ export default function OfferZoneBanner() {
 
       <div className="relative z-10 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 pt-1">
         {currentOffers.map(item => (
-          <article key={item.campaignId + ':' + item.medicineId} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-2xl p-4 shadow-md flex flex-col justify-between space-y-3 border border-orange-200/50 dark:border-slate-800">
+          <article key={item.campaignId + ':' + item.medicineId} className="bg-white text-slate-900 rounded-2xl p-4 shadow-xs flex flex-col justify-between space-y-3 border border-orange-200">
             <div className="space-y-1.5">
               <div className="flex items-center justify-between gap-2">
-                <span className="bg-red-100 dark:bg-red-950/80 text-red-700 dark:text-red-300 text-[10px] font-black px-2 py-0.5 rounded-md">
+                <span className="bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-black px-2 py-0.5 rounded-md">
                   {Number(item.discountPercent).toFixed(0)}% OFF
                 </span>
-                <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500">
+                <span className="text-[10px] font-semibold text-slate-600">
                   {Number(item.stock) > 0 ? `${item.stock} available` : 'Out of stock'}
                 </span>
               </div>
-              <h3 className="font-extrabold text-xs sm:text-sm line-clamp-2">{item.name}</h3>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2">{item.campaignName}{item.campaignDescription ? ` · ${item.campaignDescription}` : ''}</p>
-              <div className="flex flex-wrap items-center gap-2 text-[10px]"><span className="rounded-full bg-indigo-50 px-2 py-1 font-bold text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">{Number(item.redemptionCount || 0).toLocaleString()} redeemed</span>{item.remainingClaims != null && <span className="rounded-full bg-amber-50 px-2 py-1 font-bold text-amber-700 dark:bg-amber-950 dark:text-amber-300">{Number(item.remainingClaims).toLocaleString()} left</span>}</div>
-              {Number(item.minOrderAmount) > 0 && <p className="text-[10px] text-amber-700 dark:text-amber-300">Minimum basket ₹{Number(item.minOrderAmount).toFixed(0)}</p>}
+              <h3 className="font-extrabold text-xs sm:text-sm line-clamp-2 text-slate-900">{item.name}</h3>
+              <p className="text-[11px] text-slate-600 line-clamp-2">{item.campaignName}{item.campaignDescription ? ` · ${item.campaignDescription}` : ''}</p>
+              <div className="flex flex-wrap items-center gap-2 text-[10px]"><span className="rounded-full bg-blue-50 border border-blue-200 px-2 py-1 font-bold text-blue-800">{Number(item.redemptionCount || 0).toLocaleString()} redeemed</span>{item.remainingClaims != null && <span className="rounded-full bg-amber-50 border border-amber-200 px-2 py-1 font-bold text-amber-800">{Number(item.remainingClaims).toLocaleString()} left</span>}</div>
+              {Number(item.minOrderAmount) > 0 && <p className="text-[10px] font-semibold text-amber-800">Minimum basket ₹{Number(item.minOrderAmount).toFixed(0)}</p>}
             </div>
-            <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
+            <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
               <div>
-                <div className="text-[10px] text-slate-400 line-through">₹{Number(item.originalPrice).toFixed(2)}</div>
-                <div className="text-sm font-black text-emerald-600 dark:text-emerald-400">₹{Number(item.discountedPrice).toFixed(2)}</div>
-                <div className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300">Save ₹{Number(item.savingsAmount).toFixed(2)}</div>
+                <div className="text-[10px] text-slate-600 line-through">₹{Number(item.originalPrice).toFixed(2)}</div>
+                <div className="text-sm font-black text-emerald-700">₹{Number(item.discountedPrice).toFixed(2)}</div>
+                <div className="text-[10px] font-bold text-emerald-700">Save ₹{Number(item.savingsAmount).toFixed(2)}</div>
               </div>
               {cartQuantityFor(item) > 0 ? (
-                <div className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 p-1.5 shadow-sm dark:border-emerald-900 dark:bg-emerald-950/50" aria-label={`Quantity controls for ${item.name}`}>
-                  <button type="button" onClick={() => updateQuantity(cartItemFor(item)._id, -1)} className="flex h-8 w-8 items-center justify-center rounded-lg bg-white text-lg font-black text-emerald-700 shadow-sm transition hover:bg-emerald-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-600 dark:bg-slate-900 dark:text-emerald-300" aria-label={`Decrease ${item.name} quantity`}>−</button>
-                  <span className="min-w-8 px-1 text-center text-sm font-black tabular-nums text-emerald-800 dark:text-emerald-200" aria-live="polite">{cartQuantityFor(item)}</span>
-                  <button type="button" onClick={() => handleAddToCart(item)} disabled={cartQuantityFor(item) >= Number(cartItemFor(item)?.maxCartQuantity || cartItemFor(item)?.stock || item.stock)} className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600 text-lg font-black text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40" aria-label={`Increase ${item.name} quantity`}>+</button>
+                <div className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 p-1 shadow-xs" aria-label={`Quantity controls for ${item.name}`}>
+                  <button type="button" onClick={() => updateQuantity(cartItemFor(item)._id, -1)} className="flex h-10 w-10 items-center justify-center rounded-lg bg-white text-lg font-black text-emerald-700 shadow-xs transition hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600" aria-label={`Decrease ${item.name} quantity`}>−</button>
+                  <span className="min-w-8 px-1 text-center text-sm font-black tabular-nums text-emerald-800" aria-live="polite">{cartQuantityFor(item)}</span>
+                  <button type="button" onClick={() => handleAddToCart(item)} disabled={cartQuantityFor(item) >= Number(cartItemFor(item)?.maxCartQuantity || cartItemFor(item)?.stock || item.stock)} className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-600 text-lg font-black text-white shadow-xs transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40" aria-label={`Increase ${item.name} quantity`}>+</button>
                 </div>
               ) : (
-                <button type="button" onClick={() => handleAddToCart(item)} disabled={Number(item.stock) <= 0} aria-label={`Claim offer for ${item.name}`} className="min-h-10 rounded-xl bg-blue-600 px-4 py-2 text-xs font-extrabold text-white shadow-sm transition hover:bg-blue-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-slate-400">Claim Offer</button>
+                <button type="button" onClick={() => handleAddToCart(item)} disabled={Number(item.stock) <= 0} aria-label={`Claim offer for ${item.name}`} className="min-h-11 rounded-xl bg-blue-600 px-4 py-2 text-xs font-extrabold text-white shadow-xs transition hover:bg-blue-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-slate-400">Claim Offer</button>
               )}
             </div>
           </article>

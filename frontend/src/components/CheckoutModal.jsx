@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { getReadableErrorMessage } from '../utils/errorMessage';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -125,7 +124,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       } catch (error) {
         if (requestId === quoteRequestId.current) {
           setRewardQuote(null);
-          setQuoteError(getReadableErrorMessage(error, t('catalogUnavailable')));
+          setQuoteError(error.message || t('catalogUnavailable'));
         }
       } finally {
         if (requestId === quoteRequestId.current) setQuoteLoading(false);
@@ -156,7 +155,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
         if (active) setRestockItems(Array.isArray(response.data?.items) ? response.data.items : []);
       })
       .catch((error) => {
-        if (active) setRestockError(getReadableErrorMessage(error, 'Personalized restock suggestions are temporarily unavailable.'));
+        if (active) setRestockError(error.response?.data?.message || 'Personalized restock suggestions are temporarily unavailable.');
       })
       .finally(() => {
         if (active) setRestockLoading(false);
@@ -548,7 +547,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       });
       setRestockItems(Array.isArray(response.data?.items) ? response.data.items : []);
     } catch (error) {
-      setRestockError(getReadableErrorMessage(error, 'Personalized restock suggestions are temporarily unavailable.'));
+      setRestockError(error.response?.data?.message || 'Personalized restock suggestions are temporarily unavailable.');
     } finally {
       setRestockLoading(false);
     }
@@ -589,7 +588,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
           {errorMsg && (
             <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold rounded-xl flex items-center gap-2">
               <span>⚠️</span>
-              <span>{errorMsg}</span>
+              <span>{typeof errorMsg === 'string' ? errorMsg : String(errorMsg?.message || errorMsg?.error || errorMsg || '')}</span>
             </div>
           )}
           
@@ -680,7 +679,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
                     <span>{t('readyToAttach')}: {prescriptionFile.name}</span>
                   </div>
                 )}
-                {prescriptionError && <p className="mt-1 text-xs text-rose-700" role="alert">{prescriptionError}</p>}
+                {prescriptionError && <p className="mt-1 text-xs text-rose-700" role="alert">{typeof prescriptionError === 'string' ? prescriptionError : String(prescriptionError?.message || prescriptionError?.error || prescriptionError || '')}</p>}
               </>}
             </div>
             <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 max-h-48 overflow-y-auto space-y-2">
@@ -708,7 +707,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
 
           {restockError && (
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900" role="alert">
-              <p>{restockError}</p>
+              <p>{typeof restockError === 'string' ? restockError : String(restockError?.message || restockError?.error || restockError || '')}</p>
               <button type="button" onClick={retryRestockItems} disabled={restockLoading} className="mt-2 font-bold underline disabled:opacity-50">{restockLoading ? 'Retrying...' : 'Try again'}</button>
             </div>
           )}
@@ -874,7 +873,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
                       {rewardQuote.warning} Allowed: {rewardQuote.allowedPoints} points.
                     </p>
                   )}
-                  {quoteError && <p role="alert" className="font-bold text-rose-700">{quoteError}</p>}
+                  {quoteError && <p role="alert" className="font-bold text-rose-700">{typeof quoteError === 'string' ? quoteError : String(quoteError?.message || quoteError?.error || quoteError || '')}</p>}
                 </div>
               </div>
               <div className="flex justify-between text-slate-600">

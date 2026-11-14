@@ -6,16 +6,6 @@
  * GET /api/medicines is intentionally absent: it is the sanitized public storefront catalog.
  */
 export const API_CAPABILITIES = [
-  {
-    method: 'GET',
-    pattern: /^\/api\/v1\/admin\/infrastructure(?:\/|$)/,
-    permission: 'users.read'
-  },
-  {
-    method: 'POST',
-    pattern: /^\/api\/v1\/admin\/infrastructure(?:\/|$)/,
-    permission: 'users.manage'
-  },
   { method: 'POST', pattern: /^\/api\/private-images\/?$/, permission: 'inventory.write' },
   { method: 'GET', pattern: /^\/api\/private-images\/[^/]+\/content$/, permission: 'inventory.read' },
   { method: 'DELETE', pattern: /^\/api\/private-images\/[^/]+$/, permission: 'inventory.write' },
@@ -285,16 +275,6 @@ export const API_CAPABILITIES = [
     permission: 'orders.create'
   },
   {
-    method: 'POST',
-    pattern: /^\/api\/v1\/prescriptions\/(?:scan-product-label|upload)$/,
-    permission: 'prescription.write'
-  },
-  {
-    method: 'GET',
-    pattern: /^\/api\/v1\/prescriptions\/[^/]+$/,
-    permission: 'prescription.read'
-  },
-  {
     method: 'GET',
     pattern: /^\/api\/v1\/prescriptions\/reviews\/queue$/,
     permission: 'prescription.review'
@@ -400,6 +380,10 @@ export const API_CAPABILITIES = [
     permission: 'tenants.manage'
   },
   { method: 'GET', pattern: /^\/api\/v1\/admin\/service-logs(?:\/|$)/, permission: 'users.read' },
+  { method: 'GET', pattern: /^\/api\/v1\/admin\/rbac(?:\/|$)/, permission: 'users.read' },
+  { method: 'POST', pattern: /^\/api\/v1\/admin\/rbac(?:\/|$)/, permission: 'users.manage' },
+  { method: 'PUT', pattern: /^\/api\/v1\/admin\/rbac(?:\/|$)/, permission: 'users.manage' },
+  { method: 'PATCH', pattern: /^\/api\/v1\/admin\/rbac(?:\/|$)/, permission: 'users.manage' },
   {
     method: 'GET',
     pattern: /^\/api\/v1\/admin\/tenants(?:\/|$)/,

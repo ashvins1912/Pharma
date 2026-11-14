@@ -13,6 +13,7 @@ import MedicineRequest from '../models/MedicineRequest.js';
 import { buildIntelligentFulfillmentPlan, buildDynamicFulfillmentRoute, validateWaitWindow } from '../services/intelligentFulfillment/fulfillmentPlanner.js';
 import { refreshStockWaitlistCases } from '../services/intelligentFulfillment/waitlistMonitor.js';
 import { authenticateUser, isAdmin } from '../middleware/auth.js';
+import { requireDisplayPermission, requireModifyPermission } from '../middleware/authorization.js';
 import { sendCustomWhatsAppAlert, getNotificationLog } from '../config/whatsapp.js';
 import { getPrescription, removePrescription, savePrescription } from '../config/prescriptionStorage.js';
 import { getIsConnected } from '../config/db.js';
@@ -1441,7 +1442,7 @@ router.put('/:id/review', authenticateUser, isAdmin, async (req, res) => {
     }
 });
 
-router.post('/admin/:id/prescription/reinitiate', authenticateUser, isAdmin, async (req, res) => {
+router.post('/admin/:id/prescription/reinitiate', authenticateUser, isAdmin, requireModifyPermission('orders.manage', { resourceType: 'order_prescription', auditOnAllow: true }), async (req, res) => {
     try {
         const order = await dataStore.getOrderById(req.params.id);
         if (!order) return res.status(404).json({ message: 'Order not found.' });
@@ -1516,7 +1517,7 @@ router.post('/admin/:id/prescription/reinitiate', authenticateUser, isAdmin, asy
     }
 });
 
-router.post('/admin/:id/prescription/manual-approve', authenticateUser, isAdmin, async (req, res) => {
+router.post('/admin/:id/prescription/manual-approve', authenticateUser, isAdmin, requireModifyPermission('orders.manage', { resourceType: 'order_prescription', auditOnAllow: true }), async (req, res) => {
     try {
         const { scope = 'order', itemIndex, reason = '' } = req.body || {};
         const order = await dataStore.getOrderById(req.params.id);
@@ -1630,7 +1631,7 @@ router.put('/:id/dispatch', authenticateUser, isAdmin, async (req, res) => {
     }
 });
 
-router.post('/admin/:id/auto-assign', authenticateUser, isAdmin, async (req, res) => {
+router.post('/admin/:id/auto-assign', authenticateUser, isAdmin, requireModifyPermission('delivery.manage', { resourceType: 'order_dispatch', auditOnAllow: true }), async (req, res) => {
     try {
         if (!getIsConnected()) {
             return res.status(503).json({ message: 'Auto-assignment requires an active MongoDB connection.' });
@@ -1754,7 +1755,7 @@ router.put('/:id/cancel', authenticateUser, handleCustomerCancelOrder);
 router.post('/:id/cancel', authenticateUser, handleCustomerCancelOrder);
 
 // Order State Machine Transition
-router.post('/admin/transition', authenticateUser, isAdmin, async (req, res) => {
+router.post('/admin/transition', authenticateUser, isAdmin, requireModifyPermission('orders.manage', { resourceType: 'order', auditOnAllow: true }), async (req, res) => {
     try {
         const { orderId, newStatus, cashCollectionStatus } = req.body;
         if (isTenantOrderStaff(req)) {
@@ -1839,7 +1840,7 @@ router.post('/admin/transition', authenticateUser, isAdmin, async (req, res) => 
 });
 
 // Smart Delivery Route Clubbing & Google Maps link generation (Requirements 11, 12, 13, 14)
-router.post('/admin/optimize-and-club-routes', authenticateUser, isAdmin, async (req, res) => {
+router.post('/admin/optimize-and-club-routes', authenticateUser, isAdmin, requireModifyPermission('delivery.manage', { resourceType: 'route_plan', auditOnAllow: true }), async (req, res) => {
     try {
         if (!getIsConnected()) {
             return res.status(503).json({ message: 'Route planning requires an active MongoDB connection.' });
@@ -1875,7 +1876,7 @@ router.post('/admin/optimize-and-club-routes', authenticateUser, isAdmin, async 
 });
 
 // Dispatch batch of clubbed orders to rider
-router.post('/admin/dispatch-batch', authenticateUser, isAdmin, async (req, res) => {
+router.post('/admin/dispatch-batch', authenticateUser, isAdmin, requireModifyPermission('delivery.manage', { resourceType: 'order_dispatch', auditOnAllow: true }), async (req, res) => {
     try {
         if (!getIsConnected()) {
             return res.status(503).json({ message: 'Batch dispatch requires an active MongoDB connection.' });
@@ -1923,7 +1924,7 @@ router.post('/admin/dispatch-batch', authenticateUser, isAdmin, async (req, res)
 });
 
 // Legacy single-step transition shortcut
-router.patch('/admin/:orderId/:step', authenticateUser, isAdmin, async (req, res) => {
+router.patch('/admin/:orderId/:step', authenticateUser, isAdmin, requireModifyPermission('orders.manage', { resourceType: 'order', auditOnAllow: true }), async (req, res) => {
     try {
         const { orderId, step } = req.params;
         const actor = req.user.user_metadata?.name || req.user.email || 'Pharmacist Admin';
@@ -2055,7 +2056,7 @@ router.get('/:id/notify-whatsapp', authenticateUser, isAdmin, handleNotifyWhatsA
 router.post('/:id/notify-whatsapp', authenticateUser, isAdmin, handleNotifyWhatsApp);
 
 // Admin All Orders
-router.get('/admin/all', authenticateUser, isAdmin, async (req, res) => {
+router.get('/admin/all', authenticateUser, isAdmin, requireDisplayPermission('orders.manage', { resourceType: 'order' }), async (req, res) => {
     try {
         if (isTenantOrderStaff(req)) {
             const tenantId = getActorTenantId(req);

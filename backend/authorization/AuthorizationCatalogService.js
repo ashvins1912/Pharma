@@ -31,18 +31,120 @@ const ROLE_PERMISSIONS = {
 };
 const ROLE_SCOPE = { SUPER_ADMIN:'PLATFORM', PLATFORM_SUPER_ADMIN:'PLATFORM', admin:'PLATFORM', TENANT_OWNER:'TENANT', TENANT_ADMIN:'TENANT', PHARMACIST:'TENANT', PHARMACY_STAFF:'TENANT', pharmacy:'TENANT', INVENTORY_MANAGER:'TENANT', ORDER_MANAGER:'TENANT', CUSTOMER:'CUSTOMER', customer:'CUSTOMER' };
 const memory = {
-  rolePermissions: new Map(Object.entries(ROLE_PERMISSIONS))
+  features: [...FEATURES],
+  permissions: PERMISSIONS.map(([feature, action]) => [feature, action]),
+  rolePermissions: new Map(Object.entries(ROLE_PERMISSIONS)),
+  roleScope: { ...ROLE_SCOPE }
 };
+
+export function getCatalogDefinition() {
+  return {
+    features: [...memory.features],
+    permissions: memory.permissions.map(([feature, action]) => [feature, action]),
+    rolePermissions: Object.fromEntries(
+      [...memory.rolePermissions.entries()].map(([role, perms]) => [role, [...perms]])
+    ),
+    roleScope: { ...memory.roleScope }
+  };
+}
+
+export function applyCatalogSnapshot({
+  features = FEATURES,
+  permissions = PERMISSIONS,
+  rolePermissions = ROLE_PERMISSIONS,
+  roleScope = ROLE_SCOPE
+} = {}) {
+  memory.features = [...features];
+  memory.permissions = permissions.map(([feature, action]) => [feature, action]);
+  memory.rolePermissions = new Map(
+    Object.entries(rolePermissions).map(([role, perms]) => [role, [...perms]])
+  );
+  memory.roleScope = { ...roleScope };
+  return getCatalogDefinition();
+}
+
+export async function syncCatalogToDatabase({ deactivateMissing = false } = {}) {
+  if (!getIsConnected()) {
+    return { connected: false, synced: false, featuresUpserted: 0, permissionsUpserted: 0, rolesUpserted: 0, rolePermissionsActivated: 0, rolePermissionsDisabled: 0 };
+  }
+  const current = getCatalogDefinition();
+  let featuresUpserted = 0;
+  let permissionsUpserted = 0;
+  let rolesUpserted = 0;
+  let rolePermissionsActivated = 0;
+  let rolePermissionsDisabled = 0;
+
+  for (const code of current.features) {
+    await Feature.findOneAndUpdate(
+      { code },
+      { $set: { status: 'ACTIVE' }, $setOnInsert: { code, name: code } },
+      { upsert: true }
+    );
+    featuresUpserted += 1;
+  }
+
+  const activePermCodes = [];
+  for (const [featureCode, action] of current.permissions) {
+    const code = `${featureCode}.${action}`;
+    activePermCodes.push(code);
+    await Permission.findOneAndUpdate(
+      { code },
+      { $set: { featureCode, action, status: 'ACTIVE' }, $setOnInsert: { code } },
+      { upsert: true }
+    );
+    permissionsUpserted += 1;
+  }
+
+  for (const [code, permissions] of Object.entries(current.rolePermissions)) {
+    await Role.findOneAndUpdate(
+      { code },
+      { $set: { scope: current.roleScope[code] || 'CUSTOMER', status: 'ACTIVE' }, $setOnInsert: { code, name: code } },
+      { upsert: true }
+    );
+    rolesUpserted += 1;
+    for (const permissionCode of permissions) {
+      await RolePermission.findOneAndUpdate(
+        { roleCode: code, permissionCode },
+        { $set: { status: 'ACTIVE' }, $setOnInsert: { roleCode: code, permissionCode } },
+        { upsert: true }
+      );
+      rolePermissionsActivated += 1;
+    }
+    if (deactivateMissing) {
+      const disabled = await RolePermission.updateMany(
+        { roleCode: code, permissionCode: { $nin: permissions }, status: 'ACTIVE' },
+        { $set: { status: 'DISABLED' } }
+      );
+      rolePermissionsDisabled += Number(disabled?.modifiedCount || 0);
+    }
+  }
+
+  if (deactivateMissing) {
+    await Feature.updateMany({ code: { $nin: current.features }, status: 'ACTIVE' }, { $set: { status: 'DISABLED' } });
+    await Permission.updateMany({ code: { $nin: activePermCodes }, status: 'ACTIVE' }, { $set: { status: 'DISABLED' } });
+  }
+
+  return {
+    connected: true,
+    synced: true,
+    featuresUpserted,
+    permissionsUpserted,
+    rolesUpserted,
+    rolePermissionsActivated,
+    rolePermissionsDisabled
+  };
+}
 
 export async function ensureAuthorizationCatalog() {
   if (!getIsConnected()) return;
-  for (const code of FEATURES) await Feature.findOneAndUpdate({ code }, { $setOnInsert: { code, name: code } }, { upsert: true });
-  for (const [featureCode, action] of PERMISSIONS) {
+  const current = getCatalogDefinition();
+  for (const code of current.features) await Feature.findOneAndUpdate({ code }, { $setOnInsert: { code, name: code } }, { upsert: true });
+  for (const [featureCode, action] of current.permissions) {
     const code = featureCode + '.' + action;
     await Permission.findOneAndUpdate({ code }, { $setOnInsert: { code, featureCode, action } }, { upsert: true });
   }
-  for (const [code, permissions] of Object.entries(ROLE_PERMISSIONS)) {
-    await Role.findOneAndUpdate({ code }, { $setOnInsert: { code, name: code, scope: ROLE_SCOPE[code] || 'CUSTOMER' } }, { upsert: true });
+  for (const [code, permissions] of Object.entries(current.rolePermissions)) {
+    await Role.findOneAndUpdate({ code }, { $setOnInsert: { code, name: code, scope: current.roleScope[code] || 'CUSTOMER' } }, { upsert: true });
     for (const permissionCode of permissions) await RolePermission.findOneAndUpdate({ roleCode: code, permissionCode }, { $setOnInsert: { roleCode: code, permissionCode, status: 'ACTIVE' } }, { upsert: true });
   }
   // Inventory imports stay unavailable to tenant roles until controlled tenant/branch validation is complete.
@@ -68,8 +170,15 @@ export async function getRolePermissions(roleCode) {
   return [...(memory.rolePermissions.get(roleCode) || [])];
 }
 
-export function getRoleScope(roleCode) { return ROLE_SCOPE[roleCode] || 'CUSTOMER'; }
+export function getRoleScope(roleCode) { return memory.roleScope[roleCode] || 'CUSTOMER'; }
 export function isKnownPermission(permissionCode) {
-  return PERMISSIONS.some(([feature, action]) => feature + '.' + action === permissionCode);
+  return memory.permissions.some(([feature, action]) => feature + '.' + action === permissionCode);
 }
-export const authorizationCatalog = { ensureAuthorizationCatalog, getRolePermissions, getRoleScope };
+export const authorizationCatalog = {
+  ensureAuthorizationCatalog,
+  syncCatalogToDatabase,
+  getRolePermissions,
+  getRoleScope,
+  getCatalogDefinition,
+  applyCatalogSnapshot
+};

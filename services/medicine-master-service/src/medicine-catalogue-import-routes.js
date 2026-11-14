@@ -6,8 +6,6 @@ import { invalidateMedicineMasterVersionCache, MedicineMatchReference, mapMedici
 import { requireServiceScope } from './service-auth.js';
 import { config } from './config.js';
 import { scoreMedicineMatch } from './medicine-match-scoring.js';
-import { buildNameNgramIdf, CharacterNgramCandidateIndex } from '@pharma/algorithm-kernel';
-import { catalogueProcessingLimits, evaluateCatalogueProcessingGuard, getCatalogueProcessingResourceSnapshot } from './guards/catalogue-processing-guard.js';
 export { scoreMedicineMatch };
 
 const router = express.Router();
@@ -49,83 +47,125 @@ const pick = (record, ...names) => {
   }
   return undefined;
 };
-
-// Read every matching master row in stable _id order. Bounded pages avoid
-// Mongo result limits without silently treating a partial scan as complete.
-export async function collectCatalogueCandidates(fetchPage, batchSize = 1000, onPage = null) {
-  if (typeof fetchPage !== 'function' || !Number.isInteger(batchSize) || batchSize < 1) {
-    throw new TypeError('A page loader and positive integer batch size are required.');
+const levenshteinRatio = (left, right) => {
+  const a = key(left), b = key(right);
+  if (!a && !b) return 100;
+  if (!a || !b) return 0;
+  let previous = Array.from({ length: b.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= a.length; i += 1) {
+    const current = [i];
+    for (let j = 1; j <= b.length; j += 1) current[j] = Math.min(current[j - 1] + 1, previous[j] + 1, previous[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    previous = current;
   }
-  const results = [];
-  let after = null;
-  while (true) {
-    const page = await fetchPage({ after, limit: batchSize });
-    if (!Array.isArray(page)) throw new TypeError('Catalogue candidate page must be an array.');
-    results.push(...page);
-    if (onPage) await onPage(results.length, page.length);
-    if (page.length < batchSize) break;
-    const next = page[page.length - 1]?._id;
-    if (next == null || String(next) === String(after)) {
-      throw new Error('Catalogue candidate pagination did not advance; refusing an incomplete reconciliation scan.');
+  return Math.round((1 - previous[b.length] / Math.max(a.length, b.length)) * 100);
+};
+const similarityText = value => key(value)
+  .replace(/\b(\d+(?:\.\d+)?)\s*(mcg|mg|gm|g|ml|iu|%)\b/g, '$1 $2')
+  .replace(/\b(tablets|tabs|capsules|caps|sachets|vials)\b/g, match => ({ tablets: 'tablet', tabs: 'tab', capsules: 'capsule', caps: 'cap', sachets: 'sachet', vials: 'vial' })[match]);
+const tokenSortRatio = (left, right) => levenshteinRatio(similarityText(left).split(' ').filter(Boolean).sort().join(' '), similarityText(right).split(' ').filter(Boolean).sort().join(' '));
+const characterNgrams = value => {
+  const normalized = similarityText(value).replace(/\s+/g, ' ').trim();
+  const padded = '  ' + normalized + '  ';
+  const grams = [];
+  for (let i = 0; i <= padded.length - 3; i += 1) grams.push(padded.slice(i, i + 3));
+  return grams;
+};
+const buildNameNgramIdf = candidates => {
+  const documentFrequency = new Map();
+  let documents = 0;
+  for (const candidate of candidates) {
+    if (!candidate.brandName) continue;
+    documents += 1;
+    for (const gram of new Set(characterNgrams(candidate.brandName))) documentFrequency.set(gram, (documentFrequency.get(gram) || 0) + 1);
+  }
+  return new Map([...documentFrequency].map(([gram, frequency]) => [gram, Math.log((documents + 1) / (frequency + 1)) + 1]));
+};
+const tfIdfNgramCosine = (left, right, idf = null) => {
+  const vector = value => {
+    const counts = new Map();
+    for (const gram of characterNgrams(value)) counts.set(gram, (counts.get(gram) || 0) + 1);
+    const weighted = new Map();
+    for (const [gram, count] of counts) weighted.set(gram, count * (idf?.get(gram) || 1));
+    return weighted;
+  };
+  const a = vector(left), b = vector(right);
+  let dot = 0, normA = 0, normB = 0;
+  for (const value of a.values()) normA += value * value;
+  for (const value of b.values()) normB += value * value;
+  for (const [gram, value] of a) dot += value * (b.get(gram) || 0);
+  if (!normA || !normB) return 0;
+  return Math.round((dot / Math.sqrt(normA * normB)) * 100);
+};
+const charNgramDice = (left, right) => {
+  const a = similarityText(left).replace(/\s+/g, ' ');
+  const b = similarityText(right).replace(/\s+/g, ' ');
+  if (!a || !b) return a === b ? 100 : 0;
+  const n = Math.min(3, Math.max(2, Math.min(a.length, b.length)));
+  const grams = value => {
+    const result = new Map();
+    for (let i = 0; i <= value.length - n; i += 1) {
+      const gram = value.slice(i, i + n);
+      result.set(gram, (result.get(gram) || 0) + 1);
     }
-    after = next;
-  }
-  return results;
-}
-
-async function loadCatalogueCandidates(filter, projection, onPage = null) {
-  return collectCatalogueCandidates(({ after, limit }) => {
-    const pageFilter = after ? { $and: [filter, { _id: { $gt: after } }] } : filter;
-    return MedicineMaster.find(pageFilter, projection).sort({ _id: 1 }).limit(limit).lean();
-  }, 1000, onPage);
-}
+    return result;
+  };
+  const leftGrams = grams(a), rightGrams = grams(b);
+  let overlap = 0, leftTotal = 0, rightTotal = 0;
+  for (const count of leftGrams.values()) leftTotal += count;
+  for (const count of rightGrams.values()) rightTotal += count;
+  for (const [gram, count] of leftGrams) overlap += Math.min(count, rightGrams.get(gram) || 0);
+  return Math.round((2 * overlap / Math.max(1, leftTotal + rightTotal)) * 100);
+};
+const fieldSimilarity = (left, right) => Math.round(tokenSortRatio(left, right) * 0.65 + charNgramDice(left, right) * 0.35);
+const normalizeStrength = value => key(value).replace(/(\d+(?:\.\d+)?)\s*(mcg|mg|gm|g|ml|iu|%)\b/g, (_, amount, unit) => {
+  const numeric = Number(amount);
+  if (unit === 'mcg') return String(Number((numeric / 1000).toFixed(6))) + 'mg';
+  if (unit === 'g' || unit === 'gm') return String(Number((numeric * 1000).toFixed(6))) + 'mg';
+  return String(numeric) + unit;
+});
+const normalizeDosageForm = value => key(value)
+  .replace(/\btablets\b/g, 'tablet').replace(/\bcapsules\b/g, 'capsule')
+  .replace(/\bcaplets\b/g, 'caplet').replace(/\bvials\b/g, 'vial')
+  .replace(/\bampoules\b/g, 'ampoule').replace(/\bsachets\b/g, 'sachet')
+  .replace(/\bdrops\b/g, 'drop').replace(/\bpatches\b/g, 'patch');
 
 async function reconcileCatalogueRecordsAgainstMaster(records) {
   const ids = [...new Set(records.flatMap(item => [item.medicineId, item.reconciliationMatch?.targetMedicineId].filter(Boolean)))];
   const canonicalKeys = [...new Set(records.map(item => item.canonicalKey).filter(Boolean))];
   const names = [...new Set(records.filter(item => item.safeNameMatch).map(item => item.brandName).filter(Boolean))];
-  const searchTerms = [...new Set(records.flatMap(item => CharacterNgramCandidateIndex.searchTerms(item.brandName, { limit: 1000 })))];
-  const candidateTerms = searchTerms.slice(0, 600);
-  const candidateTermScanTruncated = searchTerms.length > candidateTerms.length;
-  let indexState = null;
-  try { indexState = await MedicineNameNgramIndexState.findById('brandName-v1').lean(); } catch { /* Keep prefix fallback available if optional state storage is unavailable. */ }
-  const usePersistedIndex = process.env.MEDICINE_NGRAM_INDEX_ENABLED === 'true'
-    && indexState?.status === 'READY' && Boolean(indexState.backfillCompletedAt);
-  const prefixes = [...new Set(records.map(item => key(item.brandName).slice(0, 2)).filter(value => value.length === 2))];
-  const [indexedRows, archivedIdentityRows] = await Promise.all([
-    usePersistedIndex && candidateTerms.length
-      ? MedicineNameNgramIndex.find({ grams: { $in: candidateTerms }, isArchived: false }, { medicineId: 1 }).limit(5001).lean()
-      : [],
-    ids.length ? MedicineMaster.find({ medicineId: { $in: ids }, isArchived: true }, { medicineId: 1 }).lean() : []
-  ]);
-  const indexedCandidateIds = [...new Set(indexedRows.map(row => row.medicineId))];
-  const indexCandidateLimitTruncated = indexedRows.length > 5000;
+  const allPrefixes = [...new Set(records.map(item => key(item.brandName).slice(0, 2)).filter(value => value.length === 2))];
+  const prefixes = allPrefixes.slice(0, 120);
+  const scannedPrefixes = new Set(prefixes);
+  const prefixScanTruncated = allPrefixes.length > prefixes.length;
   const clauses = [
     ...(ids.length ? [{ medicineId: { $in: ids } }] : []),
     ...(canonicalKeys.length ? [{ canonicalKey: { $in: canonicalKeys } }] : []),
     ...(names.length ? [{ brandName: { $in: names } }] : []),
-    ...(usePersistedIndex
-      ? (indexedCandidateIds.length ? [{ medicineId: { $in: indexedCandidateIds } }] : [])
-      : prefixes.map(prefix => ({ brandName: { $regex: '^' + prefix, $options: 'i' } })))
+    ...prefixes.map(prefix => ({ brandName: { $regex: '^' + prefix, $options: 'i' } }))
   ];
-  const candidates = clauses.length ? await loadCatalogueCandidates({ $or: clauses, isArchived: { $ne: true } }, {
-    _id: 1, medicineId: 1, canonicalKey: 1, brandName: 1, genericName: 1, composition: 1,
-    ingredients: 1, strength: 1, dosageForm: 1, manufacturer: 1
-  }) : [];
+  const [candidates, archivedIdentityRows] = await Promise.all([
+    clauses.length ? MedicineMaster.find({ $or: clauses, isArchived: { $ne: true } }, {
+      _id: 1, medicineId: 1, canonicalKey: 1, brandName: 1, genericName: 1, composition: 1,
+      ingredients: 1, strength: 1, dosageForm: 1, manufacturer: 1
+    }).limit(5001).lean() : [],
+    ids.length ? MedicineMaster.find({ medicineId: { $in: ids }, isArchived: true }, { medicineId: 1 }).lean() : []
+  ]);
   const archivedIds = new Set(archivedIdentityRows.map(item => item.medicineId));
-  const scanTruncated = candidateTermScanTruncated || indexCandidateLimitTruncated;
-  const activeCandidates = candidates;
+  const candidateLimitTruncated = candidates.length > 5000;
+  const scanTruncated = candidateLimitTruncated || prefixScanTruncated;
+  const activeCandidates = candidates.slice(0, 5000);
   const byId = new Map(activeCandidates.map(item => [item.medicineId, item]));
-  const keyGroups = new Map(), nameGroups = new Map();
+  const keyGroups = new Map(), nameGroups = new Map(), prefixGroups = new Map();
   for (const candidate of activeCandidates) {
     if (candidate.canonicalKey) keyGroups.set(candidate.canonicalKey, [...(keyGroups.get(candidate.canonicalKey) || []), candidate]);
     const nameKey = key(candidate.brandName);
     nameGroups.set(nameKey, [...(nameGroups.get(nameKey) || []), candidate]);
+    const prefix = nameKey.slice(0, 2);
+    if (prefix.length === 2) prefixGroups.set(prefix, [...(prefixGroups.get(prefix) || []), candidate]);
   }
   const unique = groups => new Map([...groups.entries()].filter(([, group]) => group.length === 1).map(([identity, group]) => [identity, group[0]]));
   const byKey = unique(keyGroups), byName = unique(nameGroups);
   const nameNgramIdf = buildNameNgramIdf(activeCandidates);
-  const candidateIndex = new CharacterNgramCandidateIndex(activeCandidates);
   const plans = [];
   const blockers = [];
   for (const item of records) {
@@ -159,20 +199,18 @@ async function reconcileCatalogueRecordsAgainstMaster(records) {
     } else {
       let best = null;
       let tiedBest = false;
-      const retrieved = candidateIndex.search(item.brandName, { limit: 1000 });
-      if (!retrieved.matchedGrams) {
-        plan = { decision: 'MANUAL_REVIEW', targetMedicineId: '', method: 'FUZZY_CANDIDATE_NAME_TOO_SHORT', score: 0, warnings: ['INSUFFICIENT_NAME_FOR_FUZZY_RETRIEVAL'] };
-      } else if (retrieved.truncated) {
-        plan = { decision: 'MANUAL_REVIEW', targetMedicineId: '', method: 'FUZZY_CANDIDATE_RETRIEVAL_TRUNCATED', score: 0, warnings: ['CANDIDATE_RETRIEVAL_LIMIT_REACHED'] };
+      const prefix = key(item.brandName).slice(0, 2);
+      if (!scannedPrefixes.has(prefix)) {
+        plan = { decision: 'MANUAL_REVIEW', targetMedicineId: '', method: 'FUZZY_CANDIDATE_PREFIX_NOT_SCANNED', score: 0, warnings: ['CANDIDATE_SCAN_PREFIX_LIMIT_REACHED'] };
       } else {
-        for (const entry of retrieved.candidates) {
-          const scored = scoreMedicineMatch(item, entry.record, { nameNgramIdf });
-          if (!best || scored.score > best.score) { best = { candidate: entry.record, ...scored }; tiedBest = false; }
+        for (const candidate of prefixGroups.get(prefix) || []) {
+          const scored = scoreMedicineMatch(item, candidate, { nameNgramIdf });
+          if (!best || scored.score > best.score) { best = { candidate, ...scored }; tiedBest = false; }
           else if (scored.score === best.score) tiedBest = true;
         }
       }
       if (plan) {
-        // Insufficient or truncated candidate retrieval is never safe evidence for auto-publish.
+        // Candidate prefix was not scanned; keep this row out of automatic insert/update.
       } else if (best && tiedBest) {
         plan = { decision: 'MANUAL_REVIEW', targetMedicineId: '', method: 'AMBIGUOUS_TOP_MATCHES', score: best.score, warnings: ['MULTIPLE_CANDIDATES_SHARE_TOP_SCORE'] };
       } else if (best && best.decision === 'AUTO_MERGE') {
@@ -214,7 +252,7 @@ async function reconcileCatalogueRecordsAgainstMaster(records) {
   };
 }
 
-export const fuzzyCandidatePrefixes = records => [...new Set(records.map(item => key(item.brandName).slice(0, 2)).filter(value => value.length === 2))];
+const fuzzyCandidatePrefixes = records => [...new Set(records.map(item => key(item.brandName).slice(0, 2)).filter(value => value.length === 2))].slice(0, 120);
 const bool = value => typeof value === 'boolean' ? value : ['true', 'yes', '1'].includes(text(value).toLowerCase());
 const cleanRetailProductName = value => text(value).split(/\b(?:mrp|price|inclusive of all taxes|prescription required|prescription only)\b|₹|\bRs\.?\s*\d/i)[0].replace(/[|,;\-–]+\s*$/, '').trim();
 const cleanDosageForm = value => {
@@ -347,35 +385,6 @@ const catalogueImportJobSchema = new mongoose.Schema({
 }, { timestamps: true });
 catalogueImportJobSchema.index({ status: 1, leaseExpiresAt: 1, createdAt: 1 });
 const CatalogueImportJob = mongoose.models.MedicineCatalogueImportJob || mongoose.model('MedicineCatalogueImportJob', catalogueImportJobSchema);
-const catalogueWorkerSlotSchema = new mongoose.Schema({
-  slotId: { type: Number, required: true, unique: true },
-  ownerId: { type: String, default: '' },
-  leaseExpiresAt: { type: Date, default: new Date(0), index: true }
-}, { timestamps: true });
-const CatalogueWorkerSlot = mongoose.models.MedicineCatalogueWorkerSlot || mongoose.model('MedicineCatalogueWorkerSlot', catalogueWorkerSlotSchema);
-const catalogueWorkerOwnerId = randomUUID();
-async function acquireCatalogueWorkerSlot() {
-  const now = new Date();
-  const slot = await CatalogueWorkerSlot.findOneAndUpdate(
-    { slotId: { $lt: catalogueProcessingLimits.maxConcurrentJobs }, leaseExpiresAt: { $lte: now } },
-    { $set: { ownerId: catalogueWorkerOwnerId, leaseExpiresAt: new Date(now.getTime() + catalogueProcessingLimits.workerLeaseMs) } },
-    { sort: { slotId: 1 }, new: true }
-  ).lean();
-  return slot?.slotId ?? null;
-}
-async function renewCatalogueWorkerSlot(slotId) {
-  await CatalogueWorkerSlot.updateOne(
-    { slotId, ownerId: catalogueWorkerOwnerId },
-    { $set: { leaseExpiresAt: new Date(Date.now() + catalogueProcessingLimits.workerLeaseMs) } }
-  );
-}
-async function releaseCatalogueWorkerSlot(slotId) {
-  if (slotId === null || slotId === undefined) return;
-  await CatalogueWorkerSlot.updateOne(
-    { slotId, ownerId: catalogueWorkerOwnerId },
-    { $set: { ownerId: '', leaseExpiresAt: new Date(0) } }
-  );
-}
 let catalogueImportBucket;
 let catalogueImportWorkerTimer;
 let catalogueImportWorkerBusy = false;
@@ -388,30 +397,15 @@ const streamToBuffer = async stream => {
 };
 async function processNextCatalogueImportJob() {
   if (catalogueImportWorkerBusy || mongoose.connection.readyState !== 1) return;
-  const resources = getCatalogueProcessingResourceSnapshot();
-  const protection = evaluateCatalogueProcessingGuard({
-    heapUsedPercent: resources.process.heapUsedPercent,
-    rssUsedPercent: resources.process.rssUsedPercent,
-    cpuLoadPercent: resources.host.cpuLoadPercent
-  });
-  if (!protection.allowed) return;
   catalogueImportWorkerBusy = true;
   let job;
   let heartbeat;
-  let workerSlotId = null;
   try {
-    workerSlotId = await acquireCatalogueWorkerSlot();
-    if (workerSlotId === null) return;
     job = await CatalogueImportJob.findOneAndUpdate({
       $or: [{ status: 'QUEUED' }, { status: 'PROCESSING', leaseExpiresAt: { $lt: new Date() } }]
     }, { $set: { status: 'PROCESSING', stage: 'ANALYZING', leaseExpiresAt: new Date(Date.now() + 15 * 60 * 1000), startedAt: new Date(), errorMessage: '' }, $inc: { attempts: 1 } }, { sort: { createdAt: 1 }, new: true });
     if (!job) return;
-    heartbeat = setInterval(() => {
-      void Promise.all([
-        CatalogueImportJob.updateOne({ jobId: job.jobId, status: 'PROCESSING' }, { $set: { leaseExpiresAt: new Date(Date.now() + 15 * 60 * 1000) } }),
-        renewCatalogueWorkerSlot(workerSlotId)
-      ]).catch(() => {});
-    }, 30000);
+    heartbeat = setInterval(() => { void CatalogueImportJob.updateOne({ jobId: job.jobId, status: 'PROCESSING' }, { $set: { leaseExpiresAt: new Date(Date.now() + 15 * 60 * 1000) } }).catch(() => {}); }, 60000);
     heartbeat.unref?.();
     const buffer = await streamToBuffer(getCatalogueImportBucket().openDownloadStream(job.fileId));
     const fakeResponse = {
@@ -436,15 +430,11 @@ async function processNextCatalogueImportJob() {
     if (job) await CatalogueImportJob.updateOne({ jobId: job.jobId }, { $set: {
       status: 'FAILED', stage: 'FAILED', leaseExpiresAt: null, errorMessage: String(error.message || 'Import processing failed.').slice(0, 1000), completedAt: new Date()
     } });
-  } finally {
-    if (heartbeat) clearInterval(heartbeat);
-    await releaseCatalogueWorkerSlot(workerSlotId).catch(() => {});
-    catalogueImportWorkerBusy = false;
-  }
+  } finally { if (heartbeat) clearInterval(heartbeat); catalogueImportWorkerBusy = false; }
 }
 export function startMedicineCatalogueImportWorker() {
   if (catalogueImportWorkerTimer) return;
-  catalogueImportWorkerTimer = setInterval(() => { void processNextCatalogueImportJob(); }, catalogueProcessingLimits.pollIntervalMs);
+  catalogueImportWorkerTimer = setInterval(() => { void processNextCatalogueImportJob(); }, 1500);
   catalogueImportWorkerTimer.unref?.();
 }
 export function stopMedicineCatalogueImportWorker() {
@@ -453,41 +443,6 @@ export function stopMedicineCatalogueImportWorker() {
 }
 
 const MedicineMaster = mongoose.models.MedicineMaster || mongoose.model('MedicineMaster', medicineMasterSchema);
-const medicineNameNgramIndexSchema = new mongoose.Schema({
-  medicineId: { type: String, required: true, unique: true },
-  grams: { type: [String], default: [] },
-  isArchived: { type: Boolean, default: false }
-}, { timestamps: true, collection: 'medicine_name_ngram_index' });
-medicineNameNgramIndexSchema.index({ grams: 1, isArchived: 1 });
-const MedicineNameNgramIndex = mongoose.models.MedicineNameNgramIndex
-  || mongoose.model('MedicineNameNgramIndex', medicineNameNgramIndexSchema);
-const medicineNameNgramIndexStateSchema = new mongoose.Schema({
-  _id: { type: String, required: true },
-  status: { type: String, enum: ['BUILDING', 'READY', 'FAILED', 'SYNCING'], default: 'BUILDING' },
-  indexedCount: { type: Number, default: 0 },
-  activeSyncs: { type: Number, default: 0 },
-  version: { type: Number, default: 1 },
-  backfillCompletedAt: { type: Date, default: null },
-  updatedAt: { type: Date, default: Date.now }
-}, { collection: 'medicine_name_ngram_index_state', versionKey: false });
-const MedicineNameNgramIndexState = mongoose.models.MedicineNameNgramIndexState
-  || mongoose.model('MedicineNameNgramIndexState', medicineNameNgramIndexStateSchema);
-async function syncMedicineNameNgramIndex(medicineIds) {
-  const ids = [...new Set(medicineIds.filter(Boolean))];
-  if (!ids.length) return;
-  const masters = await MedicineMaster.find({ medicineId: { $in: ids } }, { medicineId: 1, brandName: 1, isArchived: 1 }).lean();
-  if (!masters.length) return;
-  await MedicineNameNgramIndex.bulkWrite(masters.map(master => ({
-    updateOne: {
-      filter: { medicineId: master.medicineId },
-      update: { $set: {
-        grams: CharacterNgramCandidateIndex.searchTerms(master.brandName, { limit: 1000 }),
-        isArchived: Boolean(master.isArchived)
-      } },
-      upsert: true
-    }
-  })), { ordered: false });
-}
 const CatalogueImport = mongoose.models.MedicineCatalogueImport || mongoose.model('MedicineCatalogueImport', catalogueImportSchema);
 const catalogueImportChunkSchema = new mongoose.Schema({
   batchId: { type: String, required: true, index: true },
@@ -746,49 +701,6 @@ router.use((req, res, next) => req.service?.isPlatformUser === true
   ? next()
   : res.status(403).json({ code: 'PLATFORM_ADMIN_REQUIRED', message: 'Only a platform administrator can publish the shared medicine master catalogue.' }));
 
-router.get('/imports/processing-guard', asyncHandler(async (_req, res) => {
-  const [queuedJobs, activeJobs] = await Promise.all([
-    CatalogueImportJob.countDocuments({ status: 'QUEUED' }),
-    CatalogueImportJob.countDocuments({ status: 'PROCESSING' })
-  ]);
-  const resources = getCatalogueProcessingResourceSnapshot();
-  const protection = evaluateCatalogueProcessingGuard({
-    heapUsedPercent: resources.process.heapUsedPercent,
-    rssUsedPercent: resources.process.rssUsedPercent,
-    cpuLoadPercent: resources.host.cpuLoadPercent,
-    queuedJobs
-  });
-  return res.json({
-    enabled: process.env.MEDICINE_CATALOGUE_PROCESSING_ENABLED !== 'false',
-    state: protection.allowed ? 'READY' : 'PROTECTED',
-    reasons: protection.reasons,
-    limits: catalogueProcessingLimits,
-    queue: { queuedJobs, activeJobs, maxQueuedJobs: catalogueProcessingLimits.maxQueuedJobs },
-    resources
-  });
-}));
-
-const enforceCatalogueQueueCapacity = asyncHandler(async (_req, res, next) => {
-  const queuedJobs = await CatalogueImportJob.countDocuments({ status: 'QUEUED' });
-  const resources = getCatalogueProcessingResourceSnapshot();
-  const protection = evaluateCatalogueProcessingGuard({
-    heapUsedPercent: resources.process.heapUsedPercent,
-    rssUsedPercent: resources.process.rssUsedPercent,
-    cpuLoadPercent: resources.host.cpuLoadPercent,
-    queuedJobs
-  });
-  if (protection.reasons.includes('QUEUE_CAPACITY_REACHED')) {
-    res.set('Retry-After', '30');
-    return res.status(429).json({ code: 'CATALOGUE_QUEUE_FULL', message: 'The medicine catalogue processing queue is full. Retry after existing jobs complete.', queuedJobs, maxQueuedJobs: catalogueProcessingLimits.maxQueuedJobs });
-  }
-  const resourceReasons = protection.reasons.filter(reason => reason !== 'QUEUE_CAPACITY_REACHED');
-  if (resourceReasons.length) {
-    res.set('Retry-After', '30');
-    return res.status(503).json({ code: 'CATALOGUE_PROCESSING_PROTECTED', message: 'Catalogue uploads are temporarily paused by the resource protection guard.', reasons: resourceReasons });
-  }
-  return next();
-});
-
 async function processCatalogueImportPreview(req, res) {
   if (!req.file) return res.status(400).json({ message: 'Select a JSON file to upload.' });
   let payload;
@@ -858,26 +770,19 @@ async function processCatalogueImportPreview(req, res) {
   const incomingKeyCounts = new Map();
   for (let offset = 0; offset < records.length; offset += CATALOGUE_CHUNK_SIZE) { for (const item of records.slice(offset, offset + CATALOGUE_CHUNK_SIZE)) if (item.canonicalKey) incomingKeyCounts.set(item.canonicalKey, (incomingKeyCounts.get(item.canonicalKey) || 0) + 1); if (req.file.size > LARGE_IMPORT_THRESHOLD_BYTES) await yieldToEventLoop(); }
   const candidateProjection = { medicineId: 1, canonicalKey: 1, brandName: 1 };
-  if (req.importJob) await updateCatalogueImportJob(req.importJob, { stage: 'RECONCILING', progressPercent: 40 });
   const exactCandidates = await MedicineMaster.find({ $or: [{ medicineId: { $in: ids } }, { canonicalKey: { $in: canonicalKeys } }] }, candidateProjection).lean();
   const nameCandidates = names.length
     ? await MedicineMaster.find({ brandName: { $in: names } }, candidateProjection).collation({ locale: 'en', strength: 2 }).lean()
     : [];
   const fuzzyPrefixes = fuzzyCandidatePrefixes(records);
   const fuzzyCandidates = fuzzyPrefixes.length
-    ? await loadCatalogueCandidates(
-      { $or: fuzzyPrefixes.map(prefix => ({ brandName: { $regex: '^' + prefix, $options: 'i' } })) },
-      { _id: 1, medicineId: 1, canonicalKey: 1, brandName: 1, genericName: 1, composition: 1, ingredients: 1, strength: 1, dosageForm: 1, manufacturer: 1 },
-      req.importJob ? async scanned => {
-        const progressPercent = Math.min(47, 42 + Math.floor(scanned / 5000));
-        await updateCatalogueImportJob(req.importJob, { stage: 'RECONCILING', progressPercent });
-      } : null
-    )
+    ? await MedicineMaster.find({ $or: fuzzyPrefixes.map(prefix => ({ brandName: { $regex: '^' + prefix, $options: 'i' } })) },
+      { medicineId: 1, canonicalKey: 1, brandName: 1, genericName: 1, composition: 1, ingredients: 1, strength: 1, dosageForm: 1, manufacturer: 1 })
+      .limit(5000).lean()
     : [];
   const existingByMongoId = new Map();
   for (const candidate of [...exactCandidates, ...nameCandidates, ...fuzzyCandidates]) existingByMongoId.set(String(candidate._id), candidate);
   const existing = [...existingByMongoId.values()];
-  if (req.importJob) await updateCatalogueImportJob(req.importJob, { stage: 'RECONCILING', progressPercent: 48 });
   const existingById = new Map(existing.map(item => [item.medicineId, item]));
   const existingKeyGroups = new Map();
   const existingNameGroups = new Map();
@@ -908,11 +813,6 @@ async function processCatalogueImportPreview(req, res) {
     if (best && ['AUTO_MERGE', 'MANUAL_REVIEW'].includes(best.decision)) {
       item.reconciliationMatch = { targetMedicineId: best.candidate.medicineId, method: 'HYBRID_TFIDF_NGRAM_LINKAGE', score: best.score, nameScore: best.nameScore, compositionScore: best.compositionScore, decision: best.decision, warnings: best.warnings };
     }
-    if (req.importJob && (recordIndex + 1) % 500 === 0) {
-      const progressPercent = 48 + Math.floor(((recordIndex + 1) / records.length) * 18);
-      await updateCatalogueImportJob(req.importJob, { stage: 'RECONCILING', progressPercent, processedRecords: sourceRecords, totalRecords: sourceRecords });
-      await yieldToEventLoop();
-    }
   }
   const recordsByMasterTarget = new Map();
   const deduplicatedRecords = [];
@@ -932,7 +832,6 @@ async function processCatalogueImportPreview(req, res) {
   }
   records = deduplicatedRecords;
   duplicatesRemoved += fuzzyTargetDuplicatesMerged;
-  if (req.importJob) await updateCatalogueImportJob(req.importJob, { stage: 'RECONCILING', progressPercent: 72, processedRecords: sourceRecords, totalRecords: sourceRecords });
   const fuzzyAutoMerge = records.filter(item => item.reconciliationMatch?.method === 'HYBRID_TFIDF_NGRAM_LINKAGE' && item.reconciliationMatch.decision === 'AUTO_MERGE').length;
   const fuzzyManualReview = records.filter(item => item.reconciliationMatch?.decision === 'MANUAL_REVIEW').length;
   const updateCandidates = records.filter(item => item.reconciliationMatch?.decision === 'AUTO_MERGE').length;
@@ -995,7 +894,7 @@ async function processCatalogueImportPreview(req, res) {
   }
 
 }
-router.post('/imports/preview', enforceCatalogueQueueCapacity, upload.single('jsonFile'), asyncHandler(async (req, res) => {
+router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (req, res) => {
   if (!req.file) return res.status(400).json({ message: 'Select a JSON file to upload.' });
   const jobId = randomUUID();
   await CatalogueImportJob.create({
@@ -1235,16 +1134,10 @@ router.get('/matches/review', async (req, res, next) => {
     const page = Math.max(1, Number.parseInt(req.query.page || '1', 10) || 1);
     const limit = Math.max(1, Math.min(100, Number.parseInt(req.query.limit || '100', 10) || 100));
     const status = String(req.query.status || 'PENDING').toUpperCase();
-    const parsedMinConfidence = Number.parseInt(req.query.minConfidence ?? '80', 10);
-    const minConfidence = Number.isFinite(parsedMinConfidence) ? Math.max(0, Math.min(100, parsedMinConfidence)) : 80;
-    const filter = {
-      confidence: { $gte: minConfidence },
-      ...(status === 'ALL'
-        ? { mappingStatus: { $ne: 'APPROVED' } }
-        : status === 'PENDING'
-          ? { $or: [{ mappingStatus: 'PENDING' }, { mappingStatus: { $exists: false } }] }
-          : { mappingStatus: status })
-    };
+    const filter = status === 'ALL'
+      ? { mappingStatus: { $ne: 'APPROVED' } }
+      : status === 'PENDING' ? { $or: [{ mappingStatus: 'PENDING' }, { mappingStatus: { $exists: false } }] }
+        : { mappingStatus: status };
     const [rows, total] = await Promise.all([
       MedicineMatchReference.find(filter).sort({ updatedAt: 1, _id: 1 }).skip((page - 1) * limit).limit(limit).lean(),
       MedicineMatchReference.countDocuments(filter)
@@ -1254,7 +1147,7 @@ router.get('/matches/review', async (req, res, next) => {
     candidateProjection._id = 0; candidateProjection.medicineId = 1;
     const candidates = ids.length ? await MedicineMaster.find({ medicineId: { $in: ids }, isArchived: { $ne: true } }, candidateProjection).lean() : [];
     const byId = new Map(candidates.map(item => [item.medicineId, item]));
-    return res.json({ items: rows.map(row => ({ ...row, candidates: (row.candidates || []).filter(candidate => Number(candidate.score ?? row.confidence ?? 0) >= minConfidence), candidate: byId.get(row.mappedMedicineId || row.medicineId) || null })), pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } });
+    return res.json({ items: rows.map(row => ({ ...row, candidate: byId.get(row.mappedMedicineId || row.medicineId) || null })), pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } });
   } catch (error) { return next(error); }
 });
 router.post('/matches/discover', async (req, res, next) => {
@@ -1379,7 +1272,7 @@ router.get('/imports/:batchId', asyncHandler(async (req, res) => {
 router.post('/imports/:batchId/approve', asyncHandler(async (req, res) => {
   const batch = await CatalogueImport.findOne({ batchId: req.params.batchId, isHidden: { $ne: true } });
   if (!batch) return res.status(404).json({ message: 'Catalogue import batch was not found.' });
-  if (!['READY', 'PARTIALLY_PUBLISHED'].includes(batch.status)) return res.status(409).json({ message: 'Only a ready or partially published batch can be approved.' });
+  if (batch.status !== 'READY') return res.status(409).json({ message: 'Only a ready batch can be approved.' });
   if (Number(batch.report?.blockingConflicts || 0) > 0) return res.status(409).json({ message: 'This combined batch contains conflicting source identifiers with different strength, form or composition. Separate the conflicting source batches before approval.' });
   if (req.body?.confirmReconciliation !== true || req.body?.reportFingerprint !== batch.reportFingerprint) return res.status(400).json({ message: 'Review confirmation does not match this reconciliation report. Refresh the batch and confirm the current report.' });
   batch.approvedBy = req.service.userId || req.service.name;
@@ -1404,32 +1297,10 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
     const recordChunks = stagedChunks.length ? stagedChunks.map(item => item.records) : (batch.records?.length ? [batch.records] : []);
     const records = recordChunks.flat();
     const freshReconciliation = await reconcileCatalogueRecordsAgainstMaster(records);
-    const blockedMedicineIds = new Set(freshReconciliation.blockers.map(item => item.medicineId).filter(Boolean));
-    const blockedTargets = new Set(freshReconciliation.blockers
-      .filter(item => item.reason === 'MULTIPLE_INCOMING_RECORDS_TARGET_SAME_MEDICINE')
-      .map(item => item.targetMedicineId).filter(Boolean));
-    const hasUnscopedBlocker = freshReconciliation.blockers.some(item =>
-      !item.medicineId && item.reason !== 'MULTIPLE_INCOMING_RECORDS_TARGET_SAME_MEDICINE'
-    );
-    const publishEntries = records.map((record, index) => ({ record, plan: freshReconciliation.plans[index] }))
-      .filter(({ record, plan }) => {
-        if (!['AUTO_MERGE', 'NO_MATCH'].includes(plan.decision)) return false;
-        if (blockedMedicineIds.has(record.medicineId)) return false;
-        if (plan.decision === 'AUTO_MERGE' && blockedTargets.has(plan.targetMedicineId)) return false;
-        if (plan.decision === 'NO_MATCH' && (freshReconciliation.scanTruncated || hasUnscopedBlocker)) return false;
-        return true;
-      });
-    const skippedCount = records.length - publishEntries.length;
-    const publishSummary = {
-      ...freshReconciliation.summary,
-      publishableRecords: publishEntries.length,
-      skippedRecords: skippedCount,
-      publishedRecords: 0
-    };
-    if (!publishEntries.length) {
+    if (freshReconciliation.blockers.length) {
       const refreshedReport = {
         ...(batch.report || {}),
-        publishReconciliation: publishSummary,
+        publishReconciliation: freshReconciliation.summary,
         publishBlockedAt: new Date().toISOString()
       };
       batch.report = refreshedReport;
@@ -1437,7 +1308,7 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
       batch.approvedAt = null;
       batch.approvedBy = '';
       batch.status = 'READY';
-      batch.errorMessage = 'Publishing blocked: no records passed live reconciliation. Resolve the conflicts and approve the updated report.';
+      batch.errorMessage = 'Publishing blocked: live catalogue reconciliation found stale, ambiguous or conflicting records. Review the updated report and approve again after resolving them.';
       await batch.save();
       return res.status(409).json({
         message: batch.errorMessage,
@@ -1445,14 +1316,15 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
         status: batch.status,
         report: refreshedReport,
         reportFingerprint: batch.reportFingerprint,
-        reconciliation: publishSummary
+        reconciliation: freshReconciliation.summary
       });
     }
-    const planByIndex = publishEntries;
-    for (let offset = 0; offset < planByIndex.length; offset += 250) {
-      const entries = planByIndex.slice(offset, offset + 250);
-      const chunk = entries.map(entry => entry.record);
-      const chunkPlans = entries.map(entry => entry.plan);
+    const planByIndex = freshReconciliation.plans;
+    let recordOffset = 0;
+    for (const recordChunk of recordChunks) for (let offset = 0; offset < recordChunk.length; offset += 250) {
+      const chunk = recordChunk.slice(offset, offset + 250);
+      const chunkPlans = planByIndex.slice(recordOffset, recordOffset + chunk.length);
+      recordOffset += chunk.length;
       const ids = [...new Set(chunkPlans.map(plan => plan.targetMedicineId).filter(Boolean))];
       const existing = ids.length ? await MedicineMaster.find({ medicineId: { $in: ids }, isArchived: { $ne: true } }).lean() : [];
       const byId = new Map(existing.map(item => [item.medicineId, item]));
@@ -1502,69 +1374,14 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
           }
         };
       });
-      let syncNgramIndex = false;
-      if (process.env.MEDICINE_NGRAM_INDEX_ENABLED === 'true') {
-        const syncState = await MedicineNameNgramIndexState.findOneAndUpdate(
-          { _id: 'brandName-v1', backfillCompletedAt: { $ne: null }, status: { $in: ['READY', 'SYNCING'] } },
-          { $inc: { activeSyncs: 1 }, $set: { status: 'SYNCING', updatedAt: new Date() } },
-          { new: true }
-        ).lean();
-        syncNgramIndex = Boolean(syncState);
-      }
       await MedicineMaster.bulkWrite(operations, { ordered: false });
-      if (syncNgramIndex) {
-        const indexMedicineIds = chunk.map((item, itemIndex) => chunkPlans[itemIndex].targetMedicineId || item.medicineId);
-        try {
-          await syncMedicineNameNgramIndex(indexMedicineIds);
-        } catch (error) {
-          await MedicineNameNgramIndexState.updateOne(
-            { _id: 'brandName-v1' },
-            { $set: { status: 'FAILED', updatedAt: new Date() } }
-          );
-          throw error;
-        } finally {
-          await MedicineNameNgramIndexState.updateOne(
-            { _id: 'brandName-v1' },
-            { $inc: { activeSyncs: -1 }, $set: { updatedAt: new Date() } }
-          );
-          await MedicineNameNgramIndexState.updateOne(
-            { _id: 'brandName-v1', activeSyncs: 0, backfillCompletedAt: { $ne: null }, status: 'SYNCING' },
-            { $set: { status: 'READY', updatedAt: new Date() } }
-          );
-        }
-      }
       // A master write invalidates every cached link immediately, including partial publishes.
       invalidateMedicineMasterVersionCache();
       publishedCount += chunk.length;
       await CatalogueImport.updateOne({ _id: batch._id }, { $set: { publishedCount } });
     }
-    const totalPublishedForBatch = await MedicineMaster.countDocuments({ lastImportBatchId: batch.batchId });
-    batch.publishedCount = Math.max(publishedCount, totalPublishedForBatch);
-    if (skippedCount > 0) {
-      const refreshedReport = {
-        ...(batch.report || {}),
-        publishReconciliation: { ...publishSummary, publishedRecords: batch.publishedCount },
-        publishBlockedAt: new Date().toISOString()
-      };
-      batch.report = refreshedReport;
-      batch.reportFingerprint = hash(JSON.stringify(refreshedReport));
-      batch.approvedAt = null;
-      batch.approvedBy = '';
-      batch.status = 'PARTIALLY_PUBLISHED';
-      batch.errorMessage = `Published ${batch.publishedCount} conflict-free records; ${skippedCount} records remain blocked for manual review or reconciliation.`;
-      await batch.save();
-      return res.json({
-        batchId: batch.batchId,
-        status: batch.status,
-        publishedCount: batch.publishedCount,
-        skippedCount,
-        message: batch.errorMessage,
-        report: batch.report,
-        reportFingerprint: batch.reportFingerprint
-      });
-    }
     batch.status = 'PUBLISHED';
-    batch.errorMessage = '';
+    batch.publishedCount = publishedCount;
     await batch.save();
     return res.json({ batchId: batch.batchId, status: batch.status, publishedCount, report: batch.report });
   } catch (error) {
@@ -1577,91 +1394,7 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
 }));
 
 export async function initializeMedicineCatalogueModels() {
-  await Promise.all([MedicineMaster.init(), CatalogueImport.init(), CatalogueImportChunk.init(), CatalogueImportJob.init(), CatalogueWorkerSlot.init()]);
-  await Promise.all(Array.from({ length: catalogueProcessingLimits.maxConcurrentJobs }, async (_, slotId) => {
-    try {
-      await CatalogueWorkerSlot.updateOne(
-        { slotId },
-        { $setOnInsert: { slotId, ownerId: '', leaseExpiresAt: new Date(0) } },
-        { upsert: true }
-      );
-    } catch (error) {
-      if (error.code !== 11000) throw error;
-    }
-  }));
+  await Promise.all([MedicineMaster.init(), CatalogueImport.init(), CatalogueImportChunk.init(), CatalogueImportJob.init()]);
   startMedicineCatalogueImportWorker();
 }
-
-const catalogueCleanupPlan = async () => {
-  const chunkCutoff = new Date(Date.now() - 60 * 60 * 1000);
-  const failedCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const publishedBatches = await CatalogueImport.find({ status: 'PUBLISHED', updatedAt: { $lt: chunkCutoff } }).select('batchId').lean();
-  const publishedIds = publishedBatches.map(batch => batch.batchId);
-  const readyJobs = await CatalogueImportJob.find({ status: 'READY', completedAt: { $lt: chunkCutoff }, batchId: { $in: publishedIds } }).select('jobId fileId fileSize').lean();
-  const failedJobs = await CatalogueImportJob.find({ status: 'FAILED', completedAt: { $lt: failedCutoff } }).select('jobId fileId fileSize').lean();
-  const jobs = [...readyJobs, ...failedJobs];
-  const jobFileIds = jobs.map(job => job.fileId).filter(Boolean);
-  const [chunkStats, jobStats] = await Promise.all([
-    CatalogueImportChunk.aggregate([
-      { $match: { batchId: { $in: publishedIds } } },
-      { $group: { _id: null, count: { $sum: 1 }, bytes: { $sum: { $bsonSize: '$$ROOT' } } } }
-    ]),
-    CatalogueImportJob.aggregate([
-      { $match: { jobId: { $in: jobs.map(job => job.jobId) } } },
-      { $group: { _id: null, count: { $sum: 1 }, bytes: { $sum: { $bsonSize: '$$ROOT' } } } }
-    ])
-  ]);
-  const gridFsBytes = jobs.reduce((sum, job) => sum + (Number(job.fileSize) || 0), 0);
-  return {
-    retention: { publishedImportHours: 1, failedJobHours: 24 },
-    protected: { medicineMasterCatalogue: 'Never deleted', importBatchReports: 'Retained', 'READY batches awaiting publish': 'Retained' },
-    collections: [
-      { name: 'medicinecatalogueimportchunks', count: chunkStats[0]?.count || 0, estimatedBytes: chunkStats[0]?.bytes || 0, rule: 'Chunks belonging only to PUBLISHED batches older than 1 hour' },
-      { name: 'medicinecatalogueimportjobs', count: jobStats[0]?.count || 0, estimatedBytes: jobStats[0]?.bytes || 0, rule: 'READY jobs for published batches older than 1 hour and FAILED jobs older than 24 hours' },
-      { name: 'medicineCatalogueUploads.files', count: jobFileIds.length, estimatedBytes: gridFsBytes, rule: 'GridFS uploads referenced by eligible terminal jobs' }
-    ],
-    eligibleJobIds: jobs.map(job => job.jobId),
-    eligibleFileIds: jobFileIds.map(id => String(id))
-  };
-};
-router.get('/admin/database-cleanup/status', asyncHandler(async (_req, res) => {
-  const { eligibleJobIds, eligibleFileIds, ...summary } = await catalogueCleanupPlan();
-  return res.json({ success: true, service: 'medicine-master-service', ...summary });
-}));
-router.post('/admin/database-cleanup/preview', asyncHandler(async (_req, res) => {
-  const { eligibleJobIds, eligibleFileIds, ...summary } = await catalogueCleanupPlan();
-  return res.json({ success: true, service: 'medicine-master-service', ...summary });
-}));
-router.post('/admin/database-cleanup/execute', asyncHandler(async (req, res) => {
-  if (req.body?.confirmation !== 'DELETE ELIGIBLE MEDICINE IMPORT DATA') {
-    return res.status(400).json({ success: false, code: 'CONFIRMATION_REQUIRED', message: 'Type the exact confirmation phrase to execute cleanup.' });
-  }
-  const plan = await catalogueCleanupPlan();
-  const results = [];
-  try {
-    const chunks = await CatalogueImportChunk.deleteMany({ batchId: { $in: (await CatalogueImport.find({ status: 'PUBLISHED', updatedAt: { $lt: new Date(Date.now() - 3600000) } }).distinct('batchId')) } });
-    results.push({ collection: 'medicinecatalogueimportchunks', status: 'COMPLETED', deletedCount: chunks.deletedCount || 0 });
-  } catch (error) {
-    results.push({ collection: 'medicinecatalogueimportchunks', status: 'FAILED', deletedCount: 0, error: error.message, code: error.code || null });
-  }
-  for (const jobId of plan.eligibleJobIds) {
-    try {
-      const job = await CatalogueImportJob.findOne({ jobId, status: { $in: ['READY', 'FAILED'] } }).lean();
-      if (!job) continue;
-      if (job.fileId) {
-        try { await getCatalogueImportBucket().delete(job.fileId); }
-        catch (error) { if (error.code !== 'ENOENT') throw error; }
-      }
-      await CatalogueImportJob.deleteOne({ _id: job._id });
-      results.push({ collection: 'medicinecatalogueimportjobs', status: 'COMPLETED', deletedCount: 1, jobId });
-    } catch (error) {
-      results.push({ collection: 'medicinecatalogueimportjobs', status: 'FAILED', deletedCount: 0, jobId, error: error.message, code: error.code || null });
-    }
-  }
-  const failed = results.some(item => item.status === 'FAILED');
-  const actorId = req.service?.userId || req.service?.name || 'super-admin';
-  console.info(JSON.stringify({ event: 'database_cleanup_completed', service: 'medicine-master-service', actor: actorId, requestId: req.requestId, results, at: new Date().toISOString() }));
-  return res.status(failed ? 207 : 200).json({ success: !failed, service: 'medicine-master-service', executedAt: new Date(), actor: actorId, results });
-}));
-
 export default router;

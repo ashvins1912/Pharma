@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { getReadableErrorMessage } from '../../../utils/errorMessage';
 import apiClient from '../../../api/apiClient';
 import { useToast } from '../../../context/ToastContext';
 import { useTenant } from '../../../context/TenantContext';
@@ -140,7 +139,7 @@ export default function RiderTerminal({ riderId, onClose }) {
       addToast(`Rider duty status updated to ${newStatus.toUpperCase()}`, 'success');
       fetchRiderData();
     } catch (error) {
-      addToast(getReadableErrorMessage(error, 'Failed to update status'), 'error');
+      addToast(error.response?.data?.message || 'Failed to update status', 'error');
     }
   };
 
@@ -183,7 +182,7 @@ export default function RiderTerminal({ riderId, onClose }) {
       setOtpCode('');
       await fetchRiderData();
     } catch (error) {
-      addToast(getReadableErrorMessage(error, 'Delivery verification failed. Check the code and order assignment.'), 'error');
+      addToast(error.response?.data?.message || 'Delivery verification failed. Check the code and order assignment.', 'error');
     } finally {
       setVerifyingDelivery(false);
     }

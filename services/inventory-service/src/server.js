@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 import express from 'express';
 import multer from 'multer';
 import mongoose from 'mongoose';
-import { createServiceDatabase } from '@pharma/database-kernel';
 import { config, validateConfig } from './config.js';
 import routes from './routes.js';
 import stagedImportRoutes from './staged-import-routes.js';
@@ -11,16 +10,6 @@ import { initializeMedicineMatchReferenceModel } from './medicine-match-queue.js
 import { Audit, ImportBatch, ImportBatchSnapshot, ImportFailure, ImportJob, Inventory, Product, Reservation } from './models.js';
 
 validateConfig();
-const database = createServiceDatabase({
-  serviceName: 'inventory-service',
-  mongoose,
-  mongoOptions: {
-    serverSelectionTimeoutMS: 5000,
-    maxPoolSize: config.mongoMaxPoolSize,
-    minPoolSize: 0,
-    maxIdleTimeMS: 30_000
-  }
-});
 const app = express();
 app.disable('x-powered-by');
 app.use((req, res, next) => {
@@ -65,7 +54,7 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: '8mb' }));
 app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'inventory-service' }));
 app.get('/ready', (_req, res) => {
-  const ready = database.isReady();
+  const ready = mongoose.connection.readyState === 1;
   res.status(ready ? 200 : 503).json({ status: ready ? 'ready' : 'not-ready', database: ready ? 'connected' : 'disconnected' });
 });
 // Staged import routes are mounted first so uploads are stored for review only.
@@ -91,7 +80,11 @@ app.use((error, req, res, _next) => {
   });
 });
 
-await database.connect();
+await mongoose.connect(config.mongoUri, {
+  dbName: config.dbName,
+  serverSelectionTimeoutMS: 5000,
+  maxPoolSize: 20
+});
 await Promise.all([
   Product.init(),
   Inventory.init(),
@@ -118,7 +111,7 @@ const server = app.listen(config.port, '0.0.0.0', () => {
 
 const shutdown = async () => {
   server.close();
-  await database.disconnect();
+  await mongoose.disconnect();
 };
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);

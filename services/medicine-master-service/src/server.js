@@ -2,23 +2,12 @@ import { randomUUID } from 'node:crypto';
 import express from 'express';
 import multer from 'multer';
 import mongoose from 'mongoose';
-import { createServiceDatabase } from '@pharma/database-kernel';
 import { config, validateConfig } from './config.js';
 import medicineCatalogueImportRoutes, { initializeMedicineCatalogueModels, stopMedicineCatalogueImportWorker } from './medicine-catalogue-import-routes.js';
 import medicineCatalogueRoutes from './medicine-catalogue-routes.js';
 import { initializeMedicineMatchReferenceModel, startMedicineMatchWorker, stopMedicineMatchWorker } from './medicine-match-reference.js';
 
 validateConfig();
-const database = createServiceDatabase({
-  serviceName: 'medicine-master-service',
-  mongoose,
-  mongoOptions: {
-    serverSelectionTimeoutMS: 10000,
-    maxPoolSize: config.mongoMaxPoolSize,
-    minPoolSize: 0,
-    maxIdleTimeMS: 30_000
-  }
-});
 const app = express();
 app.disable('x-powered-by');
 app.use((req, res, next) => {
@@ -36,7 +25,7 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: '8mb' }));
 app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'medicine-master-service' }));
 app.get('/ready', (_req, res) => {
-  const ready = database.isReady();
+  const ready = mongoose.connection.readyState === 1;
   res.status(ready ? 200 : 503).json({ status: ready ? 'ready' : 'not-ready', database: ready ? 'connected' : 'disconnected' });
 });
 app.use('/api/v1/inventory/catalogue/medicines', medicineCatalogueRoutes);
@@ -56,7 +45,9 @@ app.use((error, req, res, _next) => {
   });
 });
 
-await database.connect();
+await mongoose.connect(config.mongoUri, {
+  dbName: config.dbName, serverSelectionTimeoutMS: 10000, maxPoolSize: 20
+});
 await Promise.all([initializeMedicineCatalogueModels(), initializeMedicineMatchReferenceModel()]);
 startMedicineMatchWorker();
 
@@ -70,7 +61,7 @@ const shutdown = async () => {
   stopMedicineCatalogueImportWorker();
   stopMedicineMatchWorker();
   await new Promise(resolve => server.close(resolve));
-  await database.disconnect();
+  await mongoose.disconnect();
 };
 process.once('SIGTERM', shutdown);
 process.once('SIGINT', shutdown);

@@ -69,5 +69,6 @@ Thumbs.db
 /backend/data/whatsapp-auth/
 /data/whatsapp-auth/
 .local-logs/
+.rbac-snapshots/
 bun.lock
 *.lockb

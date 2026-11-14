@@ -289,7 +289,7 @@ export default function Header({
               ).trim().split(/\s+/)[0] || "Friend";
 
               return (
-                <div className="hidden min-[480px]:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:bg-amber-400/20 dark:border-amber-400/40 dark:text-amber-300 text-xs font-black shrink-0 shadow-xs" title="Time-based user greeting">
+                <div className="hidden min-[480px]:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-black shrink-0 shadow-xs" title="Time-based user greeting">
                   <span className="text-amber-500">👋</span>
                   <span className="truncate max-w-[150px] sm:max-w-[200px] tracking-tight">
                     {istGreeting}, {userFirstName}!
@@ -472,7 +472,7 @@ export default function Header({
                   ).trim().split(/\s+/)[0] || "Friend";
 
                   return (
-                    <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:bg-amber-400/20 dark:border-amber-400/40 dark:text-amber-300 text-xs font-black">
+                    <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-black">
                       <span className="text-base">👋</span>
                       <span className="truncate">
                         {istGreeting}, {userFirstName}!

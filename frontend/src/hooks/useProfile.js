@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from 'react';
-import { getReadableErrorMessage } from '../utils/errorMessage';
 import {
   addAddress as addProfileAddress,
   deleteAddress as deleteProfileAddress,
@@ -24,7 +23,7 @@ export function useProfile({ enabled = true } = {}) {
       setAddresses(result.addresses);
       return result;
     } catch (requestError) {
-      setError(getReadableErrorMessage(requestError, 'Could not load profile.'));
+      setError(requestError?.message || 'Could not load profile.');
       throw requestError;
     } finally {
       setLoading(false);
@@ -46,7 +45,7 @@ export function useProfile({ enabled = true } = {}) {
         setAddresses(result.addresses);
       })
       .catch((requestError) => {
-        if (active) setError(getReadableErrorMessage(requestError, 'Could not load profile.'));
+        if (active) setError(requestError?.message || 'Could not load profile.');
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -64,7 +63,7 @@ export function useProfile({ enabled = true } = {}) {
       setProfile(updated);
       return updated;
     } catch (requestError) {
-      setError(getReadableErrorMessage(requestError, 'Could not update profile.'));
+      setError(requestError?.message || 'Could not update profile.');
       throw requestError;
     } finally {
       setSaving(false);
@@ -84,7 +83,7 @@ export function useProfile({ enabled = true } = {}) {
       ]);
       return created;
     } catch (requestError) {
-      setError(getReadableErrorMessage(requestError, 'Could not save address.'));
+      setError(requestError?.message || 'Could not save address.');
       throw requestError;
     } finally {
       setSaving(false);
@@ -100,7 +99,7 @@ export function useProfile({ enabled = true } = {}) {
       setAddresses(nextAddresses);
       return nextAddresses;
     } catch (requestError) {
-      setError(getReadableErrorMessage(requestError, 'Could not delete address.'));
+      setError(requestError?.message || 'Could not delete address.');
       throw requestError;
     } finally {
       setSaving(false);

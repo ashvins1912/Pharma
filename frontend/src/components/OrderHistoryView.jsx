@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { getReadableErrorMessage } from '../utils/errorMessage';
 import { useApp } from '../context/AppContext';
 import apiClient from '../api/apiClient';
 import { useToast } from '../context/ToastContext';
@@ -38,7 +37,7 @@ export default function OrderHistoryView({ onTrackOrder }) {
         addToast(t('orderCancelled'), 'success');
         await loadUserOrders({ silent: true });
       } catch (error) {
-        addToast(getReadableErrorMessage(error, t('couldNotCancel')), 'error');
+        addToast(error.message || t('couldNotCancel'), 'error');
       }
     });
   };
@@ -49,7 +48,7 @@ export default function OrderHistoryView({ onTrackOrder }) {
         const res = await apiClient.get(`/api/orders/${encodeURIComponent(order._id)}`);
         onTrackOrder(res.data?.order || res.data?.data || res.data || order);
       } catch (error) {
-        addToast(getReadableErrorMessage(error, t('couldNotTrack')), 'error');
+        addToast(error.message || t('couldNotTrack'), 'error');
       }
     });
   };
@@ -91,21 +90,21 @@ export default function OrderHistoryView({ onTrackOrder }) {
 
       {loadingOrders ? (
         <div className="space-y-3 py-6 animate-pulse">
-          <div className="h-5 bg-slate-200 dark:bg-slate-700 rounded-lg w-48 mb-4"></div>
+          <div className="h-5 bg-slate-200 rounded-lg w-48 mb-4"></div>
           {[1, 2, 3].map(n => (
-            <div key={n} className="h-20 bg-slate-100 dark:bg-slate-800 rounded-2xl w-full"></div>
+            <div key={n} className="h-20 bg-slate-100 rounded-2xl w-full"></div>
           ))}
         </div>
       ) : ordersError ? (
         <div className="rounded-2xl border border-rose-100 bg-rose-50 p-4 text-sm text-rose-800" role="alert">
-          <p>{ordersError}</p>
+          <p>{typeof ordersError === 'string' ? ordersError : String(ordersError?.message || ordersError?.error || ordersError || '')}</p>
           <button type="button" onClick={() => loadUserOrders()} disabled={loadingOrders} className="mt-2 font-bold underline disabled:opacity-50">{t('tryAgain')}</button>
         </div>
       ) : activeOrders.length === 0 ? (
-        <div className="py-16 text-center text-slate-400 space-y-2">
-          <p className="text-3xl">📋</p>
-          <p className="text-xs font-bold text-slate-700">{t('noActiveOrders')}</p>
-          <p className="text-[11px] text-slate-400">{t('ordersAppearHere')}</p>
+        <div className="py-16 text-center text-slate-600 space-y-2">
+          <p className="text-3xl" aria-hidden="true">📋</p>
+          <p className="text-xs font-bold text-slate-800">{t('noActiveOrders')}</p>
+          <p className="text-xs text-slate-600">{t('ordersAppearHere')}</p>
         </div>
       ) : (
         <>
@@ -113,7 +112,7 @@ export default function OrderHistoryView({ onTrackOrder }) {
           <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead>
-                <tr className="border-b border-slate-200 text-slate-400 text-[10px] font-extrabold uppercase tracking-wider">
+                <tr className="border-b border-slate-200 text-slate-600 text-[11px] font-extrabold uppercase tracking-wider">
                   <th className="py-3 px-3">{t('orderId')}</th>
                   <th className="py-3 px-3">{t('date')}</th>
                   <th className="py-3 px-3">{t('items')}</th>
@@ -184,7 +183,7 @@ export default function OrderHistoryView({ onTrackOrder }) {
                   <header className="qm-mobile-record-header">
                     <div>
                       <span className="font-black text-slate-900 text-xs">#{orderId}</span>
-                      <span className="text-[10px] text-slate-400 block">
+                      <span className="text-xs text-slate-600 block">
                         {new Date(order.createdAt).toLocaleDateString()}
                       </span>
                     </div>
@@ -203,8 +202,8 @@ export default function OrderHistoryView({ onTrackOrder }) {
 
                   <footer className="qm-mobile-record-footer">
                     <div>
-                      <span className="text-[10px] text-slate-400 block font-bold">TOTAL</span>
-                      <span className="font-extrabold text-emerald-600 text-sm">₹{order.finalTotal}</span>
+                      <span className="text-[11px] text-slate-600 block font-bold">TOTAL</span>
+                      <span className="font-extrabold text-emerald-700 text-sm">₹{order.finalTotal}</span>
                     </div>
                     <div className="qm-mobile-record-actions">
                       {editableStatuses.includes(getNormalizedStatus(order)) && (

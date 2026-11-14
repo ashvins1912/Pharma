@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import apiClient from '../../api/apiClient';
 import { useLanguage } from '../../context/LanguageContext';
-import { getReadableErrorMessage } from '../../utils/errorMessage';
 
 export default function VerifyEmailView({ token, onClose, onOpenSignIn }) {
   const { t } = useLanguage();
@@ -23,7 +22,10 @@ export default function VerifyEmailView({ token, onClose, onOpenSignIn }) {
         await apiClient.post('/api/v1/auth/verify-email', { token });
         setVerified(true);
       } catch (err) {
-        setErrorMessage(getReadableErrorMessage(err, t('verificationInvalidExpired')));
+        const msg = err.response?.data?.error?.message
+          || err.response?.data?.message
+          || t('verificationInvalidExpired');
+        setErrorMessage(msg);
       } finally {
         setLoading(false);
       }

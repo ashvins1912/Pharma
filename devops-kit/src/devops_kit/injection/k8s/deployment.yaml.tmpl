@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ${SERVICE_NAME}
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/name: ${SERVICE_NAME}
+    devops-kit.io/environment: ${ENVIRONMENT}
+  annotations:
+    ${RELOAD_ANNOTATIONS}
+spec:
+  replicas: ${REPLICAS}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ${SERVICE_NAME}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ${SERVICE_NAME}
+        devops-kit.io/environment: ${ENVIRONMENT}
+      annotations:
+        checksum/config: "${CONFIG_CHECKSUM}"
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: ${SERVICE_NAME}
+          image: ${IMAGE_URI}
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: ${SERVICE_NAME}-runtime-config
+            - secretRef:
+                name: ${SERVICE_NAME}-runtime-secrets
+          resources:
+            requests:
+              cpu: ${CPU_REQUEST}
+              memory: ${MEM_REQUEST}
+            limits:
+              cpu: ${CPU_LIMIT}
+              memory: ${MEM_LIMIT}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]

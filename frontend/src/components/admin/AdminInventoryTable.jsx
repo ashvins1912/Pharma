@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { getReadableErrorMessage } from '../../utils/errorMessage';
 import { createPortal } from 'react-dom';
 import { useApp } from '../../context/AppContext';
 import { useToast } from '../../context/ToastContext';
@@ -70,7 +69,7 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
       setRestockQuantities(initialQty);
     } catch (err) {
       console.error('Fetch restock suggestions error:', err);
-      addToast(getReadableErrorMessage(err, 'Could not calculate restock suggestions.'), 'error');
+      addToast(err.response?.data?.message || err.message || 'Could not calculate restock suggestions.', 'error');
     } finally {
       setRestockLoading(false);
     }
@@ -116,7 +115,7 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
         setShowRestockModal(false);
       }
     } catch (err) {
-      addToast(getReadableErrorMessage(err, 'Restock application failed.'), 'error');
+      addToast(err.response?.data?.message || err.message || 'Restock application failed.', 'error');
     } finally {
       setApplyingRestock(false);
     }
@@ -158,7 +157,7 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
     } catch (err) {
       if (requestVersion !== inventoryRequestRef.current) return;
       console.error('Admin inventory load error:', err);
-      setLoadError(getReadableErrorMessage(err, 'Could not load inventory. Please retry.'));
+      setLoadError(err.response?.data?.message || err.message || 'Could not load inventory. Please retry.');
     } finally {
       if (requestVersion === inventoryRequestRef.current) setLoading(false);
     }
@@ -225,7 +224,7 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
       await loadAdminInventory(adminPage, searchTerm);
       refreshStorefrontInventory();
     } catch (err) {
-      addToast(getReadableErrorMessage(err, t('saveMedicineFailed')), 'error');
+      addToast(err.message || t('saveMedicineFailed'), 'error');
     } finally {
       setSavingMedicine(false);
     }
@@ -240,7 +239,7 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
       await loadAdminInventory(adminPage, searchTerm);
       fetchMedicines();
     } catch (err) {
-      addToast(getReadableErrorMessage(err, t('archiveMedicineFailed')), 'error');
+      addToast(err.message || t('archiveMedicineFailed'), 'error');
     }
   };
 

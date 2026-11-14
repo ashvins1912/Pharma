@@ -41,6 +41,7 @@ export default {
         "surface-lg": "1.5rem",
       },
       boxShadow: {
+        "xs": "0 1px 2px 0 rgb(15 23 42 / 0.05)",
         "surface": "0 1px 2px rgb(15 23 42 / 0.04), 0 8px 24px rgb(15 23 42 / 0.035)",
         "raised": "0 12px 32px rgb(15 23 42 / 0.09)",
       },

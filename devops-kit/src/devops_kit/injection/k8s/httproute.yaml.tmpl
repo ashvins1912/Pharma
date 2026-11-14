@@ -1,0 +1,23 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: ${SERVICE_NAME}-route
+  namespace: ${NAMESPACE}
+spec:
+  parentRefs:
+    - name: platform-edge-gateway
+      namespace: istio-system
+  hostnames:
+    - ${PUBLIC_DOMAIN}
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: ${PATH_PREFIX}
+      backendRefs:
+        - name: ${SERVICE_NAME}-stable
+          port: 80
+          weight: ${STABLE_WEIGHT}
+        - name: ${SERVICE_NAME}-canary
+          port: 80
+          weight: ${CANARY_WEIGHT}

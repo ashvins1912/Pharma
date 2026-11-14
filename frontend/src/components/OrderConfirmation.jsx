@@ -1,5 +1,4 @@
 import React from 'react';
-import { getReadableErrorMessage } from '../utils/errorMessage';
 import { useAuth } from '../context/AuthContext';
 import OrderSummaryCard from './OrderSummaryCard';
 import apiClient from '../api/apiClient';
@@ -28,7 +27,7 @@ export default function OrderConfirmation({ order, onTrackOrder, onContinueShopp
         const res = await apiClient.get(`/api/orders/${encodeURIComponent(targetId)}`);
         onTrackOrder(res.data?.order || res.data?.data || res.data || order);
       } catch (error) {
-        addToast(getReadableErrorMessage(error, t('couldNotTrack')), 'error');
+        addToast(error.message || t('couldNotTrack'), 'error');
       }
     });
   };

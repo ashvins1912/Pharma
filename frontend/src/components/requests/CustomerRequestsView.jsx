@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { getReadableErrorMessage } from '../../utils/errorMessage';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
@@ -62,7 +61,7 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
       await loadUserMedicineRequests({ page: 1, statusGroup: statusFilter });
       window.dispatchEvent(new Event('stock-waitlist-updated'));
     } catch (error) {
-      addToast(getReadableErrorMessage(error, 'Could not add this medicine request to the stock waitlist.'), 'error');
+      addToast(error.response?.data?.message || 'Could not add this medicine request to the stock waitlist.', 'error');
     } finally {
       setWaitingRequestId('');
     }
@@ -81,7 +80,7 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
         addToast(result.message || t('prescriptionUpdated'), 'success');
         await loadUserMedicineRequests({ page: 1, statusGroup: statusFilter });
       } catch (error) {
-        addToast(getReadableErrorMessage(error, t('prescriptionUpdateFailed')), 'error');
+        addToast(error.message || t('prescriptionUpdateFailed'), 'error');
       } finally {
         setUpdatingPrescriptionId(null);
       }
@@ -218,7 +217,7 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
       {/* Requests List */}
       {medicineRequestsError ? (
         <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800" role="alert">
-          <p>{medicineRequestsError}</p>
+          <p>{typeof medicineRequestsError === 'string' ? medicineRequestsError : String(medicineRequestsError?.message || medicineRequestsError?.error || medicineRequestsError || '')}</p>
           <button
             type="button"
             onClick={() => loadUserMedicineRequests()}
@@ -231,15 +230,15 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
       ) : loadingMedicineRequests && medicineRequests.length === 0 ? (
         <div className="space-y-3 py-6 animate-pulse">
           {[1, 2, 3].map(n => (
-            <div key={n} className="h-24 bg-slate-100 dark:bg-slate-800 rounded-2xl w-full"></div>
+            <div key={n} className="h-24 bg-slate-100 rounded-2xl w-full"></div>
           ))}
         </div>
       ) : filteredRequests.length === 0 ? (
-        <div className="py-16 text-center text-slate-400 space-y-3">
-          <p className="text-4xl">💊</p>
+        <div className="py-16 text-center text-slate-600 space-y-3">
+          <p className="text-4xl" aria-hidden="true">💊</p>
           <div className="max-w-sm mx-auto space-y-1">
-            <p className="text-xs font-bold text-slate-700">{t('noMedicineRequests')}</p>
-            <p className="text-[11px] text-slate-400">
+            <p className="text-xs font-bold text-slate-800">{t('noMedicineRequests')}</p>
+            <p className="text-xs text-slate-600">
               {statusFilter === 'ALL'
                 ? "Can't find a medicine in our store? Ask QuickMeds Rx to procure it for you."
                 : t('noRequestsFilter')}
@@ -247,7 +246,7 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
           </div>
           <button
             onClick={() => openRequestModal()}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2 rounded-xl transition cursor-pointer shadow-sm"
+            className="min-h-11 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2 rounded-xl transition cursor-pointer shadow-xs"
           >
             Request a Medicine Now
           </button>
@@ -271,11 +270,11 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
                     <span className="font-black text-sm text-slate-900 font-mono">
                       #{req.requestNumber}
                     </span>
-                    <span className="text-[11px] text-slate-400">
+                    <span className="text-xs text-slate-600">
                       • {new Date(req.createdAt).toLocaleDateString()}
                     </span>
                     {firstItem.originalAvailabilityStatus === 'OUT_OF_STOCK' && (
-                      <span className="text-[9px] font-bold uppercase bg-amber-100 text-amber-800 px-1.5 py-0.2 rounded">
+                      <span className="text-[11px] font-bold uppercase bg-amber-50 border border-amber-200 text-amber-800 px-1.5 py-0.5 rounded">
                         Out of Stock Arrangement
                       </span>
                     )}
@@ -289,32 +288,27 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
                   
                   <div className="space-y-0.5">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600 block">
                       Requested Medicine
                     </span>
                     <ul className="space-y-1">
-                      {(req.requestedItems || []).length > 0 ? (req.requestedItems || []).map((item, index) => (
+                      {(req.requestedItems || []).map((item, index) => (
                         <li key={`${item.requestedName}-${index}`}>
                           <p className="font-extrabold text-slate-900 text-sm">
                             {item.requestedName || t('medicine')}
                           </p>
-                          <p className="text-[11px] text-slate-500">
+                          <p className="text-xs text-slate-600">
                             {item.dosageForm && `${item.dosageForm} • `}
                             {item.strength && `${item.strength} • `}
                             Qty: {item.quantity || 1}
                           </p>
                         </li>
-                      )) : req.prescriptionId || req.prescriptionUrl ? (
-                        <li>
-                          <p className="font-extrabold text-slate-900 text-sm">Prescription attached</p>
-                          <p className="text-[11px] text-slate-500">Medicine details pending pharmacist review</p>
-                        </li>
-                      ) : null}
+                      ))}
                     </ul>
                   </div>
 
                   <div className="space-y-0.5">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600 block">
                       Delivery Window
                     </span>
                     <p className="font-bold text-slate-800 text-xs">
@@ -322,26 +316,26 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
                         ? proposal.deliverySlot.label
                         : `Preference: ${req.preferredDeliveryPreference || 'Flexible'}`}
                     </p>
-                    <p className="text-[11px] text-slate-500 truncate max-w-xs">
+                    <p className="text-xs text-slate-600 truncate max-w-xs">
                       📍 {req.deliveryAddress}
                     </p>
                   </div>
 
                   <div className="space-y-0.5 sm:text-right">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600 block">
                       {proposal?.priceType === 'APPROXIMATE' ? t('approximatePrice') : t('priceProposal')}
                     </span>
                     {proposal ? (
                       <div>
-                        <span className="text-base font-black text-emerald-600">
+                        <span className="text-base font-black text-emerald-700">
                           ₹{proposal.finalPrice ?? proposal.totalPrice ?? proposal.approximatePrice}
                         </span>
-                        <span className="text-[10px] text-slate-400 block">
+                        <span className="text-xs text-slate-600 block">
                           ({proposal.priceType === 'APPROXIMATE' ? t('approximate') : t('guaranteedFinalPrice')})
                         </span>
                       </div>
                     ) : (
-                      <span className="text-slate-400 text-xs font-semibold">
+                      <span className="text-slate-600 text-xs font-semibold">
                         Awaiting Pharmacist Quote
                       </span>
                     )}

@@ -851,18 +851,46 @@ function MainApp() {
 
       <ModalAccessibilityManager />
 
-      {/* Mobile Quick Actions Floating Action Button */}
+      {/* Quick Actions Floating Menu (Refill Prescriptions, Request Rx, Tracking, Cart & Pharmacist Desk) */}
       <QuickActionsFAB
         onRefillPrescriptions={() => {
           if (!user) {
             setAuthOpen(true);
             return;
           }
-          setActiveTab('requests');
+          handleTabSwitch('requests');
         }}
+        onRequestMedicine={() => {
+          if (!user) {
+            setAuthOpen(true);
+            return;
+          }
+          openRequestModal();
+        }}
+        onTrackOrders={() => {
+          if (!user) {
+            setAuthOpen(true);
+            return;
+          }
+          handleTabSwitch('orders');
+        }}
+        onSavedAddresses={() => {
+          if (!user) {
+            setAuthOpen(true);
+            return;
+          }
+          handleTabSwitch('addresses');
+        }}
+        onOpenCart={() => setCartOpen(true)}
         onContactPharmacist={() => {
-          setWhatsappModalOpen(true);
+          if (user && hasPermission('whatsapp.manage')) {
+            setWhatsappModalOpen(true);
+          }
         }}
+        canManageWhatsapp={Boolean(user && hasPermission('whatsapp.manage'))}
+        cartCount={Array.isArray(cart) ? cart.reduce((sum, item) => sum + (Number(item?.quantity) || 1), 0) : 0}
+        pharmacyPhone={activeTenant?.phone || whatsappStatus?.phone || '+91 95899 16475'}
+        pharmacyName={activeTenant?.name || 'QuickMeds Rx'}
       />
 
     </div>

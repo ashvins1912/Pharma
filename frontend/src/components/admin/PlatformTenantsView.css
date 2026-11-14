@@ -45,7 +45,7 @@
   .platform-tenants-view .platform-tenants-table tbody td:last-child { display: block; text-align: left; border-bottom: 0; padding-top: 12px; background: #f8fafc; }
   .platform-tenants-view .platform-tenants-table tbody td:last-child::before { content: "Tenant actions"; display: block; max-width: none; margin-bottom: 8px; }
   .platform-tenants-view .platform-tenants-table tbody td:last-child > div { display: flex; justify-content: flex-start; gap: 6px; }
-  .platform-tenants-view .platform-tenants-table tbody td:last-child button { min-height: 34px; padding: 7px 9px; }
+  .platform-tenants-view .platform-tenants-table tbody td:last-child button { min-height: 44px; padding: 8px 12px; }
   .platform-tenants-view .platform-tenants-table tbody td:nth-child(2) > div:first-child { font-size: 12px; }
   .platform-tenants-view .platform-tenants-table tbody td:nth-child(3) { font-size: 10px; }
   .platform-tenants-view .platform-tenants-table tbody td:nth-child(4) { align-items: center; }
@@ -77,4 +77,22 @@
   .platform-tenants-view .platform-tenants-table tbody td:nth-child(4)::before { content: "Status"; }
   .platform-tenants-view .platform-tenants-table tbody td:nth-child(5)::before { content: "Contact"; }
   .platform-tenants-view .platform-tenants-table tbody td:nth-child(6)::before { content: "Locale & currency"; }
+}
+
+.platform-tenants-view :where(button, a, input, select):focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  .platform-tenants-view .platform-tenants-table tbody tr { transition: none; }
+}
+html.dark .platform-governance-strip { border-color: #1e3a8a; background: linear-gradient(110deg, #0f172a, #111c2e 62%); }
+html.dark .platform-governance-intro h3 { color: #f8fafc; }
+html.dark .platform-governance-intro p, html.dark .platform-governance-check div > span { color: #94a3b8; }
+html.dark .platform-governance-check { border-color: #334155; background: rgba(15,23,42,.82); }
+html.dark .platform-governance-check strong { color: #e2e8f0; }
+html.dark .platform-tenants-view .platform-tenants-table tbody tr:hover { background: #17263b; }
+@media (max-width: 860px) {
+  html.dark .platform-tenants-view .platform-tenants-table tbody tr { border-color: #334155; background: #111c2e; }
+  html.dark .platform-tenants-view .platform-tenants-table tbody tr:hover { background: #111c2e; }
+  html.dark .platform-tenants-view .platform-tenants-table tbody td { border-bottom-color: #1e293b; }
+  html.dark .platform-tenants-view .platform-tenants-table tbody td::before { color: #94a3b8; }
+  html.dark .platform-tenants-view .platform-tenants-table tbody td:last-child { background: #0f172a; }
 }
