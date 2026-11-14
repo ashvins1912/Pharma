@@ -221,6 +221,7 @@ export default function DevOpsDeploymentCenter() {
         {(releaseReadiness?.providers || ['aws','azure','gcp','kubernetes','launchdarkly'].map(provider => ({provider,preflight:false,deployment:false,rollback:false}))).map(item => <div key={item.provider} className="rounded-lg bg-slate-50 p-2 text-xs dark:bg-slate-800">
           <p className="font-bold uppercase">{item.provider}</p>
           <p className={item.preflight ? 'text-emerald-700 dark:text-emerald-300' : 'text-amber-700 dark:text-amber-300'}>Preflight: {item.preflight ? 'PASS' : 'Pending'}</p>
+          <p className={item.targetVerified ? 'text-emerald-700 dark:text-emerald-300' : 'text-amber-700 dark:text-amber-300'}>Target: {item.targetVerified ? 'Verified' : 'Stale / pending'}</p>
           <p className={item.deployment ? 'text-emerald-700 dark:text-emerald-300' : 'text-amber-700 dark:text-amber-300'}>Staging deploy: {item.deployment ? 'PASS' : 'Pending'}</p>
           <p className={item.rollback ? 'text-emerald-700 dark:text-emerald-300' : 'text-amber-700 dark:text-amber-300'}>Rollback: {item.rollback ? 'PASS' : 'Pending'}</p>
         </div>)}
