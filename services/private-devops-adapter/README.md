@@ -21,7 +21,7 @@ The adapter now performs native read-only identity checks before it reports a pr
 | Kubernetes | `token`, `namespace`; API server URL in the integration endpoint or `server` | API server version and namespace read |
 | LaunchDarkly | `apiKey`, `projectKey`, `environmentKey` | Project/environment read using LaunchDarkly API |
 
-Credential field names are the adapter's input contract. Existing vault entries must be mapped to this shape by the trusted Admin service before staging checks. Credentials are used in memory only and must never be written to logs or job/evidence records.
+Credential field names are the adapter's input contract. Existing vault entries must be mapped to this shape by the trusted Admin service before staging checks. Credentials are used in memory only and must never be written to logs or job/evidence records. Kubernetes API hosts must be listed in `KUBERNETES_API_ALLOWED_HOSTS` in production; LaunchDarkly defaults to `app.launchdarkly.com` and any additional host must be explicitly listed in `LAUNCHDARKLY_API_ALLOWED_HOSTS`.
 
 ## Deployment execution drivers
 
