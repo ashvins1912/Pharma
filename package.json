@@ -12,8 +12,8 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "node scripts/dev.js",
-    "start:all": "npm run build && node scripts/service-runner.js start",
+    "dev": "node scripts/workspace.mjs dev",
+    "start:all": "npm run build && node scripts/workspace.mjs start",
     "start": "npm run start:all",
     "dev:split": "START_ADMIN_SERVICE=true node scripts/dev.js",
     "dev:frontend": "npm --workspace frontend run dev",
