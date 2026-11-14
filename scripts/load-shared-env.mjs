@@ -31,8 +31,8 @@ function parseEnvFile(contents) {
  */
 export function loadSharedLocalEnv() {
   const files = [
-    path.join(root, '.env'),
-    path.join(root, 'env', 'local.env')
+    path.join(root, 'env', 'local.env'),
+    path.join(root, '.env')
   ];
   for (const file of files) {
     if (!fs.existsSync(file)) continue;
