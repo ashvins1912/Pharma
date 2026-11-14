@@ -48,7 +48,7 @@ AWS example:
   "executionRoleArn": "arn:aws:iam::123456789012:role/pharma-ecs-execution",
   "subnetIds": ["subnet-0123456789abcdef0"],
   "securityGroupIds": ["sg-0123456789abcdef0"],
-  "stateBackend": {"type":"s3","bucket":"existing-tf-state","key":"pharma/staging.tfstate","region":"ap-south-1"}
+  "stateBackend": {"type":"s3","bucket":"existing-tf-state","key":"pharma/staging.tfstate","region":"ap-south-1","dynamodbTable":"existing-tf-locks"}
 }
 ```
 
