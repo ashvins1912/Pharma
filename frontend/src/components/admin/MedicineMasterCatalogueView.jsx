@@ -45,6 +45,12 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
   const [reviewRecordsLoading, setReviewRecordsLoading] = useState(false);
   const [batchActionBusy, setBatchActionBusy] = useState(false);
   const [reviewResolutionDrafts, setReviewResolutionDrafts] = useState({});
+  const [reviewConflictPage, setReviewConflictPage] = useState(1);
+  const [reviewConflictPageSize, setReviewConflictPageSize] = useState(50);
+  const [reviewConflictSort, setReviewConflictSort] = useState('brandName');
+  const [reviewConflictSortDirection, setReviewConflictSortDirection] = useState('asc');
+  const [reviewConflictFilter, setReviewConflictFilter] = useState('ALL');
+  const [selectedReviewConflictKeys, setSelectedReviewConflictKeys] = useState([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -174,7 +180,9 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
   const resolveReviewedBatchConflicts = async () => {
     if (!reviewBatch?.batchId) return;
     const unresolved = (reviewBatch.conflicts || []).filter(item => !item?.resolved && item?.medicineId);
+    const selectedKeys = new Set(selectedReviewConflictKeys);
     const resolutions = unresolved
+      .filter(conflict => selectedKeys.has(conflict.conflictId || conflict.medicineId))
       .map(conflict => {
         const key = conflict.conflictId || conflict.medicineId;
         const draftAction = reviewResolutionDrafts[key];
@@ -188,7 +196,7 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
       })
       .filter(Boolean);
     if (!resolutions.length) {
-      addToast('Select a resolution decision for at least one conflict first.', 'warning');
+      addToast('Select conflicts and choose a resolution decision for each selected conflict.', 'warning');
       return;
     }
     setBatchActionBusy(true);
@@ -203,6 +211,8 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
       );
       setReviewBatch(response.data);
       setReviewResolutionDrafts({});
+      setSelectedReviewConflictKeys([]);
+      setReviewConflictPage(1);
       setReviewConfirmed(false);
       await loadImportHistory();
       const state = getEffectiveBatchState(response.data);
@@ -352,6 +362,22 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
   const reviewStatusMeta = getReconciliationStatusMeta(reviewEffectiveState);
   const reviewPipelineIndex = getPipelineStageIndex(reviewEffectiveState);
   const reviewUnresolvedConflicts = (reviewBatch?.conflicts || []).filter(item => !item?.resolved);
+  const reviewConflictTypes = [...new Set(reviewUnresolvedConflicts.map(item => item?.reason || 'MANUAL_REVIEW'))].sort();
+  const filteredReviewConflicts = reviewUnresolvedConflicts.filter(item =>
+    reviewConflictFilter === 'ALL' || (item?.reason || 'MANUAL_REVIEW') === reviewConflictFilter
+  );
+  const sortedReviewConflicts = [...filteredReviewConflicts].sort((a, b) => {
+    const field = reviewConflictSort;
+    const left = String(field === 'brandName' ? (a?.brandName || a?.medicineId || '') : field === 'reason' ? (a?.reason || '') : field === 'score' ? (a?.score ?? '') : (a?.targetMedicineId || a?.currentTargetMedicineId || '')).toLocaleLowerCase();
+    const right = String(field === 'brandName' ? (b?.brandName || b?.medicineId || '') : field === 'reason' ? (b?.reason || '') : field === 'score' ? (b?.score ?? '') : (b?.targetMedicineId || b?.currentTargetMedicineId || '')).toLocaleLowerCase();
+    const result = field === 'score' ? Number(left || 0) - Number(right || 0) : left.localeCompare(right);
+    return reviewConflictSortDirection === 'asc' ? result : -result;
+  });
+  const reviewConflictTotalPages = Math.max(1, Math.ceil(sortedReviewConflicts.length / reviewConflictPageSize));
+  const safeReviewConflictPage = Math.min(reviewConflictPage, reviewConflictTotalPages);
+  const pagedReviewConflicts = sortedReviewConflicts.slice((safeReviewConflictPage - 1) * reviewConflictPageSize, safeReviewConflictPage * reviewConflictPageSize);
+  const visibleReviewConflictKeys = pagedReviewConflicts.map(item => item.conflictId || item.medicineId).filter(Boolean);
+  const selectedVisibleConflictCount = visibleReviewConflictKeys.filter(key => selectedReviewConflictKeys.includes(key)).length;
   const reviewHasBlockingConflicts = Number(reviewBatch?.report?.blockingConflicts || 0) > 0 || reviewUnresolvedConflicts.length > 0;
   const reviewCanResolveConflicts = ['CONFLICTS_FOUND', 'RESOLVING', 'FAILED'].includes(reviewEffectiveState) && reviewUnresolvedConflicts.some(item => item?.medicineId);
   const reviewCanReconcile = ['STAGED', 'CONFLICTS_FOUND', 'RECONCILED', 'AWAITING_APPROVAL', 'APPROVED', 'FAILED', 'PARTIALLY_PUBLISHED', 'READY'].includes(reviewEffectiveState);
@@ -864,62 +890,86 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
 
               {reviewUnresolvedConflicts.length > 0 && (
                 <section className="space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <h4 className="text-xs font-black text-amber-800">
-                        <span>Unresolved conflicts ({reviewUnresolvedConflicts.length})</span>
-                      </h4>
-                      <p className="mt-1 text-[11px] text-amber-800">
-                        <span>Resolve conflicts cleanly (`CONFLICTS_FOUND → RESOLVING → RECONCILING`) before approval and publishing.</span>
-                      </p>
+                      <h4 className="text-xs font-black text-amber-900">Unresolved conflicts ({reviewUnresolvedConflicts.length.toLocaleString()})</h4>
+                      <p className="mt-1 text-[11px] text-amber-800">Resolve a selected subset now. Unselected conflicts remain unresolved for the next review.</p>
+                      <p className="mt-1 text-[11px] font-semibold text-amber-900">{selectedReviewConflictKeys.length.toLocaleString()} selected · {Object.keys(reviewResolutionDrafts).filter(key => reviewResolutionDrafts[key]).length.toLocaleString()} decisions drafted</p>
                     </div>
                     {reviewCanResolveConflicts && (
-                      <button
-                        type="button"
-                        onClick={resolveReviewedBatchConflicts}
-                        disabled={batchActionBusy}
-                        className="min-h-11 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-700 disabled:opacity-50"
-                      >
-                        <span>{batchActionBusy ? 'Resolving…' : 'Resolve & Re-reconcile'}</span>
+                      <button type="button" onClick={resolveReviewedBatchConflicts} disabled={batchActionBusy || !selectedReviewConflictKeys.some(key => Boolean(reviewResolutionDrafts[key]))} className="min-h-11 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-700 disabled:opacity-50">
+                        <span>{batchActionBusy ? 'Resolving…' : `Resolve selected (${selectedReviewConflictKeys.filter(key => Boolean(reviewResolutionDrafts[key])).length})`}</span>
                       </button>
                     )}
                   </div>
-                  <div className="max-h-56 overflow-y-auto space-y-2">
-                    {reviewUnresolvedConflicts.slice(0, 50).map((conflict, index) => {
+                  <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-white p-2">
+                    <label className="flex min-h-10 items-center gap-2 px-2 text-xs font-semibold text-slate-700">
+                      <input type="checkbox" checked={visibleReviewConflictKeys.length > 0 && selectedVisibleConflictCount === visibleReviewConflictKeys.length} onChange={event => setSelectedReviewConflictKeys(current => event.target.checked ? [...new Set([...current, ...visibleReviewConflictKeys])] : current.filter(key => !visibleReviewConflictKeys.includes(key)))} />
+                      Select page ({visibleReviewConflictKeys.length})
+                    </label>
+                    <select aria-label="Filter conflicts by type" value={reviewConflictFilter} onChange={event => { setReviewConflictFilter(event.target.value); setReviewConflictPage(1); }} className="min-h-10 rounded-lg border border-slate-200 px-2 text-xs">
+                      <option value="ALL">All conflict types</option>
+                      {reviewConflictTypes.map(type => <option key={type} value={type}>{type}</option>)}
+                    </select>
+                    <select aria-label="Sort conflicts" value={reviewConflictSort} onChange={event => setReviewConflictSort(event.target.value)} className="min-h-10 rounded-lg border border-slate-200 px-2 text-xs">
+                      <option value="brandName">Medicine name</option><option value="reason">Conflict type</option><option value="score">Match score</option><option value="target">Candidate ID</option>
+                    </select>
+                    <button type="button" onClick={() => setReviewConflictSortDirection(value => value === 'asc' ? 'desc' : 'asc')} className="min-h-10 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-700">Sort {reviewConflictSortDirection === 'asc' ? '↑' : '↓'}</button>
+                    <label className="ml-auto flex items-center gap-2 text-xs text-slate-600">Rows
+                      <select value={reviewConflictPageSize} onChange={event => { setReviewConflictPageSize(Number(event.target.value)); setReviewConflictPage(1); }} className="min-h-10 rounded-lg border border-slate-200 px-2">
+                        <option value={25}>25</option><option value={50}>50</option><option value={100}>100</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div className="space-y-2">
+                    {pagedReviewConflicts.map((conflict, index) => {
                       const draftKey = conflict.conflictId || conflict.medicineId || `rev-cnf-${index}`;
                       const targetId = conflict.targetMedicineId || conflict.currentTargetMedicineId || '';
+                      const selected = selectedReviewConflictKeys.includes(draftKey);
                       return (
-                        <div key={draftKey} className="flex flex-col gap-2 rounded-xl border border-amber-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
-                          <div className="min-w-0 flex-1 space-y-1">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="text-xs font-bold text-slate-900">{conflict.brandName || conflict.medicineId || conflict.reason}</span>
-                              <span className="rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-800">{conflict.reason}</span>
+                        <article key={draftKey} className="rounded-xl border border-amber-200 bg-white p-3">
+                          <div className="flex flex-wrap items-start gap-3">
+                            <input type="checkbox" aria-label={`Select conflict ${conflict.brandName || conflict.medicineId}`} checked={selected} onChange={event => setSelectedReviewConflictKeys(current => event.target.checked ? [...new Set([...current, draftKey])] : current.filter(key => key !== draftKey))} className="mt-1 h-4 w-4" />
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="text-xs font-bold text-slate-900">{conflict.brandName || conflict.medicineId || 'Unnamed medicine'}</span>
+                                <span className="rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-800">{conflict.reason || 'MANUAL_REVIEW'}</span>
+                                {conflict.score != null && <span className="text-[10px] text-slate-500">Match score: {conflict.score}%</span>}
+                              </div>
+                              <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                <div className="rounded-lg border border-slate-200 bg-slate-50 p-2">
+                                  <p className="text-[9px] font-bold uppercase tracking-wide text-slate-500">Incoming / source record</p>
+                                  <p className="mt-1 break-all text-[11px] font-semibold text-slate-800">{conflict.medicineId || 'ID unavailable'}</p>
+                                </div>
+                                <div className="rounded-lg border border-blue-100 bg-blue-50/60 p-2">
+                                  <p className="text-[9px] font-bold uppercase tracking-wide text-slate-500">Existing / candidate record</p>
+                                  <p className="mt-1 break-all text-[11px] font-semibold text-slate-800">{targetId || 'No candidate identified'}</p>
+                                </div>
+                              </div>
+                              {conflict.message && <p className="mt-2 text-[11px] text-slate-600">{conflict.message}</p>}
+                              {conflict.warnings?.length > 0 && <p className="mt-1 text-[10px] text-slate-500">{conflict.warnings.join(' · ')}</p>}
                             </div>
-                            <p className="text-[11px] text-slate-600">
-                              <span>
-                                {conflict.medicineId ? `Source: ${conflict.medicineId}` : ''}
-                                {targetId ? ` · Candidate: ${targetId}` : ''}
-                                {conflict.score ? ` · Score ${conflict.score}%` : ''}
-                                {conflict.warnings?.length ? ` · ${conflict.warnings.join(', ')}` : ''}
-                              </span>
-                            </p>
+                            {conflict.medicineId && reviewCanResolveConflicts && (
+                              <select aria-label={`Resolution for ${conflict.brandName || conflict.medicineId}`} value={reviewResolutionDrafts[draftKey] || ''} onChange={event => setReviewResolutionDrafts(prev => ({ ...prev, [draftKey]: event.target.value }))} className="min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-900 sm:w-auto">
+                                <option value="">Select resolution…</option>
+                                {targetId && <option value="ACCEPT_CANDIDATE">Merge into candidate ({targetId})</option>}
+                                <option value="KEEP_SEPARATE">Keep as separate medicine</option>
+                                <option value="SKIP_RECORD">Skip staged record</option>
+                              </select>
+                            )}
                           </div>
-                          {conflict.medicineId && reviewCanResolveConflicts && (
-                            <select
-                              aria-label={`Batch conflict action for ${conflict.brandName || conflict.medicineId}`}
-                              value={reviewResolutionDrafts[draftKey] || ''}
-                              onChange={event => setReviewResolutionDrafts(prev => ({ ...prev, [draftKey]: event.target.value }))}
-                              className="min-h-11 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-900"
-                            >
-                              <option value="">Select resolution…</option>
-                              {targetId && <option value="ACCEPT_CANDIDATE">Merge into candidate ({targetId})</option>}
-                              <option value="KEEP_SEPARATE">Keep as separate medicine</option>
-                              <option value="SKIP_RECORD">Skip staged record</option>
-                            </select>
-                          )}
-                        </div>
+                        </article>
                       );
                     })}
+                    {!pagedReviewConflicts.length && <p className="rounded-lg bg-white p-4 text-center text-xs text-slate-500">No unresolved conflicts match this filter.</p>}
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-amber-200 pt-3">
+                    <p className="text-[11px] text-slate-600">Showing {sortedReviewConflicts.length ? ((safeReviewConflictPage - 1) * reviewConflictPageSize + 1).toLocaleString() : 0}–{Math.min(safeReviewConflictPage * reviewConflictPageSize, sortedReviewConflicts.length).toLocaleString()} of {sortedReviewConflicts.length.toLocaleString()} filtered conflicts</p>
+                    <div className="flex items-center gap-2">
+                      <button type="button" disabled={safeReviewConflictPage <= 1} onClick={() => setReviewConflictPage(value => Math.max(1, value - 1))} className="min-h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold disabled:opacity-40">Previous</button>
+                      <span className="text-xs font-semibold text-slate-700">Page {safeReviewConflictPage} / {reviewConflictTotalPages}</span>
+                      <button type="button" disabled={safeReviewConflictPage >= reviewConflictTotalPages} onClick={() => setReviewConflictPage(value => Math.min(reviewConflictTotalPages, value + 1))} className="min-h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold disabled:opacity-40">Next</button>
+                    </div>
                   </div>
                 </section>
               )}
