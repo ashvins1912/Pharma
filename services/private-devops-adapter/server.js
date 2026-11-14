@@ -86,13 +86,14 @@ async function providerCall(provider, operation, payload) {
   let configured = false;
   try { configured = Boolean(endpointFor(provider)); } catch (error) { throw Object.assign(error,{code:'DRIVER_ENDPOINT_INVALID'}); }
   if (configured) {
-    const paths = { preflight:'/v1/preflight', execute:'/v1/deployments/execute', status:'/v1/deployments/status', rollback:'/v1/deployments/rollback', flag:'/v1/feature-flags/rollout' };
+    const paths = { preflight:'/v1/preflight', execute:'/v1/deployments/execute', status:'/v1/deployments/status', rollback:'/v1/deployments/rollback', flag:'/v1/feature-flags/rollout', flagRollback:'/v1/feature-flags/rollback' };
     return driverCall(provider,paths[operation],payload);
   }
   if (operation === 'preflight') return {checks:[await nativeProviderPreflight(provider,payload)]};
   if (operation === 'execute') return nativeProviderExecute(provider,payload);
   if (operation === 'rollback') return nativeProviderRollback(provider,payload);
   if (operation === 'flag') return nativeProviderExecute(provider,payload);
+  if (operation === 'flagRollback') return nativeProviderRollback(provider,payload);
   if (operation === 'status') return {status:'SUCCEEDED'};
   throw new Error('Unsupported provider operation.');
 }
@@ -202,9 +203,25 @@ app.post('/v1/feature-flags/rollout',validateBase,async(req,res)=>{
   try {
     const result=await providerCall(provider,'flag',{jobId:job.jobId,environment,flag,credentials,integration:{id:integration.id,endpoint:integration.endpoint,targetConfig:integration.targetConfig||{}},preserveUnspecifiedRules:true});
     job.status=['SUBMITTED','RUNNING','SUCCEEDED','FAILED'].includes(result.status)?result.status:'SUBMITTED';
-    job.result={providerOperationId:result.operationId||null}; await job.save();
+    job.result={providerOperationId:result.operationId||null,rollbackSnapshot:result.rollbackSnapshot||null}; await job.save();
     return res.status(202).json({success:true,accepted:true,requestId:job.jobId,status:job.status});
   } catch(error) { job.status='FAILED'; job.errorCode=error.code||'FLAG_ROLLOUT_FAILED'; await job.save(); return res.status(error.statusCode||502).json({success:false,code:job.errorCode}); }
+});
+
+app.post('/v1/feature-flags/rollback',validateBase,async(req,res)=>{
+  const {integration,credentials,sourceRequestId,flag}=req.body||{};
+  if(integration?.provider!=='launchdarkly'||!integration?.id||!sourceRequestId||!flag?.key) return res.status(400).json({success:false,code:'FLAG_ROLLBACK_CONTEXT_REQUIRED'});
+  const source=await Job.findOne({jobId:sourceRequestId,provider:'launchdarkly',environment:integration.environment,operation:'flag_rollout',status:'SUCCEEDED'});
+  if(!source?.result?.rollbackSnapshot) return res.status(409).json({success:false,code:'FLAG_ROLLBACK_SNAPSHOT_MISSING'});
+  const key='flag-rollback:'+sourceRequestId;
+  let job=await Job.findOne({idempotencyKey:key});
+  if(!job) job=await Job.create({jobId:crypto.randomUUID(),idempotencyKey:key,provider:'launchdarkly',operation:'flag_rollback',environment:integration.environment,status:'QUEUED',request:{sourceRequestId,flagKey:flag.key}});
+  try {
+    const result=await providerCall('launchdarkly','flagRollback',{integration:{id:integration.id,endpoint:integration.endpoint,targetConfig:integration.targetConfig||{}},credentials,flag,rollbackSnapshot:source.result.rollbackSnapshot});
+    job.status=result.status==='ROLLED_BACK'?'ROLLED_BACK':'FAILED';
+    job.result={providerOperationId:result.operationId||null};await job.save();
+    return res.status(job.status==='ROLLED_BACK'?200:502).json({success:job.status==='ROLLED_BACK',accepted:job.status==='ROLLED_BACK',requestId:job.jobId,status:job.status});
+  } catch(error){job.status='FAILED';job.errorCode=error.code||'FLAG_ROLLBACK_FAILED';await job.save();return res.status(502).json({success:false,code:job.errorCode});}
 });
 
 app.get('/v1/evidence',async(req,res)=>{
