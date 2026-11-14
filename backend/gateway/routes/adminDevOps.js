@@ -174,6 +174,28 @@ async function getProductionReleaseReadiness() {
   return readiness;
 }
 
+async function assertDeploymentStagingEvidence(deployment, artifact) {
+  if (!['aws','azure','gcp','kubernetes'].includes(deployment.provider)) return;
+  const preflight = await ProviderPreflight.findOne({
+    provider: deployment.provider, environment: 'staging',
+    artifactDigest: artifact.digest, serviceName: artifact.serviceName
+  }).sort({ checkedAt: -1 }).lean();
+  if (!preflight || preflight.status !== 'PASS') throw Object.assign(new Error('The latest preflight for this exact artifact must pass before approval or execution.'), { code: 'STAGING_PREFLIGHT_REQUIRED', statusCode: 409 });
+  const stagedIntegration = await InfrastructureIntegration.findOne({ _id: preflight.integrationId, revokedAt: null }).lean();
+  if (!stagedIntegration || stagedIntegration.provider !== deployment.provider || stagedIntegration.environment !== 'staging'
+    || stagedIntegration.verification?.authenticated !== true || stagedIntegration.verification?.discoveryPassed !== true
+    || targetConfigDigest(stagedIntegration.targetConfig) !== preflight.targetDigest) throw Object.assign(new Error('The preflighted staging target changed or is no longer verified.'), { code: 'STAGING_PREFLIGHT_STALE', statusCode: 409 });
+  if (deployment.environment === 'staging' && String(preflight.integrationId) !== String(deployment.integrationId)) throw Object.assign(new Error('The deployment must use the exact staging integration that passed preflight.'), { code: 'STAGING_PREFLIGHT_INTEGRATION_MISMATCH', statusCode: 409 });
+  if (deployment.environment === 'production') {
+    const stagedDeployment = await Deployment.findOne({
+      provider: deployment.provider, environment: 'staging', serviceName: artifact.serviceName,
+      integrationId: preflight.integrationId, status: { $in: ['SUCCEEDED','ROLLED_BACK'] }
+    }).sort({ updatedAt: -1 }).lean();
+    const stagedArtifact = stagedDeployment ? await Artifact.findById(stagedDeployment.artifactId).lean() : null;
+    if (!stagedArtifact || stagedArtifact.digest !== artifact.digest) throw Object.assign(new Error('The exact artifact must complete in staging against the preflighted target before production approval or execution.'), { code: 'STAGING_DEPLOYMENT_REQUIRED', statusCode: 409 });
+  }
+}
+
 async function assertProductionReleaseReady() {
   const readiness = await getProductionReleaseReadiness();
   if (!readiness.ready) {
@@ -383,6 +405,11 @@ router.post('/deployments/:id/approve', async (req, res) => {
   const deployment = await Deployment.findById(req.params.id);
   if (!deployment) return res.status(404).json({ success: false, message: 'Deployment not found.' });
   if (deployment.status !== 'PENDING_APPROVAL') return res.status(409).json({ success: false, message: `Deployment is ${deployment.status}; only pending plans can be approved.` });
+  if (['aws','azure','gcp','kubernetes'].includes(deployment.provider)) {
+    const artifact = await Artifact.findById(deployment.artifactId).lean();
+    try { if (!artifact || artifact.validation?.status !== 'PASS') throw Object.assign(new Error('Validated artifact is unavailable.'), { statusCode: 409, code: 'ARTIFACT_INVALID' }); await assertDeploymentStagingEvidence(deployment, artifact); }
+    catch (error) { return res.status(error.statusCode || 409).json({ success: false, code: error.code || 'STAGING_EVIDENCE_REQUIRED', message: error.message }); }
+  }
   if (deployment.environment === 'production') { try { await assertProductionReleaseReady(); } catch (error) { return res.status(error.statusCode || 423).json({ success: false, code: error.code || 'PRODUCTION_STAGING_GATE_BLOCKED', message: error.message }); } }
   if (req.body?.confirmation !== 'APPROVE DEPLOYMENT') return res.status(400).json({ success: false, code: 'CONFIRMATION_REQUIRED', message: 'Type APPROVE DEPLOYMENT to continue.' });
   if (deployment.environment === 'production' && deployment.requestedBy === actorOf(req)) return res.status(403).json({ success: false, code: 'SEPARATION_OF_DUTIES_REQUIRED', message: 'A different Super Admin must approve production deployments.' });
@@ -399,6 +426,11 @@ router.post('/deployments/:id/execute', async (req, res) => {
   const deployment = await Deployment.findById(req.params.id);
   if (!deployment) return res.status(404).json({ success: false, message: 'Deployment not found.' });
   if (deployment.status !== 'APPROVED') return res.status(409).json({ success: false, message: 'Deployment must be approved before execution.' });
+  if (['aws','azure','gcp','kubernetes'].includes(deployment.provider)) {
+    const artifact = await Artifact.findById(deployment.artifactId).lean();
+    try { if (!artifact || artifact.validation?.status !== 'PASS') throw Object.assign(new Error('Validated artifact is unavailable.'), { statusCode: 409, code: 'ARTIFACT_INVALID' }); await assertDeploymentStagingEvidence(deployment, artifact); }
+    catch (error) { return res.status(error.statusCode || 409).json({ success: false, code: error.code || 'STAGING_EVIDENCE_REQUIRED', message: error.message }); }
+  }
   if (deployment.environment === 'production') { try { await assertProductionReleaseReady(); } catch (error) { return res.status(error.statusCode || 423).json({ success: false, code: error.code || 'PRODUCTION_STAGING_GATE_BLOCKED', message: error.message }); } }
   if (req.body?.confirmation !== 'EXECUTE DEPLOYMENT') return res.status(400).json({ success: false, code: 'CONFIRMATION_REQUIRED', message: 'Type EXECUTE DEPLOYMENT to continue.' });
   try {
