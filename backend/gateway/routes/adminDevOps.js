@@ -30,6 +30,22 @@ const artifactSchema = new mongoose.Schema({
 artifactSchema.index({ serviceName: 1, environment: 1, createdAt: -1 });
 const Artifact = mongoose.models.DevOpsArtifact || mongoose.model('DevOpsArtifact', artifactSchema, 'devops_artifacts');
 
+const providerPreflightSchema = new mongoose.Schema({
+  provider: { type: String, enum: ['aws','azure','gcp','kubernetes','launchdarkly'], required: true, index: true },
+  environment: { type: String, enum: ['staging'], required: true, default: 'staging' },
+  integrationId: { type: mongoose.Schema.Types.ObjectId, required: true, index: true },
+  artifactId: { type: mongoose.Schema.Types.ObjectId, default: null },
+  artifactDigest: { type: String, default: null, index: true },
+  serviceName: { type: String, default: null },
+  flagKey: { type: String, default: null },
+  status: { type: String, enum: ['PASS','FAIL','BLOCKED'], required: true, index: true },
+  evidenceRunId: { type: String, default: null },
+  checkedBy: { type: String, required: true },
+  checkedAt: { type: Date, default: Date.now, index: true }
+}, { timestamps: true, strict: true });
+providerPreflightSchema.index({ provider: 1, environment: 1, artifactDigest: 1, flagKey: 1, status: 1, checkedAt: -1 });
+const ProviderPreflight = mongoose.models.DevOpsProviderPreflight || mongoose.model('DevOpsProviderPreflight', providerPreflightSchema, 'devops_provider_preflights');
+
 const configurationSchema = new mongoose.Schema({
   serviceName: { type: String, required: true, index: true },
   environment: { type: String, enum: ['development', 'staging', 'production'], required: true, index: true },
@@ -181,7 +197,14 @@ router.post('/providers/preflight', async (req, res) => {
       deployment: artifact ? { serviceName: artifact.serviceName, files: artifact.files, image: artifact.config?.image || null, artifactDigest: artifact.digest } : undefined,
       flag: provider === 'launchdarkly' ? { key: String(req.body?.flagKey || '') } : undefined
     });
-    await audit(req, 'PROVIDER_STAGING_PREFLIGHT', result.success ? 'PASS' : 'BLOCKED', 'integration', integration._id, { provider, environment, evidenceRunId: result.evidence?.runId || null, evidenceStatus: result.evidence?.status || 'UNKNOWN' });
+    const preflightStatus = result.success && result.evidence?.status === 'PASS' ? 'PASS' : result.evidence?.status === 'FAIL' ? 'FAIL' : 'BLOCKED';
+    await ProviderPreflight.create({
+      provider, environment, integrationId: integration._id, artifactId: artifact?._id || null,
+      artifactDigest: artifact?.digest || null, serviceName: artifact?.serviceName || null,
+      flagKey: provider === 'launchdarkly' ? String(req.body?.flagKey || '') : null,
+      status: preflightStatus, evidenceRunId: result.evidence?.runId || null, checkedBy: actorOf(req)
+    });
+    await audit(req, 'PROVIDER_STAGING_PREFLIGHT', preflightStatus, 'integration', integration._id, { provider, environment, evidenceRunId: result.evidence?.runId || null, evidenceStatus: result.evidence?.status || 'UNKNOWN', artifactDigest: artifact?.digest || null, flagKey: provider === 'launchdarkly' ? String(req.body?.flagKey || '') : null });
     return res.status(result.success ? 200 : 424).json(result);
   } catch (error) {
     return res.status(error.statusCode || 400).json({ success: false, code: error.code || 'PROVIDER_PREFLIGHT_FAILED', message: error.message });
@@ -292,6 +315,16 @@ router.post('/deployments/plan', async (req, res) => {
     if (artifact.provider !== provider || artifact.environment !== environment) throw new Error('Deployment provider and environment must match the generated artifact.');
     if (!Object.hasOwn(DEPLOYMENT_STRATEGIES, strategy)) throw new Error('Unsupported deployment strategy.');
     const { integration } = await loadDeployIntegration(integrationId, provider, environment, 'deploy');
+    if (['aws','azure','gcp','kubernetes'].includes(provider)) {
+      const stagedPreflight = await ProviderPreflight.findOne({ provider, environment: 'staging', artifactDigest: artifact.digest, serviceName: artifact.serviceName, status: 'PASS' }).sort({ checkedAt: -1 }).lean();
+      if (!stagedPreflight) throw Object.assign(new Error('A passing staging provider preflight for this exact artifact is required before creating a deployment plan.'), { code: 'STAGING_PREFLIGHT_REQUIRED', statusCode: 409 });
+      if (environment === 'staging' && String(stagedPreflight.integrationId) !== String(integration._id)) throw Object.assign(new Error('Run staging preflight again using the selected staging integration.'), { code: 'STAGING_PREFLIGHT_INTEGRATION_MISMATCH', statusCode: 409 });
+      if (environment === 'production') {
+        const stagedDeployment = await Deployment.findOne({ provider, environment: 'staging', serviceName: artifact.serviceName, status: 'SUCCEEDED' }).sort({ updatedAt: -1 }).lean();
+        const stagedArtifact = stagedDeployment ? await Artifact.findById(stagedDeployment.artifactId).lean() : null;
+        if (!stagedArtifact || stagedArtifact.digest !== artifact.digest) throw Object.assign(new Error('The exact artifact must complete successfully in staging before production planning is enabled.'), { code: 'STAGING_DEPLOYMENT_REQUIRED', statusCode: 409 });
+      }
+    }
     const reference = String(changeReference || '').trim().slice(0, 120);
     if (!reference) throw new Error('A change/ticket reference is required for every deployment.');
     const deployment = await Deployment.create({
@@ -433,6 +466,13 @@ router.post('/feature-flags/rollout', async (req, res) => {
     const reference = String(changeReference || '').trim().slice(0, 120);
     if (!reference) throw new Error('A change/ticket reference is required for feature flag changes.');
     const { integration } = await loadDeployIntegration(integrationId, 'launchdarkly', environment, 'manage');
+    const stagedPreflight = await ProviderPreflight.findOne({ provider: 'launchdarkly', environment: 'staging', flagKey: key, status: 'PASS' }).sort({ checkedAt: -1 }).lean();
+    if (!stagedPreflight) throw Object.assign(new Error('A passing LaunchDarkly staging preflight for this flag is required before rollout planning.'), { code: 'LAUNCHDARKLY_STAGING_PREFLIGHT_REQUIRED', statusCode: 409 });
+    if (environment === 'staging' && String(stagedPreflight.integrationId) !== String(integration._id)) throw Object.assign(new Error('Run LaunchDarkly staging preflight again using the selected integration.'), { code: 'LAUNCHDARKLY_PREFLIGHT_INTEGRATION_MISMATCH', statusCode: 409 });
+    if (environment === 'production') {
+      const stagedChange = await FlagChange.findOne({ flagKey: key, environment: 'staging', strategy, rolloutPercent: strategy === 'kill_switch' ? 0 : percent, status: 'SUCCEEDED' }).sort({ updatedAt: -1 }).lean();
+      if (!stagedChange) throw Object.assign(new Error('The same LaunchDarkly flag strategy and percentage must complete in staging before production rollout planning.'), { code: 'LAUNCHDARKLY_STAGING_ROLLOUT_REQUIRED', statusCode: 409 });
+    }
     const change = await FlagChange.create({
       flagKey: key, environment, strategy,
       rolloutPercent: strategy === 'kill_switch' ? 0 : percent,
