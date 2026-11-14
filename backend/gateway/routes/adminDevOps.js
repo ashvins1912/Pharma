@@ -258,7 +258,11 @@ router.post('/providers/preflight', async (req, res) => {
     const capability = provider === 'launchdarkly' ? 'manage' : 'deploy';
     if (provider === 'launchdarkly' && !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,99}$/.test(String(req.body?.flagKey || ''))) return res.status(400).json({ success: false, code: 'PREFLIGHT_FLAG_KEY_REQUIRED' });
     if (provider === 'launchdarkly' && !['canary','progressive','blue_green','kill_switch'].includes(req.body?.strategy || 'progressive')) return res.status(400).json({ success: false, code: 'UNSUPPORTED_FLAG_STRATEGY' });
-    if (provider === 'launchdarkly' && (req.body?.strategy || 'progressive') !== 'kill_switch' && !/^[A-Za-z0-9_-]{1,64}$/.test(String(req.body?.variationId || ''))) return res.status(400).json({ success: false, code: 'PREFLIGHT_VARIATION_REQUIRED' });
+    const preflightStrategy = req.body?.strategy || 'progressive';
+    const preflightPercent = preflightStrategy === 'kill_switch' ? 0 : Number(req.body?.rolloutPercent ?? 100);
+    if (provider === 'launchdarkly' && (!Number.isInteger(preflightPercent) || preflightPercent < 0 || preflightPercent > 100)) return res.status(400).json({ success: false, code: 'INVALID_PREFLIGHT_PERCENTAGE' });
+    if (provider === 'launchdarkly' && preflightStrategy === 'blue_green' && ![0,100].includes(preflightPercent)) return res.status(400).json({ success: false, code: 'BLUE_GREEN_CONFIGURATION_INVALID' });
+    if (provider === 'launchdarkly' && preflightStrategy !== 'kill_switch' && !/^[A-Za-z0-9_-]{1,64}$/.test(String(req.body?.variationId || ''))) return res.status(400).json({ success: false, code: 'PREFLIGHT_VARIATION_REQUIRED' });
     const { integration, credentials } = await loadDeployIntegration(req.body?.integrationId, provider, environment, capability);
     let artifact = null;
     if (provider !== 'launchdarkly') {
@@ -271,7 +275,7 @@ router.post('/providers/preflight', async (req, res) => {
       integration: { id: String(integration._id), provider, environment, endpoint: integration.endpoint, targetConfig: integration.targetConfig || {} },
       credentials,
       deployment: artifact ? { serviceName: artifact.serviceName, files: artifact.files, image: artifact.config?.image || null, artifactDigest: artifact.digest } : undefined,
-      flag: provider === 'launchdarkly' ? { key: String(req.body?.flagKey || ''), variationId: req.body?.variationId || null, strategy: req.body?.strategy || 'progressive', rolloutPercent: Number(req.body?.rolloutPercent ?? 100) } : undefined
+      flag: provider === 'launchdarkly' ? { key: String(req.body?.flagKey || ''), variationId: req.body?.variationId || null, strategy: req.body?.strategy || 'progressive', rolloutPercent: preflightPercent } : undefined
     });
     const preflightStatus = result.success && result.evidence?.status === 'PASS' ? 'PASS' : result.evidence?.status === 'FAIL' ? 'FAIL' : 'BLOCKED';
     await ProviderPreflight.create({
