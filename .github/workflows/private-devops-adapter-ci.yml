@@ -2,6 +2,7 @@ name: Private DevOps Adapter CI
 on:
   pull_request:
     paths:
+      - '.github/workflows/private-devops-adapter-ci.yml'
       - 'services/private-devops-adapter/**'
       - 'backend/gateway/routes/adminDevOps.js'
       - 'backend/gateway/routes/adminInfrastructureSecurity.js'
@@ -10,7 +11,7 @@ on:
       - 'frontend/src/components/admin/InfrastructureSecurityPanel.jsx'
       - 'frontend/src/components/admin/DevOpsDeploymentCenter.jsx'
   push:
-    branches: [feat/private-devops-provider-adapter]
+    branches: [feat/private-devops-provider-adapter, feat/private-devops-provider-adapter-main]
     paths:
       - 'services/private-devops-adapter/**'
       - 'backend/gateway/routes/adminDevOps.js'
