@@ -35,7 +35,7 @@ function awsSignature({ accessKeyId, secretAccessKey, sessionToken, region = 'us
   const authorization = 'AWS4-HMAC-SHA256 Credential=' + accessKeyId + '/' + scope + ', SignedHeaders=' + signedHeaders + ', Signature=' + signature;
   return { host, amzDate, body, authorization, sessionToken };
 }
-async function aws(credentials) {
+async function aws(credentials, integration = {}) {
   const accessKeyId = required(credentials.accessKeyId, 'aws.accessKeyId');
   const secretAccessKey = required(credentials.secretAccessKey, 'aws.secretAccessKey');
   const region = String((integration.targetConfig||{}).region || credentials.region || 'us-east-1');
@@ -52,7 +52,7 @@ async function aws(credentials) {
   if (!response.ok || !/<Account>[^<]+<\/Account>/.test(xml) || !/<Arn>[^<]+<\/Arn>/.test(xml)) throw Object.assign(new Error('AWS STS GetCallerIdentity failed.'), { code: 'AWS_IDENTITY_FAILED' });
   return { name: 'aws_identity', status: 'PASS', code: 'AWS_STS_IDENTITY_VERIFIED' };
 }
-async function azure(credentials) {
+async function azure(credentials, integration = {}) {
   const tenant = required(credentials.tenantId, 'azure.tenantId');
   const client = required(credentials.clientId, 'azure.clientId');
   const secret = required(credentials.clientSecret, 'azure.clientSecret');
@@ -67,7 +67,7 @@ async function azure(credentials) {
   if (requested && !subs.value.some(item => item.subscriptionId === requested)) throw Object.assign(new Error('Configured Azure subscription is not accessible.'), { code: 'AZURE_SUBSCRIPTION_SCOPE_MISMATCH' });
   return { name: 'azure_identity', status: 'PASS', code: 'AZURE_SUBSCRIPTION_VERIFIED' };
 }
-async function gcp(credentials) {
+async function gcp(credentials, integration = {}) {
   const email = required(credentials.clientEmail, 'gcp.clientEmail');
   const privateKey = required(credentials.privateKey, 'gcp.privateKey').replace(/\\n/g, '\n');
   const project = required((integration.targetConfig||{}).projectId || credentials.projectId, 'gcp.projectId');
@@ -125,5 +125,5 @@ export async function verifyProviderIdentity(provider, credentials, integration 
     launchdarkly: value => launchdarkly(value, integration)
   }[provider];
   if (!result) throw new Error('Unsupported provider identity check.');
-  return result(credentials);
+  return result(credentials, integration);
 }
