@@ -267,7 +267,8 @@ app.post('/v1/release-readiness',async(_req,res)=>{
     let completed=null,rollback=null;
     for(const candidate of candidates){
       if(!preflight||new Date(candidate.createdAt)<new Date(preflight.checkedAt))continue;
-      const rollbackCandidate=await Job.findOne({provider,environment:'staging',operation:rollbackOperation,status:'ROLLED_BACK','request.sourceJobId':candidate.jobId}).lean();
+      const sourceField=provider==='launchdarkly'?'request.sourceRequestId':'request.sourceJobId';
+      const rollbackCandidate=await Job.findOne({provider,environment:'staging',operation:rollbackOperation,status:'ROLLED_BACK',[sourceField]:candidate.jobId}).lean();
       if(rollbackCandidate&&new Date(rollbackCandidate.createdAt)>=new Date(candidate.createdAt)){completed=candidate;rollback=rollbackCandidate;break;}
     }
     const preflightPassed=preflight?.status==='PASS';
