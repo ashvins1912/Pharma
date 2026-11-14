@@ -106,20 +106,22 @@ app.post('/v1/preflight',validateBase,async(req,res)=>{
 });
 
 app.post('/v1/deployments/execute',validateBase,async(req,res)=>{
-  const {provider,environment}=req.body;
-  const idempotencyKey=String(req.get('idempotency-key')||req.body.idempotencyKey||'');
+  const {integration,credentials,deployment}=req.body||{};
+  const provider=integration?.provider, environment=integration?.environment;
+  if(!integration?.id || !credentials || typeof credentials!=='object' || !deployment?.id) return res.status(400).json({success:false,code:'INTEGRATION_CONTEXT_REQUIRED'});
+  const idempotencyKey='deployment:'+String(deployment.id);
   if(idempotencyKey.length<16||idempotencyKey.length>160) return res.status(400).json({success:false,code:'IDEMPOTENCY_KEY_REQUIRED'});
-  if(!req.body.artifact || !req.body.changeReference) return res.status(400).json({success:false,code:'DEPLOYMENT_INPUT_REQUIRED'});
+  if(!Array.isArray(deployment.files) || !deployment.files.length || !deployment.changeReference) return res.status(400).json({success:false,code:'DEPLOYMENT_INPUT_REQUIRED'});
   const existing=await Job.findOne({idempotencyKey});
   if(existing) return res.status(200).json({success:true,job:publicJob(existing),replayed:true});
-  const job=await Job.create({jobId:crypto.randomUUID(),idempotencyKey,provider,operation:'deploy',environment,status:'QUEUED',request:{artifact:req.body.artifact,configuration:req.body.configuration||{},changeReference:req.body.changeReference}});
+  const job=await Job.create({jobId:crypto.randomUUID(),idempotencyKey,provider,operation:'deploy',environment,status:'QUEUED',request:{integrationId:String(integration.id),artifactDigest:deployment.artifactDigest,changeReference:deployment.changeReference}});
   try {
-    const result=await driverCall(provider,'/v1/deployments/execute',{jobId:job.jobId,environment,artifact:req.body.artifact,configuration:req.body.configuration||{},changeReference:req.body.changeReference});
+    const result=await driverCall(provider,'/v1/deployments/execute',{jobId:job.jobId,integration:{id:integration.id,endpoint:integration.endpoint},credentials,deployment});
     job.status=String(result.status||'SUBMITTED');
     if(!['SUBMITTED','RUNNING','SUCCEEDED','FAILED'].includes(job.status)) job.status='SUBMITTED';
     job.result={providerOperationId:result.operationId||null,message:'Provider execution accepted; reconcile status before declaring success.'};
     await job.save();
-    return res.status(202).json({success:true,job:publicJob(job)});
+    return res.status(202).json({success:true,accepted:true,deploymentId:job.jobId,status:job.status,job:publicJob(job)});
   } catch(error) {
     job.status='FAILED'; job.errorCode=error.code||'PROVIDER_EXECUTION_FAILED'; await job.save();
     return res.status(error.statusCode||502).json({success:false,job:publicJob(job)});
@@ -127,22 +129,24 @@ app.post('/v1/deployments/execute',validateBase,async(req,res)=>{
 });
 
 app.post('/v1/deployments/status',async(req,res)=>{
-  const {jobId,provider}=req.body||{};
+  const {integration,credentials,deployment}=req.body||{};
+  const provider=integration?.provider, jobId=deployment?.remoteDeploymentId;
   const job=await Job.findOne({jobId,provider});
   if(!job) return res.status(404).json({success:false,code:'JOB_NOT_FOUND'});
   if(!TERMINAL.has(job.status)) {
     try {
-      const result=await driverCall(provider,'/v1/deployments/status',{jobId,providerOperationId:job.result?.providerOperationId});
+      const result=await driverCall(provider,'/v1/deployments/status',{jobId,credentials,integration:{id:integration.id,endpoint:integration.endpoint},providerOperationId:job.result?.providerOperationId});
       if(['RUNNING','SUCCEEDED','FAILED','ROLLED_BACK'].includes(result.status)) job.status=result.status;
       job.result={...(job.result||{}),providerStatus:result.status||'UNKNOWN',health:result.health||null};
       job.errorCode=result.errorCode||null; job.updatedAt=new Date(); await job.save();
     } catch(error) { return res.status(502).json({success:false,code:error.code||'STATUS_RECONCILIATION_FAILED',job:publicJob(job)}); }
   }
-  return res.json({success:true,job:publicJob(job)});
+  return res.json({success:true,status:job.status,errorCode:job.errorCode,job:publicJob(job)});
 });
 
 app.post('/v1/deployments/rollback',validateBase,async(req,res)=>{
-  const {provider,environment,jobId,changeReference}=req.body||{};
+  const {integration,credentials,deployment}=req.body||{};
+  const provider=integration?.provider, environment=integration?.environment, jobId=deployment?.remoteDeploymentId, changeReference=deployment?.changeReference;
   if(!jobId||!changeReference) return res.status(400).json({success:false,code:'ROLLBACK_INPUT_REQUIRED'});
   const source=await Job.findOne({jobId,provider,environment});
   if(!source||!['SUCCEEDED','RUNNING'].includes(source.status)) return res.status(409).json({success:false,code:'ROLLBACK_SOURCE_NOT_ELIGIBLE'});
@@ -150,24 +154,25 @@ app.post('/v1/deployments/rollback',validateBase,async(req,res)=>{
   let job=await Job.findOne({idempotencyKey:key});
   if(!job) job=await Job.create({jobId:crypto.randomUUID(),idempotencyKey:key,provider,operation:'rollback',environment,status:'QUEUED',request:{sourceJobId:jobId,changeReference}});
   try {
-    const result=await driverCall(provider,'/v1/deployments/rollback',{jobId:job.jobId,sourceJobId:jobId,environment,changeReference});
+    const result=await driverCall(provider,'/v1/deployments/rollback',{jobId:job.jobId,sourceJobId:jobId,environment,changeReference,credentials,integration:{id:integration.id,endpoint:integration.endpoint},deployment});
     job.status=['SUBMITTED','RUNNING','SUCCEEDED','FAILED'].includes(result.status)?result.status:'SUBMITTED';
     job.result={providerOperationId:result.operationId||null}; await job.save();
-    return res.status(202).json({success:true,job:publicJob(job)});
+    return res.status(202).json({success:true,accepted:true,status:job.status,job:publicJob(job)});
   } catch(error) { job.status='FAILED'; job.errorCode=error.code||'ROLLBACK_FAILED'; await job.save(); return res.status(error.statusCode||502).json({success:false,job:publicJob(job)}); }
 });
 
 app.post('/v1/feature-flags/rollout',validateBase,async(req,res)=>{
-  const {provider,environment,flagKey,rolloutPercent,changeReference}=req.body||{};
+  const {integration,credentials,flag}=req.body||{};
+  const provider=integration?.provider, environment=integration?.environment, flagKey=flag?.key, rolloutPercent=flag?.rolloutPercent, changeReference=flag?.changeReference;
   if(provider!=='launchdarkly'||!flagKey||!Number.isFinite(rolloutPercent)||rolloutPercent<0||rolloutPercent>100||!changeReference) return res.status(400).json({success:false,code:'INVALID_FLAG_ROLLOUT'});
   const key='flag:'+environment+':'+flagKey+':'+rolloutPercent+':'+changeReference;
   let job=await Job.findOne({idempotencyKey:key});
   if(!job) job=await Job.create({jobId:crypto.randomUUID(),idempotencyKey:key,provider,operation:'flag_rollout',environment,status:'QUEUED',request:{flagKey,rolloutPercent,changeReference}});
   try {
-    const result=await driverCall(provider,'/v1/feature-flags/rollout',{jobId:job.jobId,environment,flagKey,rolloutPercent,changeReference,preserveUnspecifiedRules:true});
+    const result=await driverCall(provider,'/v1/feature-flags/rollout',{jobId:job.jobId,environment,flag,credentials,integration:{id:integration.id,endpoint:integration.endpoint},preserveUnspecifiedRules:true});
     job.status=['SUBMITTED','RUNNING','SUCCEEDED','FAILED'].includes(result.status)?result.status:'SUBMITTED';
     job.result={providerOperationId:result.operationId||null}; await job.save();
-    return res.status(202).json({success:true,requestId:job.jobId,status:job.status});
+    return res.status(202).json({success:true,accepted:true,requestId:job.jobId,status:job.status});
   } catch(error) { job.status='FAILED'; job.errorCode=error.code||'FLAG_ROLLOUT_FAILED'; await job.save(); return res.status(error.statusCode||502).json({success:false,code:job.errorCode}); }
 });
 
