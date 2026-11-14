@@ -16,6 +16,7 @@ const TERMINAL = new Set(['SUCCEEDED','FAILED','CANCELLED','ROLLED_BACK']);
 const DRIVER_CHECK_STATES = new Set(['PASS','BLOCKED','FAIL','WARN']);
 const SAFE_CODE = /^[A-Z0-9_:-]{1,80}$/;
 const productionEnabled = () => process.env.ALLOW_PRODUCTION_OPERATIONS === 'true';
+const safeErrorCode = (value,fallback) => SAFE_CODE.test(String(value||'')) ? String(value) : fallback;
 
 const jobSchema = new mongoose.Schema({
   jobId: { type: String, required: true, unique: true },
@@ -172,7 +173,7 @@ app.post('/v1/deployments/execute',validateBase,async(req,res)=>{
     await job.save();
     return res.status(202).json({success:true,accepted:true,deploymentId:job.jobId,status:job.status,job:publicJob(job)});
   } catch(error) {
-    job.status='FAILED'; job.errorCode=error.code||'PROVIDER_EXECUTION_FAILED'; await job.save();
+    job.status='FAILED'; job.errorCode=safeErrorCode(error.code,'PROVIDER_EXECUTION_FAILED'); await job.save();
     return res.status(error.statusCode||502).json({success:false,job:publicJob(job)});
   }
 });
@@ -190,7 +191,7 @@ app.post('/v1/deployments/status',async(req,res)=>{
       job.result={...(job.result||{}),providerStatus:['SUBMITTED','RUNNING','SUCCEEDED','FAILED','ROLLED_BACK'].includes(result.status)?result.status:'UNKNOWN',health:typeof result.health==='string'?result.health.slice(0,240):null};
       job.errorCode=SAFE_CODE.test(String(result.errorCode||''))?String(result.errorCode):null; job.updatedAt=new Date(); await job.save();
       if(job.operation==='rollback'&&job.status==='ROLLED_BACK'){const source=await Job.findOne({jobId:job.request?.sourceJobId});if(source){source.status='ROLLED_BACK';source.updatedAt=new Date();await source.save();}}
-    } catch(error) { return res.status(502).json({success:false,code:error.code||'STATUS_RECONCILIATION_FAILED',job:publicJob(job)}); }
+    } catch(error) { return res.status(502).json({success:false,code:safeErrorCode(error.code,'STATUS_RECONCILIATION_FAILED'),job:publicJob(job)}); }
   }
   return res.json({success:true,status:job.status,errorCode:job.errorCode,job:publicJob(job)});
 });
@@ -211,7 +212,7 @@ app.post('/v1/deployments/rollback',validateBase,async(req,res)=>{
     job.result={providerOperationId:result.operationId||null}; await job.save();
     if(job.status==='ROLLED_BACK'){source.status='ROLLED_BACK';source.updatedAt=new Date();await source.save();}
     return res.status(202).json({success:true,accepted:true,status:job.status,job:publicJob(job)});
-  } catch(error) { job.status='FAILED'; job.errorCode=error.code||'ROLLBACK_FAILED'; await job.save(); return res.status(error.statusCode||502).json({success:false,job:publicJob(job)}); }
+  } catch(error) { job.status='FAILED'; job.errorCode=safeErrorCode(error.code,'ROLLBACK_FAILED'); await job.save(); return res.status(error.statusCode||502).json({success:false,job:publicJob(job)}); }
 });
 
 app.post('/v1/feature-flags/rollout',validateBase,async(req,res)=>{
@@ -226,7 +227,7 @@ app.post('/v1/feature-flags/rollout',validateBase,async(req,res)=>{
     job.status=['SUBMITTED','RUNNING','SUCCEEDED','FAILED'].includes(result.status)?result.status:'SUBMITTED';
     job.result={providerOperationId:result.operationId||null,rollbackSnapshot:result.rollbackSnapshot||null}; await job.save();
     return res.status(202).json({success:true,accepted:true,requestId:job.jobId,status:job.status});
-  } catch(error) { job.status='FAILED'; job.errorCode=error.code||'FLAG_ROLLOUT_FAILED'; await job.save(); return res.status(error.statusCode||502).json({success:false,code:job.errorCode}); }
+  } catch(error) { job.status='FAILED'; job.errorCode=safeErrorCode(error.code,'FLAG_ROLLOUT_FAILED'); await job.save(); return res.status(error.statusCode||502).json({success:false,code:job.errorCode}); }
 });
 
 app.post('/v1/feature-flags/rollback',validateBase,async(req,res)=>{
@@ -242,7 +243,7 @@ app.post('/v1/feature-flags/rollback',validateBase,async(req,res)=>{
     job.status=result.status==='ROLLED_BACK'?'ROLLED_BACK':'FAILED';
     job.result={providerOperationId:result.operationId||null};await job.save();
     return res.status(job.status==='ROLLED_BACK'?200:502).json({success:job.status==='ROLLED_BACK',accepted:job.status==='ROLLED_BACK',requestId:job.jobId,status:job.status});
-  } catch(error){job.status='FAILED';job.errorCode=error.code||'FLAG_ROLLBACK_FAILED';await job.save();return res.status(502).json({success:false,code:job.errorCode});}
+  } catch(error){job.status='FAILED';job.errorCode=safeErrorCode(error.code,'FLAG_ROLLBACK_FAILED');await job.save();return res.status(502).json({success:false,code:job.errorCode});}
 });
 
 app.get('/v1/evidence',async(req,res)=>{
