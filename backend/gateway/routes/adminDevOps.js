@@ -129,14 +129,14 @@ function controlPlaneBase() {
   const raw = String(process.env.PRIVATE_DEVOPS_ADAPTER_URL || process.env.INFRASTRUCTURE_CONTROL_PLANE_URL || '').trim();
   if (!raw) throw new Error('Private DevOps control-plane adapter is not configured.');
   const url = new URL(raw);
-  if (process.env.NODE_ENV === 'production' && url.protocol !== 'https:') throw new Error('DevOps control-plane adapter must use HTTPS in production.');
+  if (url.protocol !== 'https:' && !(process.env.NODE_ENV !== 'production' && ['localhost','127.0.0.1','::1'].includes(url.hostname))) throw new Error('DevOps control-plane adapter must use HTTPS; loopback HTTP is permitted only outside production.');
   if (url.username || url.password || url.search || url.hash) throw new Error('DevOps control-plane URL must not contain credentials, query parameters or fragments.');
   return url.toString().replace(/\/$/, '');
 }
 
 async function adapterRequest(path, body) {
   const token = String(process.env.PRIVATE_DEVOPS_ADAPTER_TOKEN || process.env.INFRASTRUCTURE_CONTROL_PLANE_TOKEN || '').trim();
-  if (process.env.NODE_ENV === 'production' && token.length < 32) throw new Error('A strong private control-plane service token is required in production.');
+  if (token.length < 32) throw new Error('A strong private control-plane service token of at least 32 characters is required.');
   const response = await fetch(new URL(path, controlPlaneBase()), {
     method: 'POST',
     headers: { Accept: 'application/json', 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
