@@ -19,6 +19,7 @@ const ports = {
   'private-devops-adapter': process.env.PRIVATE_DEVOPS_ADAPTER_PORT || '8092'
 };
 const privateAdapterConfigured = Boolean(process.env.PRIVATE_DEVOPS_ADAPTER_TOKEN && (process.env.ADAPTER_MONGO_URI || process.env.MONGO_URI));
+if (process.env.PRIVATE_DEVOPS_ADAPTER_TOKEN && process.env.PRIVATE_DEVOPS_ADAPTER_TOKEN.length < 32) throw new Error('PRIVATE_DEVOPS_ADAPTER_TOKEN must contain at least 32 characters.');
 const privateAdapterRemoteConfigured = Boolean(process.env.PRIVATE_DEVOPS_ADAPTER_TOKEN && process.env.PRIVATE_DEVOPS_ADAPTER_URL);
 const privateAdapterExplicit = process.env.START_PRIVATE_DEVOPS_ADAPTER === 'true';
 if (privateAdapterExplicit && !privateAdapterConfigured) throw new Error('START_PRIVATE_DEVOPS_ADAPTER requires PRIVATE_DEVOPS_ADAPTER_TOKEN and ADAPTER_MONGO_URI or MONGO_URI.');
