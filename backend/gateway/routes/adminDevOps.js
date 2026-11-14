@@ -176,7 +176,7 @@ router.post('/providers/preflight', async (req, res) => {
       provider, environment, capabilities: integration.grantedScopes,
       integration: { id: String(integration._id), provider, environment, endpoint: integration.endpoint, targetConfig: integration.targetConfig || {} },
       credentials,
-      deployment: artifact ? { serviceName: artifact.serviceName, files: artifact.files, artifactDigest: artifact.digest } : undefined,
+      deployment: artifact ? { serviceName: artifact.serviceName, files: artifact.files, image: artifact.config?.image || null, artifactDigest: artifact.digest } : undefined,
       flag: provider === 'launchdarkly' ? { key: String(req.body?.flagKey || '') } : undefined
     });
     await audit(req, 'PROVIDER_STAGING_PREFLIGHT', result.success ? 'PASS' : 'BLOCKED', 'integration', integration._id, { provider, environment, evidenceRunId: result.evidence?.runId || null, evidenceStatus: result.evidence?.status || 'UNKNOWN' });
@@ -341,7 +341,7 @@ router.post('/deployments/:id/execute', async (req, res) => {
       deployment: {
         id: String(deployment._id), serviceName: deployment.serviceName, provider: deployment.provider,
         environment: deployment.environment, strategy: deployment.strategy, changeReference: deployment.changeReference,
-        artifactDigest: artifact.digest, files: artifact.files
+        artifactDigest: artifact.digest, image: artifact.config?.image || null, files: artifact.files
       }
     });
     if (!result.accepted || !result.deploymentId) throw new Error('Provider adapter did not return a confirmed deployment acceptance.');
