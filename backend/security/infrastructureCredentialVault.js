@@ -120,9 +120,9 @@ export function validateProviderTargetConfig(provider, input = {}) {
   }[provider];
   if (Object.keys(value).length && required.some(key => value[key] === undefined || value[key] === null || value[key] === '')) throw new Error(provider+' target configuration is missing required fields: '+required.filter(key => value[key] === undefined || value[key] === null || value[key] === '').join(', '));
   if (provider === 'aws' && Object.keys(value).length) {
-    if (!/^[a-z]{2}(?:-gov)?-[a-z]+-\\d$/.test(value.region)) throw new Error('AWS target region is invalid.');
+    if (!/^[a-z]{2}(?:-gov)?-[a-z]+-\d$/.test(value.region)) throw new Error('AWS target region is invalid.');
     if (!Array.isArray(value.subnetIds) || !value.subnetIds.length || !Array.isArray(value.securityGroupIds) || !value.securityGroupIds.length) throw new Error('AWS subnet and security-group allowlists are required.');
-    if (!/^arn:aws(?:-us-gov)?:iam::\\d{12}:role\\/[A-Za-z0-9+=,.@_/-]+$/.test(value.executionRoleArn)) throw new Error('AWS execution role ARN is invalid.');
+    if (!/^arn:aws(?:-us-gov)?:iam::\d{12}:role\/[A-Za-z0-9+=,.@_/-]+$/.test(value.executionRoleArn)) throw new Error('AWS execution role ARN is invalid.');
   }
   if (provider === 'azure' && Object.keys(value).length && (!/^[0-9a-f-]{36}$/i.test(value.tenantId) || !/^[0-9a-f-]{36}$/i.test(value.subscriptionId))) throw new Error('Azure tenant and subscription IDs must be UUIDs.');
   if (provider === 'gcp' && Object.keys(value).length && !/^[a-z][a-z0-9-]{4,28}[a-z0-9]$/.test(value.projectId)) throw new Error('GCP project ID is invalid.');
