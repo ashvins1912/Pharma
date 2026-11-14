@@ -201,7 +201,7 @@ app.post('/v1/deployments/rollback',validateBase,async(req,res)=>{
   const provider=integration?.provider, environment=integration?.environment, jobId=deployment?.remoteDeploymentId, changeReference=deployment?.changeReference;
   if(!jobId||!changeReference) return res.status(400).json({success:false,code:'ROLLBACK_INPUT_REQUIRED'});
   const source=await Job.findOne({jobId,provider,environment});
-  if(!source||!['SUCCEEDED','RUNNING'].includes(source.status)) return res.status(409).json({success:false,code:'ROLLBACK_SOURCE_NOT_ELIGIBLE'});
+  if(!source||!['SUCCEEDED','RUNNING','FAILED'].includes(source.status)) return res.status(409).json({success:false,code:'ROLLBACK_SOURCE_NOT_ELIGIBLE'});
   const key='rollback:'+jobId+':'+changeReference;
   let job=await Job.findOne({idempotencyKey:key});
   if(!job) job=await Job.create({jobId:crypto.randomUUID(),idempotencyKey:key,provider,operation:'rollback',environment,status:'QUEUED',request:{sourceJobId:jobId,changeReference}});
