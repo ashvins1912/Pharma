@@ -71,3 +71,7 @@ Thumbs.db
 .local-logs/
 bun.lock
 *.lockb
+
+# Shared local environment (private; commit only env/common/.env.example)
+env/local.env
+env/local.env.*
