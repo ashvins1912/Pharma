@@ -22,7 +22,8 @@ function filesOf(files,provider=null){
   for(const [name,value] of Object.entries(files)){
     if(typeof value!=='string'||Buffer.byteLength(value)>200000||name.startsWith('/')||name.split('/').includes('..')||!/^[A-Za-z0-9._/-]{1,180}$/.test(name))throw new Error('Unsafe deployment artifact.');
     if(name.startsWith('terraform/')&&/\bprovisioner\s+["'](?:local-exec|remote-exec)["']|\bdata\s+["']external["']|\bresource\s+["'](?:null_resource|terraform_data)["']|\bmodule\s+["']/i.test(value))throw Object.assign(new Error('Terraform execution hooks are not permitted.'),{code:'TERRAFORM_EXECUTION_HOOK_BLOCKED'});
-    if(name.startsWith('terraform/')&&/\.(?:tf|tf\.json)$/.test(name)){
+    if(name.startsWith('terraform/')&&provider==='kubernetes'&&/\.(?:tf|tf\.json)$/.test(name)&&/\b(?:resource|provider|data|module)\s+"/i.test(value))throw Object.assign(new Error('Kubernetes deployment artifacts may not execute Terraform resources.'),{code:'TERRAFORM_PROVIDER_NOT_ALLOWED'});
+    if(name.startsWith('terraform/')&&['aws','azure','gcp'].includes(provider)&&/\.(?:tf|tf\.json)$/.test(name)){
       if(!terraformPolicy)throw Object.assign(new Error('Terraform is not permitted for this provider.'),{code:'TERRAFORM_PROVIDER_NOT_ALLOWED'});
       const resources=[...value.matchAll(/\bresource\s+"([^"]+)"/g)].map(match=>match[1]);
       const providers=[...value.matchAll(/\bprovider\s+"([^"]+)"/g)].map(match=>match[1]);
