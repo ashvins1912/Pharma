@@ -156,11 +156,28 @@ async function adapterRequest(path, body) {
   return payload;
 }
 
-async function assertProductionReleaseReady() {
+async function getProductionReleaseReadiness() {
   const readiness = await adapterRequest('/v1/release-readiness', {});
+  for (const item of readiness.providers || []) {
+    const latest = await ProviderPreflight.findOne({ provider: item.provider, environment: 'staging' }).sort({ checkedAt: -1 }).lean();
+    const integration = latest ? await InfrastructureIntegration.findOne({ _id: latest.integrationId, revokedAt: null }).lean() : null;
+    const targetVerified = Boolean(latest && latest.status === 'PASS' && integration
+      && integration.verification?.authenticated === true
+      && integration.verification?.discoveryPassed === true
+      && targetConfigDigest(integration.targetConfig) === latest.targetDigest);
+    item.targetVerified = targetVerified;
+    item.preflight = Boolean(item.preflight && targetVerified);
+    item.ready = Boolean(item.preflight && item.deployment && item.rollback);
+  }
+  readiness.ready = Boolean((readiness.providers || []).length === 5 && readiness.providers.every(item => item.ready));
+  return readiness;
+}
+
+async function assertProductionReleaseReady() {
+  const readiness = await getProductionReleaseReadiness();
   if (!readiness.ready) {
-    const missing = (readiness.providers || []).filter(item => !item.ready).map(item => item.provider + ': ' + ['preflight','deployment','rollback'].filter(key => !item[key]).join('/')).join('; ');
-    throw Object.assign(new Error('Production remains locked until all five providers pass staging preflight, deployment and rollback rehearsal. Outstanding: ' + (missing || 'provider evidence incomplete')), { code: 'PRODUCTION_STAGING_GATE_BLOCKED', statusCode: 423 });
+    const missing = (readiness.providers || []).filter(item => !item.ready).map(item => item.provider + ': ' + ['preflight','targetVerified','deployment','rollback'].filter(key => !item[key]).join('/')).join('; ');
+    throw Object.assign(new Error('Production remains locked until all five providers pass staging preflight, target verification, deployment and rollback rehearsal. Outstanding: ' + (missing || 'provider evidence incomplete')), { code: 'PRODUCTION_STAGING_GATE_BLOCKED', statusCode: 423 });
   }
   return readiness;
 }
@@ -580,7 +597,7 @@ router.post('/feature-flags/changes/:id/rollback', async (req, res) => {
 
 router.get('/release-readiness', async (_req, res) => {
   try {
-    const readiness = await adapterRequest('/v1/release-readiness', {});
+    const readiness = await getProductionReleaseReadiness();
     res.set('Cache-Control', 'private, no-store');
     return res.json(readiness);
   } catch (error) {
