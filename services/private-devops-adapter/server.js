@@ -139,7 +139,12 @@ app.post('/v1/deployments/execute',validateBase,async(req,res)=>{
   if(!Array.isArray(deployment.files) || !deployment.files.length || !deployment.changeReference) return res.status(400).json({success:false,code:'DEPLOYMENT_INPUT_REQUIRED'});
   const existing=await Job.findOne({idempotencyKey});
   if(existing) return res.status(200).json({success:true,accepted:true,deploymentId:existing.jobId,status:existing.status,job:publicJob(existing),replayed:true});
-  const job=await Job.create({jobId:crypto.randomUUID(),idempotencyKey,provider,operation:'deploy',environment,status:'QUEUED',request:{integrationId:String(integration.id),artifactDigest:deployment.artifactDigest,changeReference:deployment.changeReference}});
+  const previous=await Job.findOne({provider,environment,operation:'deploy',status:'SUCCEEDED','request.serviceName':deployment.serviceName}).sort({createdAt:-1}).lean();
+  const job=await Job.create({jobId:crypto.randomUUID(),idempotencyKey,provider,operation:'deploy',environment,status:'QUEUED',request:{
+    integrationId:String(integration.id),artifactDigest:deployment.artifactDigest,changeReference:deployment.changeReference,
+    serviceName:deployment.serviceName,image:deployment.image||null,deploymentFiles:deployment.files,
+    previousFiles:previous?.request?.deploymentFiles||null,previousImage:previous?.request?.image||null
+  }});
   try {
     const result=await providerCall(provider,'execute',{jobId:job.jobId,integration:{id:integration.id,endpoint:integration.endpoint,targetConfig:integration.targetConfig||{}},credentials,deployment});
     job.status=String(result.status||'SUBMITTED');
