@@ -56,6 +56,7 @@ const deploymentSchema = new mongoose.Schema({
   changeReference: { type: String, required: true },
   remoteDeploymentId: { type: String, default: null },
   rollbackRequestId: { type: String, default: null },
+  rollbackAvailable: { type: Boolean, default: false },
   remoteStatus: { type: String, default: null },
   lastErrorCode: { type: String, default: null },
   rolloutStages: { type: [mongoose.Schema.Types.Mixed], default: [] }
@@ -349,6 +350,7 @@ router.post('/deployments/:id/execute', async (req, res) => {
     deployment.status = result.status === 'SUCCEEDED' ? 'SUCCEEDED' : 'SUBMITTED';
     deployment.remoteDeploymentId = String(result.deploymentId).slice(0, 180);
     deployment.remoteStatus = String(result.status || 'ACCEPTED').slice(0, 80);
+    deployment.rollbackAvailable = result.rollbackAvailable === true;
     await deployment.save();
     await audit(req, 'DEPLOYMENT_SUBMITTED', 'ACCEPTED', 'deployment', deployment._id, { provider: deployment.provider, remoteDeploymentId: deployment.remoteDeploymentId, changeReference: deployment.changeReference });
     return res.json({ success: true, accepted: true, deployment, message: deployment.status === 'SUCCEEDED' ? 'Provider deployment completed and the driver confirmed success.' : 'Provider accepted the deployment request. Poll provider status to verify completion; acceptance is not success.' });
@@ -390,6 +392,7 @@ router.post('/deployments/:id/rollback', async (req, res) => {
   if (!validId(req.params.id)) return res.status(400).json({ success: false, message: 'Invalid deployment ID.' });
   const deployment = await Deployment.findById(req.params.id);
   if (!deployment || !deployment.remoteDeploymentId) return res.status(404).json({ success: false, message: 'Submitted deployment not found.' });
+  if (deployment.rollbackAvailable !== true) return res.status(409).json({ success: false, code: 'ROLLBACK_SNAPSHOT_UNAVAILABLE', message: 'No previous successful artifact is available for a safe automatic rollback.' });
   if (!['SUBMITTED', 'RUNNING', 'SUCCEEDED', 'FAILED'].includes(deployment.status)) return res.status(409).json({ success: false, message: 'Deployment is not in a rollback-eligible state.' });
   if (req.body?.confirmation !== 'ROLLBACK DEPLOYMENT') return res.status(400).json({ success: false, code: 'CONFIRMATION_REQUIRED', message: 'Type ROLLBACK DEPLOYMENT to continue.' });
   try {
