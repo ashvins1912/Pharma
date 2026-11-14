@@ -75,7 +75,7 @@ function endpointFor(provider) {
   const raw = String(process.env[key] || '').trim();
   if (!raw) return null;
   const url = new URL(raw);
-  if (url.protocol !== 'https:' && process.env.NODE_ENV === 'production') throw new Error('Provider driver endpoints must use HTTPS in production.');
+  if (url.protocol !== 'https:' && !(process.env.NODE_ENV !== 'production' && ['localhost','127.0.0.1','::1'].includes(url.hostname))) throw new Error('Provider driver endpoints must use HTTPS; loopback HTTP is permitted only outside production.');
   if (url.username || url.password || url.search || url.hash) throw new Error('Invalid provider driver URL.');
   return url.toString().replace(/\/$/,'');
 }
