@@ -168,7 +168,7 @@ router.post('/providers/preflight', async (req, res) => {
     const { integration, credentials } = await loadDeployIntegration(req.body?.integrationId, provider, environment, capability);
     const result = await adapterRequest('/v1/preflight', {
       provider, environment, capabilities: integration.grantedScopes,
-      integration: { id: String(integration._id), provider, environment, endpoint: integration.endpoint }, credentials
+      integration: { id: String(integration._id), provider, environment, endpoint: integration.endpoint, targetConfig: integration.targetConfig || {} }, credentials
     });
     await audit(req, 'PROVIDER_STAGING_PREFLIGHT', result.success ? 'PASS' : 'BLOCKED', 'integration', integration._id, { provider, environment, evidenceRunId: result.evidence?.runId || null, evidenceStatus: result.evidence?.status || 'UNKNOWN' });
     return res.status(result.success ? 200 : 424).json(result);
@@ -327,7 +327,7 @@ router.post('/deployments/:id/execute', async (req, res) => {
     const artifact = await Artifact.findById(deployment.artifactId).lean();
     if (!artifact || artifact.validation?.status !== 'PASS') throw new Error('The validated deployment artifact is no longer available.');
     const result = await adapterRequest('/v1/deployments/execute', {
-      integration: { id: String(integration._id), provider: integration.provider, environment: integration.environment, endpoint: integration.endpoint },
+      integration: { id: String(integration._id), provider: integration.provider, environment: integration.environment, endpoint: integration.endpoint, targetConfig: integration.targetConfig || {} },
       credentials,
       deployment: {
         id: String(deployment._id), serviceName: deployment.serviceName, provider: deployment.provider,
@@ -357,7 +357,7 @@ router.get('/deployments/:id/status', async (req, res) => {
   try {
     const { integration, credentials } = await loadDeployIntegration(deployment.integrationId, deployment.provider, deployment.environment, 'deploy');
     const result = await adapterRequest('/v1/deployments/status', {
-      integration: { id: String(integration._id), provider: integration.provider, environment: integration.environment, endpoint: integration.endpoint },
+      integration: { id: String(integration._id), provider: integration.provider, environment: integration.environment, endpoint: integration.endpoint, targetConfig: integration.targetConfig || {} },
       credentials,
       deployment: { id: String(deployment._id), remoteDeploymentId: deployment.remoteDeploymentId }
     });
@@ -384,7 +384,7 @@ router.post('/deployments/:id/rollback', async (req, res) => {
   try {
     const { integration, credentials } = await loadDeployIntegration(deployment.integrationId, deployment.provider, deployment.environment, 'deploy');
     const result = await adapterRequest('/v1/deployments/rollback', {
-      integration: { id: String(integration._id), provider: integration.provider, environment: integration.environment, endpoint: integration.endpoint },
+      integration: { id: String(integration._id), provider: integration.provider, environment: integration.environment, endpoint: integration.endpoint, targetConfig: integration.targetConfig || {} },
       credentials,
       deployment: { id: String(deployment._id), remoteDeploymentId: deployment.remoteDeploymentId, serviceName: deployment.serviceName, changeReference: deployment.changeReference }
     });
@@ -456,7 +456,7 @@ router.post('/feature-flags/changes/:id/execute', async (req, res) => {
   try {
     const { integration, credentials } = await loadDeployIntegration(change.integrationId, 'launchdarkly', change.environment, 'manage');
     const result = await adapterRequest('/v1/feature-flags/rollout', {
-      integration: { id: String(integration._id), provider: 'launchdarkly', environment: change.environment, endpoint: integration.endpoint },
+      integration: { id: String(integration._id), provider: 'launchdarkly', environment: change.environment, endpoint: integration.endpoint, targetConfig: integration.targetConfig || {} },
       credentials,
       flag: { key: change.flagKey, strategy: change.strategy, rolloutPercent: change.rolloutPercent, stages: DEPLOYMENT_STRATEGIES[change.strategy], changeReference: change.changeReference }
     });
