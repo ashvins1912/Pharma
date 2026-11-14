@@ -149,6 +149,7 @@ app.post('/v1/deployments/execute',validateBase,async(req,res)=>{
   const idempotencyKey='deployment:'+String(deployment.id);
   if(idempotencyKey.length<16||idempotencyKey.length>160) return res.status(400).json({success:false,code:'IDEMPOTENCY_KEY_REQUIRED'});
   if(!Array.isArray(deployment.files) || !deployment.files.length || !deployment.changeReference) return res.status(400).json({success:false,code:'DEPLOYMENT_INPUT_REQUIRED'});
+  if(typeof deployment.image!=='string'||!/^([a-z0-9.-]+(?::[0-9]+)?\\/)?[a-z0-9._/-]+:[A-Za-z0-9_.-]{1,64}$/.test(deployment.image)||deployment.image.includes('CHANGE_ME')||deployment.image.split(':').pop().toLowerCase()==='latest') return res.status(400).json({success:false,code:'DEPLOYMENT_IMAGE_REQUIRED'});
   const existing=await Job.findOne({idempotencyKey});
   if(existing) return res.status(200).json({success:true,accepted:true,deploymentId:existing.jobId,status:existing.status,job:publicJob(existing),replayed:true});
   const previous=await Job.findOne({provider,environment,operation:'deploy',status:'SUCCEEDED','request.serviceName':deployment.serviceName}).sort({createdAt:-1}).lean();
