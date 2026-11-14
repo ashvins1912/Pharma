@@ -615,7 +615,7 @@ router.post('/feature-flags/changes/:id/execute', async (req, res) => {
     const result = await adapterRequest('/v1/feature-flags/rollout', {
       integration: { id: String(integration._id), provider: 'launchdarkly', environment: change.environment, endpoint: integration.endpoint, targetConfig: integration.targetConfig || {} },
       credentials,
-      flag: { key: change.flagKey, strategy: change.strategy, rolloutPercent: change.rolloutPercent, stages: DEPLOYMENT_STRATEGIES[change.strategy], changeReference: change.changeReference }
+      flag: { key: change.flagKey, variationId: change.variationId, strategy: change.strategy, rolloutPercent: change.rolloutPercent, stages: DEPLOYMENT_STRATEGIES[change.strategy], changeReference: change.changeReference }
     });
     if (!result.accepted) throw new Error('LaunchDarkly adapter did not confirm the flag rollout request.');
     change.status = result.status === 'SUCCEEDED' ? 'SUCCEEDED' : 'SUBMITTED';
