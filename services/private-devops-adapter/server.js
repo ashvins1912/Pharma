@@ -88,7 +88,7 @@ app.use('/v1',auth);
 app.get('/v1/catalog',(_req,res)=>res.json({success:true,providers:[...PROVIDERS],environments:[...ENVIRONMENTS],productionEnabled:productionEnabled(),driverStatus:Object.fromEntries([...PROVIDERS].map(p=>[p,Boolean(process.env['DEVOPS_DRIVER_'+p.toUpperCase()+'_URL'])]))}));
 
 app.post('/v1/preflight',validateBase,async(req,res)=>{
-  const {provider,environment,capabilities=[]}=req.body;
+  const {provider,environment,capabilities=[],integration,credentials}=req.body;
   const checks=[];
   let driver=null;
   try { driver=endpointFor(provider); } catch { /* reported below */ }
@@ -97,7 +97,7 @@ app.post('/v1/preflight',validateBase,async(req,res)=>{
   checks.push({name:'environment_policy',status:environment==='production'&&!productionEnabled()?'BLOCKED':'PASS'});
   let remote={};
   if(driver && checks[1].status==='PASS') {
-    try { remote=await driverCall(provider,'/v1/preflight',{provider,environment,capabilities}); checks.push(...(Array.isArray(remote.checks)?remote.checks:[])); }
+    try { remote=await driverCall(provider,'/v1/preflight',{provider,environment,capabilities,integration:{id:integration?.id,endpoint:integration?.endpoint},credentials}); checks.push(...(Array.isArray(remote.checks)?remote.checks:[])); }
     catch(error){checks.push({name:'provider_preflight',status:'FAIL',code:error.code||'PREFLIGHT_FAILED'});}
   }
   const passed=checks.length>0 && checks.every(c=>c.status==='PASS');
