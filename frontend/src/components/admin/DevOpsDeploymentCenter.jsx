@@ -13,6 +13,7 @@ export default function DevOpsDeploymentCenter() {
   const [integrations, setIntegrations] = useState([]);
   const [configurations, setConfigurations] = useState([]);
   const [flagChanges, setFlagChanges] = useState([]);
+  const [releaseReadiness, setReleaseReadiness] = useState(null);
   const [artifact, setArtifact] = useState(null);
   const [selectedFile, setSelectedFile] = useState('');
   const [busy, setBusy] = useState('');
@@ -43,9 +44,10 @@ export default function DevOpsDeploymentCenter() {
       apiClient.get(`${API}/deployments`),
       apiClient.get('/api/v1/admin/infrastructure/security/integrations'),
       apiClient.get(`${API}/configurations`),
-      apiClient.get(`${API}/feature-flags/changes`)
+      apiClient.get(`${API}/feature-flags/changes`),
+      apiClient.get(`${API}/release-readiness`)
     ]);
-    const [c, a, d, i, cfg, flags] = results;
+    const [c, a, d, i, cfg, flags, readiness] = results;
     if (c.status === 'fulfilled') setCatalog(unwrap(c.value));
     else setError(errorMessage(c.reason));
     if (a.status === 'fulfilled') setArtifacts(unwrap(a.value).artifacts || []);
@@ -53,6 +55,7 @@ export default function DevOpsDeploymentCenter() {
     if (i.status === 'fulfilled') setIntegrations(unwrap(i.value).integrations || []);
     if (cfg.status === 'fulfilled') setConfigurations(unwrap(cfg.value).configurations || []);
     if (flags.status === 'fulfilled') setFlagChanges(unwrap(flags.value).changes || []);
+    if (readiness.status === 'fulfilled') setReleaseReadiness(unwrap(readiness.value));
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -209,6 +212,21 @@ export default function DevOpsDeploymentCenter() {
     <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-100">
       <strong>Execution boundary:</strong> no remote terminal, shell playground, arbitrary command runner or generic proxy is exposed. Actions use typed APIs and a private provider adapter. Production requires separate approval; credentials remain server-side.
     </div>
+    <section className="rounded-xl border p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div><h4 className="font-black">Production release gate</h4><p className="text-xs text-slate-500">All five providers must pass staging preflight, deployment and rollback rehearsal before production planning or approval.</p></div>
+        <span className={releaseReadiness?.ready ? 'rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800' : 'rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800'}>{releaseReadiness?.ready ? 'Staging evidence complete' : 'Production locked'}</span>
+      </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+        {(releaseReadiness?.providers || ['aws','azure','gcp','kubernetes','launchdarkly'].map(provider => ({provider,preflight:false,deployment:false,rollback:false}))).map(item => <div key={item.provider} className="rounded-lg bg-slate-50 p-2 text-xs dark:bg-slate-800">
+          <p className="font-bold uppercase">{item.provider}</p>
+          <p className={item.preflight ? 'text-emerald-700 dark:text-emerald-300' : 'text-amber-700 dark:text-amber-300'}>Preflight: {item.preflight ? 'PASS' : 'Pending'}</p>
+          <p className={item.deployment ? 'text-emerald-700 dark:text-emerald-300' : 'text-amber-700 dark:text-amber-300'}>Staging deploy: {item.deployment ? 'PASS' : 'Pending'}</p>
+          <p className={item.rollback ? 'text-emerald-700 dark:text-emerald-300' : 'text-amber-700 dark:text-amber-300'}>Rollback: {item.rollback ? 'PASS' : 'Pending'}</p>
+        </div>)}
+      </div>
+      <p className="mt-2 text-xs text-slate-500">{releaseReadiness?.productionEnabled ? 'Production execution policy is enabled, subject to the release gate and two-person approval.' : 'Production execution remains disabled by adapter policy until explicitly enabled after staging validation.'}</p>
+    </section>
     {error && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-800">{error}</p>}
     {notice && <p role="status" className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</p>}
 
