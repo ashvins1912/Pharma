@@ -153,6 +153,13 @@ export default function DevOpsDeploymentCenter() {
   });
 
   const rolloutFlag = () => run('flag', async () => {
+    if (flagForm.environment === 'staging') {
+      const preflight = await apiClient.post(`${API}/providers/preflight`, {
+        provider: 'launchdarkly', environment: 'staging',
+        integrationId: flagForm.integrationId, flagKey: flagForm.flagKey
+      }, { timeout: 60000 });
+      if (!unwrap(preflight).success) throw new Error('LaunchDarkly staging preflight did not pass. Review the provider evidence before planning the flag rollout.');
+    }
     const response = await apiClient.post(`${API}/feature-flags/rollout`, {
       ...flagForm, rolloutPercent: Number(flagForm.rolloutPercent)
     });
