@@ -1,136 +1,217 @@
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import net from 'node:net';
 import { fileURLToPath } from 'node:url';
+import path from 'node:path';
+import crypto from 'node:crypto';
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const mode = process.argv[2] || 'start';
-const isWindows = process.platform === 'win32';
-const python = process.env.PYTHON || (isWindows ? 'python' : 'python3');
-const npm = process.env.npm_execpath ? process.execPath : (isWindows ? 'npm.cmd' : 'npm');
-const npmPrefix = process.env.npm_execpath ? [process.env.npm_execpath] : [];
-const envDirs = {
-  common: 'env/common/.env',
-  frontend: 'frontend/env/.env',
-  backend: 'backend/env/.env',
-  gateway: 'api-gateway/env/.env',
-  inventory: 'services/inventory-service/env/.env',
-  medicineMaster: 'services/medicine-master-service/env/.env',
-  order: 'services/order-service/env/.env',
-  websocket: 'services/websocket-service/env/.env',
-  prescription: 'services/prescription-service/env/.env',
-  cache: 'services/caching-service/env/.env'
-};
+if (!['start', 'dev'].includes(mode)) {
+  console.error('Usage: node scripts/workspace.mjs [start|dev]');
+  process.exit(2);
+}
 
-function parseEnvFile(path) {
-  if (!existsSync(path)) return {};
-  const values = {};
-  for (const line of readFileSync(path, 'utf8').split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) continue;
-    const match = trimmed.match(/^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
-    if (!match) continue;
-    let value = match[2].trim();
-    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) value = value.slice(1, -1);
-    else value = value.replace(/\s+#.*$/, '');
-    values[match[1]] = value.replace(/\\n/g, '\n');
+const children = [];
+const isLocalProduction = process.env.NODE_ENV === 'production';
+
+function configureLocalSecrets() {
+  if (isLocalProduction) {
+    const privateKey = String(process.env.PHARMA_JWT_PRIVATE_KEY || '').trim();
+    const publicKey = String(process.env.PHARMA_JWT_PUBLIC_KEY || '').trim();
+    if (privateKey.length < 100 || publicKey.length < 100) {
+      throw new Error('NODE_ENV=production requires real PHARMA_JWT_PRIVATE_KEY and PHARMA_JWT_PUBLIC_KEY values. Refusing to generate production signing keys.');
+    }
+    return;
   }
-  return values;
+
+  const privateKey = String(process.env.PHARMA_JWT_PRIVATE_KEY || '').trim();
+  const publicKey = String(process.env.PHARMA_JWT_PUBLIC_KEY || '').trim();
+  if (privateKey.length < 100 || publicKey.length < 100
+      || !privateKey.includes('BEGIN PRIVATE KEY')
+      || !publicKey.includes('BEGIN PUBLIC KEY')) {
+    const pair = crypto.generateKeyPairSync('rsa', {
+      modulusLength: 3072,
+      privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+      publicKeyEncoding: { type: 'spki', format: 'pem' }
+    });
+    process.env.PHARMA_JWT_PRIVATE_KEY = pair.privateKey;
+    process.env.PHARMA_JWT_PUBLIC_KEY = pair.publicKey;
+    console.info('[workspace] Generated an ephemeral RSA-3072 JWT key pair for this local run. It is not written to disk and will change on restart.');
+  }
+
+  if (!process.env.CACHE_SERVICE_TOKEN || process.env.CACHE_SERVICE_TOKEN.length < 32) {
+    process.env.CACHE_SERVICE_TOKEN = crypto.randomBytes(32).toString('hex');
+    console.info('[workspace] Generated an ephemeral local cache-service token for this run.');
+  }
+
+  if (process.env.USE_REMOTE_CACHE_SERVICE !== 'true') {
+    process.env.CACHE_SERVICE_URL = 'http://127.0.0.1:8081';
+  }
 }
 
-const commonEnv = parseEnvFile(resolve(root, envDirs.common));
-function serviceEnv(file) {
-  return { ...commonEnv, ...parseEnvFile(resolve(root, file)), ...process.env };
+function portIsOpen(port) {
+  return new Promise(resolve => {
+    const socket = net.createConnection({ host: '127.0.0.1', port });
+    const finish = value => { socket.destroy(); resolve(value); };
+    socket.setTimeout(500);
+    socket.once('connect', () => finish(true));
+    socket.once('error', () => finish(false));
+    socket.once('timeout', () => finish(false));
+  });
 }
-const services = [
-  { name: 'backend', env: envDirs.backend, command: 'npm', args: ['--workspace', 'backend', 'run', 'dev'], defaults: { PORT: '3001' } },
-  { name: 'api-gateway', env: envDirs.gateway, command: 'npm', args: ['--workspace', 'api-gateway', 'run', 'dev'], defaults: { PORT: '8080' } },
-  { name: 'inventory-service', env: envDirs.inventory, command: 'npm', args: ['--workspace', 'services/inventory-service', 'run', 'dev'], defaults: { PORT: '8091' } },
-  { name: 'medicine-master-service', env: envDirs.medicineMaster, command: 'npm', args: ['--workspace', 'services/medicine-master-service', 'run', 'dev'], defaults: { PORT: '8092' } },
-  { name: 'order-service', env: envDirs.order, command: 'npm', args: ['--workspace', 'services/order-service', 'run', 'dev'], defaults: { PORT: '8093' } },
-  { name: 'websocket-service', env: envDirs.websocket, command: 'npm', args: ['--workspace', 'services/websocket-service', 'run', 'dev'], defaults: { PORT: '4000' } },
-  { name: 'prescription-service', env: envDirs.prescription, command: 'python', args: ['-m', 'uvicorn', 'main:app', '--host', '0.0.0.0', '--port', '3002'], cwd: 'services/prescription-service', venv: 'services/prescription-service/.venv' },
-  { name: 'caching-service', env: envDirs.cache, command: 'python', args: ['-m', 'uvicorn', 'server:app', '--host', '0.0.0.0', '--port', '8081'], cwd: 'services/caching-service', venv: 'services/caching-service/.venv' },
-  { name: 'frontend', env: envDirs.frontend, command: 'npm', args: ['--workspace', 'frontend', 'run', 'dev'], defaults: { VITE_DEV_API_PROXY: 'http://localhost:8080' } }
+let stopping = false;
+
+function stop(code = 0) {
+  if (stopping) return;
+  stopping = true;
+  for (const child of children) {
+    if (child.exitCode === null && child.signalCode === null) child.kill('SIGTERM');
+  }
+  process.exitCode = code;
+}
+
+function launch(name, command, args, options = {}) {
+  console.log(`[workspace] STARTING ${name}`);
+  const child = spawn(command, args, {
+    cwd: options.cwd || root,
+    env: { ...process.env, ...(options.env || {}) },
+    stdio: 'inherit',
+    shell: false
+  });
+  children.push(child);
+  child.once('error', error => {
+    console.error(`[workspace] ${name} failed to launch:`, error.message);
+    stop(1);
+  });
+  child.once('exit', (code, signal) => {
+    if (!stopping) {
+      console.error(`[workspace] ${name} exited${signal ? ` from ${signal}` : ` with code ${code}`}.`);
+      stop(code || 1);
+    }
+  });
+  return child;
+}
+
+function canImportPythonModule(python, moduleName) {
+  const check = spawnSync(python, ['-c', `import ${moduleName}`], {
+    cwd: root,
+    stdio: 'ignore',
+    env: process.env
+  });
+  return check.status === 0;
+}
+
+function waitForPort(name, port, timeoutMs = Number(process.env.SERVICE_STARTUP_TIMEOUT_MS || 60000)) {
+  const deadline = Date.now() + timeoutMs;
+  return new Promise((resolve, reject) => {
+    const probe = () => {
+      if (stopping) return reject(new Error('Startup cancelled'));
+      const socket = net.createConnection({ host: '127.0.0.1', port });
+      const finish = ready => {
+        socket.destroy();
+        if (ready) {
+          console.log(`[workspace] LISTENING ${name} on 127.0.0.1:${port}`);
+          resolve();
+        } else if (Date.now() >= deadline) {
+          reject(new Error(`${name} did not listen on port ${port} within ${timeoutMs}ms`));
+        } else {
+          setTimeout(probe, 300);
+        }
+      };
+      socket.setTimeout(500);
+      socket.once('connect', () => finish(true));
+      socket.once('error', () => finish(false));
+      socket.once('timeout', () => finish(false));
+    };
+    probe();
+  });
+}
+
+const python = process.env.PYTHON_BIN || (process.platform === 'win32' ? 'python' : 'python3');
+const pythonServices = [
+  {
+    name: 'prescription-service',
+    cwd: path.join(root, 'services/prescription-service'),
+    port: Number(process.env.PRESCRIPTION_SERVICE_PORT || 3002),
+    module: 'main:app',
+    dependencies: ['fastapi', 'pydantic', 'jwt']
+  },
+  {
+    name: 'caching-service',
+    cwd: path.join(root, 'services/caching-service'),
+    port: Number(process.env.CACHE_SERVICE_PORT || 8081),
+    module: 'server:app',
+    dependencies: ['fastapi', 'pydantic', 'redis']
+  }
 ];
 
-function run(command, args, options = {}) {
-  const result = spawnSync(command, args, { cwd: root, stdio: 'inherit', ...options });
-  if (result.error) throw result.error;
-  if (result.status !== 0) process.exit(result.status ?? 1);
-}
+async function main() {
+  configureLocalSecrets();
 
-function pythonExecutable(venv) {
-  return resolve(root, venv, isWindows ? 'Scripts/python.exe' : 'bin/python');
-}
-
-async function setup() {
-  console.log('\n[workspace] Installing JavaScript workspace dependencies...');
-  run(npm, [...npmPrefix, 'install']);
-  for (const service of services.filter(item => item.venv)) {
-    if (!existsSync(pythonExecutable(service.venv))) {
-      console.log('\n[workspace] Creating Python environment: ' + service.name);
-      run(python, ['-m', 'venv', service.venv]);
-    }
-    console.log('[workspace] Installing Python dependencies: ' + service.name);
-    run(pythonExecutable(service.venv), ['-m', 'pip', 'install', '--disable-pip-version-check', '-r', 'requirements.txt'], { cwd: resolve(root, service.cwd) });
-  }
-  console.log('\n[workspace] Dependency installation completed.');
-}
-
-function build() {
-  console.log('\n[workspace] Building frontend and checking Python services...');
-  run(npm, [...npmPrefix, '--workspace', 'frontend', 'run', 'build']);
-  for (const service of services.filter(item => item.venv)) {
-    const file = service.name === 'prescription-service' ? 'main.py' : 'server.py';
-    run(pythonExecutable(service.venv), ['-m', 'py_compile', file], { cwd: resolve(root, service.cwd) });
-  }
-  console.log('\n[workspace] Build checks completed.');
-}
-
-function start() {
-  let stopping = false;
-  const children = [];
-  const stop = (signal = 'SIGTERM') => {
-    if (stopping) return;
-    stopping = true;
-    for (const child of children) if (child.exitCode === null && child.signalCode === null) child.kill(signal);
-  };
-  process.once('SIGINT', () => stop());
-  process.once('SIGTERM', () => stop());
-
-  for (const service of services) {
-    const env = { ...service.defaults, ...serviceEnv(service.env) };
-    const command = service.venv ? pythonExecutable(service.venv) : (service.command === 'npm' ? npm : service.command);
-    const args = service.venv ? service.args : [...(service.command === 'npm' ? npmPrefix : []), ...service.args];
-    const cwd = resolve(root, service.cwd || '.');
-    if (service.venv && !existsSync(command)) {
-      console.error('[workspace] Missing Python environment for ' + service.name + '. Run npm run setup:all first.');
-      stop();
-      process.exitCode = 1;
-      return;
-    }
-    const child = spawn(command, args, { cwd, env, stdio: 'inherit' });
-    children.push(child);
-    child.on('error', error => { console.error('[' + service.name + '] failed to start:', error.message); process.exitCode = 1; stop(); });
-    child.on('exit', (code, signal) => {
-      if (!stopping) {
-        console.error('[workspace] ' + service.name + ' exited (' + (signal || code) + '). Stopping the stack.');
-        process.exitCode = code || 1;
-        stop();
+  const redisPort = Number(process.env.REDIS_PORT || 6379);
+  if (!process.env.REDIS_URL) process.env.REDIS_URL = 'redis://127.0.0.1:' + redisPort + '/0';
+  let redisAvailable = await portIsOpen(redisPort);
+  if (!redisAvailable && process.env.START_LOCAL_REDIS !== 'false') {
+    const redisCheck = spawnSync('redis-server', ['--version'], { stdio: 'ignore' });
+    if (redisCheck.status === 0) {
+      launch('local-redis', 'redis-server', [
+        '--bind', '127.0.0.1', '--port', String(redisPort),
+        '--save', '', '--appendonly', 'no'
+      ]);
+      try {
+        await waitForPort('local-redis', redisPort, 10000);
+        redisAvailable = true;
+      } catch {
+        console.warn('[workspace] Local Redis did not become ready; shared cache will be disabled.');
       }
-    });
+    }
   }
-  console.log('[workspace] All local services and the frontend have been started. Press Ctrl+C to stop.');
+  if (!redisAvailable) {
+    process.env.CACHE_SERVICE_URL = '';
+    console.warn('[workspace] Redis is unavailable. Shared cache/event consumption is disabled for this run; install Redis or start it on localhost:6379.');
+  }
+
+  const nodeRunner = launch('node-workspaces', process.execPath, [
+    path.join(root, 'scripts/service-runner.js'), mode
+  ]);
+
+  const readiness = [waitForPort('API gateway', Number(process.env.API_GATEWAY_PORT || 8080))];
+
+  // The shell host is a separate local app workspace and uses port 5000.
+  launch('shell-host', 'npm', [
+    '--workspace', 'apps/shell-host', 'run', 'dev'
+  ]);
+  readiness.push(waitForPort('shell-host', Number(process.env.SHELL_HOST_PORT || 5000)));
+
+  if (canImportPythonModule(python, 'uvicorn')) {
+    for (const service of pythonServices) {
+      if (service.name === 'caching-service' && !redisAvailable) continue;
+      const missing = service.dependencies.filter(moduleName => !canImportPythonModule(python, moduleName));
+      if (missing.length) {
+        console.warn(`[workspace] ${service.name} skipped; missing Python modules: ${missing.join(', ')}. Install ${path.relative(root, path.join(service.cwd, 'requirements.txt'))}.`);
+        continue;
+      }
+      launch(service.name, python, [
+        '-m', 'uvicorn', service.module,
+        '--host', '0.0.0.0',
+        '--port', String(service.port)
+      ], {
+        cwd: service.cwd,
+        env: { PORT: String(service.port) }
+      });
+      readiness.push(waitForPort(service.name, service.port));
+    }
+  } else {
+    console.warn(`[workspace] Python services skipped: ${python} cannot import uvicorn. Install each service's requirements.txt, then rerun.`);
+  }
+
+  await Promise.all(readiness);
+  if (!stopping) console.log('[workspace] Local application startup completed. Node workspaces, shell host, and available Python services are listening; dependency health is checked separately.');
 }
 
-try {
-  if (mode === 'setup') await setup();
-  else if (mode === 'build') build();
-  else if (mode === 'start') start();
-  else if (mode === 'all') { await setup(); build(); start(); }
-  else throw new Error('Usage: node scripts/workspace.mjs <setup|build|start|all>');
-} catch (error) {
-  console.error('[workspace] Failed:', error.message);
-  process.exitCode = 1;
-}
+process.once('SIGINT', () => stop(0));
+process.once('SIGTERM', () => stop(0));
+main().catch(error => {
+  console.error('[workspace] Startup failed:', error.message);
+  stop(1);
+});
