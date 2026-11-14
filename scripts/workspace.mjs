@@ -85,13 +85,15 @@ const pythonServices = [
     name: 'prescription-service',
     cwd: path.join(root, 'services/prescription-service'),
     port: Number(process.env.PRESCRIPTION_SERVICE_PORT || 3002),
-    module: 'main:app'
+    module: 'main:app',
+    dependencies: ['fastapi', 'pydantic', 'jwt']
   },
   {
     name: 'caching-service',
     cwd: path.join(root, 'services/caching-service'),
     port: Number(process.env.CACHE_SERVICE_PORT || 8081),
-    module: 'server:app'
+    module: 'server:app',
+    dependencies: ['fastapi', 'pydantic', 'redis']
   }
 ];
 
@@ -110,6 +112,11 @@ async function main() {
 
   if (canImportPythonModule(python, 'uvicorn')) {
     for (const service of pythonServices) {
+      const missing = service.dependencies.filter(moduleName => !canImportPythonModule(python, moduleName));
+      if (missing.length) {
+        console.warn(`[workspace] ${service.name} skipped; missing Python modules: ${missing.join(', ')}. Install ${path.relative(root, path.join(service.cwd, 'requirements.txt'))}.`);
+        continue;
+      }
       launch(service.name, python, [
         '-m', 'uvicorn', service.module,
         '--host', '0.0.0.0',
