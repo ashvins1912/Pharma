@@ -12,8 +12,15 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "dev:admin": "npm --workspace services/admin-control-plane run dev",
+    "start:admin": "npm --workspace services/admin-control-plane start",
+    "test:admin": "npm --workspace services/admin-control-plane test",
+     "dev:frontend": "npm --workspace frontend run dev",
     "dev": "node scripts/dev.js",
-    "dev:frontend": "npm --workspace frontend run dev",
+    "dev": "node scripts/workspace.mjs dev",
+    "start:all": "npm run build && node scripts/workspace.mjs start",
+    "start": "npm run start:all",
+    "dev:split": "START_ADMIN_SERVICE=true node scripts/dev.js",
     "dev:gateway": "npm --workspace api-gateway run dev",
     "dev:backend": "npm --workspace backend run dev",
     "build": "npm --workspace frontend run build",
@@ -23,7 +30,12 @@
     "admin:bootstrap": "node scripts/bootstrap-super-admin.mjs",
     "tenant:create": "node scripts/create-tenant.mjs",
     "test:tenant-isolation": "node --test tests/tenantDeliveryIsolation.test.js tests/tenantOwnedRiders.test.js tests/tenantOrderIsolation.test.js tests/orderAssignmentTenantIsolation.test.js tests/surplusSavingsPricing.test.js tests/endToEndUserWorkflowAutomation.test.js backend/modules/delivery/use-cases/RiderLifecycle.test.js",
-    "test:e2e": "bash scripts/run-playwright-ci.sh"
+    "test:e2e": "bash scripts/run-playwright-ci.sh",
+    "test:database-kernel": "npm --workspace packages/database-kernel test",
+    "dev:private-devops-adapter": "npm --workspace services/private-devops-adapter run dev",
+    "start:private-devops-adapter": "npm --workspace services/private-devops-adapter run start",
+    "test:private-devops-adapter": "npm --workspace services/private-devops-adapter test"
+
   },
   "dependencies": {
     "react-router-dom": "^7.18.5",

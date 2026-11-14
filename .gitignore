@@ -72,3 +72,12 @@ Thumbs.db
 .rbac-snapshots/
 bun.lock
 *.lockb
+
+# Shared local environment (private; commit only env/common/.env.example)
+env/local.env
+env/local.env.*
+
+# Isolated Python environments and bytecode
+**/.venv/
+**/__pycache__/
+*.py[cod]

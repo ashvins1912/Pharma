@@ -10,6 +10,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // API requests stay on /api so local Vite proxying and the production Render
 // rewrite exercise the same frontend request paths.
 export default defineConfig(({ mode }) => ({
+  // Read the repository-level shared env file for UI builds and local dev.
+  envDir: '..',
   base: '/',
   plugins: [
     react(),
@@ -36,7 +38,7 @@ export default defineConfig(({ mode }) => ({
     allowedHosts: true,
     proxy: {
       '/api': {
-        target: process.env.VITE_DEV_API_PROXY || 'http://localhost:8090',
+        target: process.env.VITE_DEV_API_PROXY || 'http://localhost:8080',
         changeOrigin: true,
         secure: mode !== 'development'
       }
