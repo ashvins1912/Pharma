@@ -72,7 +72,7 @@ const flagChangeSchema = new mongoose.Schema({
   approvedBy: { type: String, default: null },
   approvedAt: { type: Date, default: null },
   changeReference: { type: String, required: true },
-  status: { type: String, enum: ['PENDING_APPROVAL', 'APPROVED', 'SUBMITTED', 'FAILED'], default: 'PENDING_APPROVAL' },
+  status: { type: String, enum: ['PENDING_APPROVAL', 'APPROVED', 'SUBMITTED', 'FAILED', 'ROLLED_BACK'], default: 'PENDING_APPROVAL' },
   remoteRequestId: { type: String, default: null },
   remoteStatus: { type: String, default: null }
 }, { timestamps: true, strict: true });
