@@ -21,6 +21,8 @@ const privateAdapterConfigured = Boolean(process.env.PRIVATE_DEVOPS_ADAPTER_TOKE
 const privateAdapterRemoteConfigured = Boolean(process.env.PRIVATE_DEVOPS_ADAPTER_TOKEN && process.env.PRIVATE_DEVOPS_ADAPTER_URL);
 const privateAdapterExplicit = process.env.START_PRIVATE_DEVOPS_ADAPTER === 'true';
 if (privateAdapterExplicit && !privateAdapterConfigured) throw new Error('START_PRIVATE_DEVOPS_ADAPTER requires PRIVATE_DEVOPS_ADAPTER_TOKEN and ADAPTER_MONGO_URI or MONGO_URI.');
+if (process.env.NODE_ENV === 'production' && privateAdapterExplicit) throw new Error('Do not start the adapter over loopback HTTP in production; deploy it behind an internal HTTPS endpoint and set PRIVATE_DEVOPS_ADAPTER_URL.');
+if (process.env.NODE_ENV === 'production' && privateAdapterConfigured && (!process.env.PRIVATE_DEVOPS_ADAPTER_URL || !process.env.PRIVATE_DEVOPS_ADAPTER_URL.startsWith('https://'))) throw new Error('Production requires an explicit HTTPS PRIVATE_DEVOPS_ADAPTER_URL.');
 
 const workspace = (name, script, overrides = {}, port = null, extraArgs = []) => ({
   name,
