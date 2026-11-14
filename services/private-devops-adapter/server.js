@@ -44,13 +44,13 @@ const evidenceSchema = new mongoose.Schema({
 }, { strict: true });
 const Evidence = mongoose.models.PrivateDevOpsEvidence || mongoose.model('PrivateDevOpsEvidence', evidenceSchema, 'private_devops_evidence');
 const artifactSnapshotSchema = new mongoose.Schema({
-  snapshotId: { type: String, required: true, unique: true },
-  provider: { type: String, required: true, index: true },
-  environment: { type: String, required: true, index: true },
-  serviceName: { type: String, required: true, index: true },
-  digest: { type: String, required: true },
-  image: { type: String, required: true },
-  files: { type: mongoose.Schema.Types.Mixed, required: true },
+  snapshotId: { type: String, required: true, unique: true, immutable: true },
+  provider: { type: String, required: true, index: true, immutable: true },
+  environment: { type: String, required: true, index: true, immutable: true },
+  serviceName: { type: String, required: true, index: true, immutable: true },
+  digest: { type: String, required: true, immutable: true },
+  image: { type: String, required: true, immutable: true },
+  files: { type: mongoose.Schema.Types.Mixed, required: true, immutable: true },
   createdAt: { type: Date, default: Date.now, index: true }
 }, { strict: true, minimize: false });
 const ArtifactSnapshot = mongoose.models.PrivateDevOpsArtifactSnapshot || mongoose.model('PrivateDevOpsArtifactSnapshot', artifactSnapshotSchema, 'private_devops_artifact_snapshots');
@@ -174,6 +174,7 @@ app.post('/v1/deployments/execute',validateBase,async(req,res)=>{
   if(idempotencyKey.length<16||idempotencyKey.length>160) return res.status(400).json({success:false,code:'IDEMPOTENCY_KEY_REQUIRED'});
   if(!Array.isArray(deployment.files) || !deployment.files.length || !deployment.changeReference) return res.status(400).json({success:false,code:'DEPLOYMENT_INPUT_REQUIRED'});
   if(!deployment.artifactDigest || artifactDigest(deployment.files)!==deployment.artifactDigest) return res.status(409).json({success:false,code:'ARTIFACT_DIGEST_MISMATCH'});
+  try { filesOf(deployment.files); } catch(error) { return res.status(422).json({success:false,code:safeErrorCode(error.code,'UNSAFE_DEPLOYMENT_ARTIFACT')}); }
   if(typeof deployment.image!=='string'||!/^([a-z0-9.-]+(?::[0-9]+)?\/)?[a-z0-9._/-]+:[A-Za-z0-9_.-]{1,64}$/.test(deployment.image)||deployment.image.includes('CHANGE_ME')||deployment.image.split(':').pop().toLowerCase()==='latest') return res.status(400).json({success:false,code:'DEPLOYMENT_IMAGE_REQUIRED'});
   const existing=await Job.findOne({idempotencyKey});
   if(existing) return res.status(200).json({success:true,accepted:true,deploymentId:existing.jobId,status:existing.status,job:publicJob(existing),replayed:true});
