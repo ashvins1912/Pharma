@@ -6,6 +6,9 @@ on:
       - 'backend/services/devopsDeploymentKit.js'
       - 'backend/services/__tests__/devopsDeploymentKit.test.js'
       - 'backend/gateway/routes/adminDevOps.js'
+      - 'backend/gateway/routes/adminInfrastructureSecurity.js'
+      - 'backend/security/infrastructureCredentialVault.js'
+      - 'services/private-devops-adapter/**'
       - 'backend/gateway/gatewayRouter.js'
       - 'api-gateway/src/**'
       - 'services/admin-control-plane/**'
@@ -19,6 +22,9 @@ on:
       - 'backend/services/devopsDeploymentKit.js'
       - 'backend/services/__tests__/devopsDeploymentKit.test.js'
       - 'backend/gateway/routes/adminDevOps.js'
+      - 'backend/gateway/routes/adminInfrastructureSecurity.js'
+      - 'backend/security/infrastructureCredentialVault.js'
+      - 'services/private-devops-adapter/**'
       - 'frontend/src/components/admin/DevOpsDeploymentCenter.jsx'
 
 permissions:
