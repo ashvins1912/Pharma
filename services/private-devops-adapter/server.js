@@ -256,6 +256,30 @@ app.post('/v1/feature-flags/rollback',validateBase,async(req,res)=>{
   } catch(error){job.status='FAILED';job.errorCode=safeErrorCode(error.code,'FLAG_ROLLBACK_FAILED');await job.save();return res.status(502).json({success:false,code:job.errorCode});}
 });
 
+app.post('/v1/release-readiness',async(_req,res)=>{
+  const requiredProviders=['aws','azure','gcp','kubernetes','launchdarkly'];
+  const results=[];
+  for(const provider of requiredProviders){
+    const preflight=await Evidence.findOne({provider,environment:'staging'}).sort({checkedAt:-1}).lean();
+    const operation=provider==='launchdarkly'?'flag_rollout':'deploy';
+    const rollbackOperation=provider==='launchdarkly'?'flag_rollback':'rollback';
+    const candidates=await Job.find({provider,environment:'staging',operation,status:provider==='launchdarkly'?'SUCCEEDED':{$in:['SUCCEEDED','ROLLED_BACK']}}).sort({createdAt:-1}).limit(20).lean();
+    let completed=null,rollback=null;
+    for(const candidate of candidates){
+      if(!preflight||new Date(candidate.createdAt)<new Date(preflight.checkedAt))continue;
+      const rollbackCandidate=await Job.findOne({provider,environment:'staging',operation:rollbackOperation,status:'ROLLED_BACK','request.sourceJobId':candidate.jobId}).lean();
+      if(rollbackCandidate&&new Date(rollbackCandidate.createdAt)>=new Date(candidate.createdAt)){completed=candidate;rollback=rollbackCandidate;break;}
+    }
+    const preflightPassed=preflight?.status==='PASS';
+    const deploymentPassed=Boolean(completed);
+    const rollbackPassed=Boolean(rollback);
+    results.push({provider,preflight:preflightPassed,deployment:deploymentPassed,rollback:rollbackPassed,ready:preflightPassed&&deploymentPassed&&rollbackPassed,evidenceRunId:preflight?.runId||null});
+  }
+  const ready=results.every(item=>item.ready);
+  res.set('Cache-Control','no-store');
+  return res.status(200).json({success:true,ready,productionEnabled:productionEnabled(),requiredProviders,providers:results,checkedAt:new Date().toISOString()});
+});
+
 app.get('/v1/evidence',async(req,res)=>{
   const filter={}; if(req.query.environment) filter.environment=req.query.environment; if(req.query.provider) filter.provider=req.query.provider;
   if (filter.provider && !PROVIDERS.has(filter.provider)) return res.status(400).json({success:false,code:'INVALID_PROVIDER'});
