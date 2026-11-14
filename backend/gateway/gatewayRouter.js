@@ -26,6 +26,7 @@ import adminServiceLogsRouter from './routes/adminServiceLogs.js';
 import adminDatabaseCleanupRouter from './routes/adminDatabaseCleanup.js';
 import adminInfrastructureRouter from './routes/adminInfrastructure.js';
 import adminInfrastructureSecurityRouter from './routes/adminInfrastructureSecurity.js';
+import adminDevOpsRouter from './routes/adminDevOps.js';
 import ServiceLog from '../models/ServiceLog.js';
 
 const gateway = express.Router();
@@ -71,6 +72,7 @@ gateway.use('/admin/tenants', adminTenantsRouter);
 gateway.use('/admin/service-logs', adminServiceLogsRouter);
 gateway.use('/admin/database-cleanup/notifications', adminDatabaseCleanupRouter);
 gateway.use('/admin/infrastructure/security', adminInfrastructureSecurityRouter);
+gateway.use('/admin/devops', adminDevOpsRouter);
 gateway.use('/admin/infrastructure', adminInfrastructureRouter);
 gateway.use('/admin/feature-health', adminFeatureHealthRouter);
 gateway.use('/vendors', vendorRouter);

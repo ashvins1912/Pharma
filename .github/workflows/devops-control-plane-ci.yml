@@ -1,0 +1,40 @@
+name: DevOps deployment control-plane checks
+
+on:
+  pull_request:
+    paths:
+      - 'backend/services/devopsDeploymentKit.js'
+      - 'backend/services/__tests__/devopsDeploymentKit.test.js'
+      - 'backend/gateway/routes/adminDevOps.js'
+      - 'backend/gateway/gatewayRouter.js'
+      - 'api-gateway/src/**'
+      - 'services/admin-control-plane/**'
+      - 'frontend/src/components/admin/DevOpsDeploymentCenter.jsx'
+      - 'frontend/src/components/admin/InfrastructureOperations.jsx'
+      - 'docs/devops-deployment-control-plane.md'
+      - '.github/workflows/devops-control-plane-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'backend/services/devopsDeploymentKit.js'
+      - 'backend/services/__tests__/devopsDeploymentKit.test.js'
+      - 'backend/gateway/routes/adminDevOps.js'
+      - 'frontend/src/components/admin/DevOpsDeploymentCenter.jsx'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Test deployment artifact generation and safety policies
+        run: node --test backend/services/__tests__/devopsDeploymentKit.test.js
+      - name: Build frontend
+        run: npm --workspace frontend run build
