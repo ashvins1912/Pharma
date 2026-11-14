@@ -7,7 +7,7 @@ import { nativeProviderPreflight, nativeProviderExecute, nativeProviderRollback,
 const app = express();
 app.disable('x-powered-by');
 app.use(express.json({ limit: '10mb' }));
-const PORT = Number(process.env.PORT || 8090);
+const PORT = Number(process.env.PORT || 8092);
 const MONGO_URI = process.env.ADAPTER_MONGO_URI || process.env.MONGO_URI;
 const TOKEN = String(process.env.PRIVATE_DEVOPS_ADAPTER_TOKEN || '');
 const PROVIDERS = new Set(['aws','azure','gcp','kubernetes','launchdarkly']);
