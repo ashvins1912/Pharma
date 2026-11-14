@@ -55,3 +55,10 @@ test('LaunchDarkly rollback refuses to run without a captured prior state',async
     flag:{key:'test-flag'}
   }),/captured prior LaunchDarkly state/);
 });
+
+test('AWS identity preflight validates configured region before network access',async()=>{
+  await assert.rejects(()=>verifyProviderIdentity('aws',{accessKeyId:'AKIATEST',secretAccessKey:'test-secret'},{targetConfig:{region:'not-a-region'}}),/AWS region is invalid/);
+});
+test('GCP identity preflight consumes the saved project target before network access',async()=>{
+  await assert.rejects(()=>verifyProviderIdentity('gcp',{clientEmail:'svc@example.test',privateKey:'not-a-private-key'},{targetConfig:{projectId:'pharma-staging'}}),/key|private/i);
+});
