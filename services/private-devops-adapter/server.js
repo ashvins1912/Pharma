@@ -70,6 +70,13 @@ function validateBase(req,res,next) {
   if (selectedEnvironment === 'production' && !productionEnabled()) return res.status(423).json({success:false,code:'PRODUCTION_LOCKED',message:'Production execution is disabled by adapter policy.'});
   next();
 }
+function validateRollbackBase(req,res,next) {
+  const { integration } = req.body || {};
+  const provider = integration?.provider || req.body?.provider;
+  const environment = integration?.environment || req.body?.environment;
+  if (!PROVIDERS.has(provider) || !ENVIRONMENTS.has(environment)) return res.status(400).json({success:false,code:'INVALID_PROVIDER_OR_ENVIRONMENT'});
+  next();
+}
 function endpointFor(provider) {
   const key = 'DEVOPS_DRIVER_' + provider.toUpperCase() + '_URL';
   const raw = String(process.env[key] || '').trim();
@@ -206,7 +213,7 @@ app.post('/v1/deployments/status',async(req,res)=>{
   return res.json({success:true,status:job.status,errorCode:job.errorCode,job:publicJob(job)});
 });
 
-app.post('/v1/deployments/rollback',validateBase,async(req,res)=>{
+app.post('/v1/deployments/rollback',validateRollbackBase,async(req,res)=>{
   const {integration,credentials,deployment}=req.body||{};
   const provider=integration?.provider, environment=integration?.environment, jobId=deployment?.remoteDeploymentId, changeReference=deployment?.changeReference;
   if(!jobId||!changeReference) return res.status(400).json({success:false,code:'ROLLBACK_INPUT_REQUIRED'});
@@ -240,7 +247,7 @@ app.post('/v1/feature-flags/rollout',validateBase,async(req,res)=>{
   } catch(error) { job.status='FAILED'; job.errorCode=safeErrorCode(error.code,'FLAG_ROLLOUT_FAILED'); await job.save(); return res.status(error.statusCode||502).json({success:false,code:job.errorCode}); }
 });
 
-app.post('/v1/feature-flags/rollback',validateBase,async(req,res)=>{
+app.post('/v1/feature-flags/rollback',validateRollbackBase,async(req,res)=>{
   const {integration,credentials,sourceRequestId,flag}=req.body||{};
   if(integration?.provider!=='launchdarkly'||!integration?.id||!sourceRequestId||!flag?.key) return res.status(400).json({success:false,code:'FLAG_ROLLBACK_CONTEXT_REQUIRED'});
   const source=await Job.findOne({jobId:sourceRequestId,provider:'launchdarkly',environment:integration.environment,operation:'flag_rollout',status:'SUCCEEDED'});
