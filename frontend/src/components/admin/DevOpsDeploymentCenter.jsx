@@ -95,6 +95,10 @@ export default function DevOpsDeploymentCenter() {
   });
 
   const planDeployment = () => artifact?.id && run('plan', async () => {
+    if (form.environment === 'staging') {
+      const preflight = await apiClient.post(`${API}/providers/preflight`, { provider: form.provider, environment: 'staging', integrationId, artifactId: artifact.id }, { timeout: 900000 });
+      if (!unwrap(preflight).success) throw new Error('Provider staging preflight did not pass. Review the provider evidence before planning deployment.');
+    }
     const response = await apiClient.post(`${API}/deployments/plan`, {
       artifactId: artifact.id, provider: form.provider, environment: form.environment,
       strategy: form.strategy, integrationId, changeReference
@@ -174,6 +178,15 @@ export default function DevOpsDeploymentCenter() {
     });
   };
 
+  const rollbackFlagChange = change => {
+    if (!confirmPhrase('Restore the captured previous LaunchDarkly flag state. This reverses the submitted rollout.', 'ROLLBACK FEATURE FLAG CHANGE')) return;
+    return run(`flag-rollback-${change._id}`, async () => {
+      const response = await apiClient.post(`${API}/feature-flags/changes/${change._id}/rollback`, { confirmation: 'ROLLBACK FEATURE FLAG CHANGE' });
+      setNotice(unwrap(response).message || 'LaunchDarkly prior state restored.');
+      await load();
+    });
+  };
+
   const activeFile = artifact?.files?.find(file => file.path === selectedFile);
 
   return <section className="space-y-5 rounded-2xl border border-sky-200 bg-white p-4 dark:border-sky-900 dark:bg-slate-900">
@@ -248,7 +261,7 @@ export default function DevOpsDeploymentCenter() {
     </section>
 
     <section className="space-y-3 rounded-xl border p-3">
-      <div><h4 className="font-black">4. LaunchDarkly feature-flag rollout</h4><p className="text-xs text-slate-500">Use canary, progressive, ring, blue/green or kill-switch targeting. The LaunchDarkly adapter owns API credentials and provider-side rules.</p></div>
+      <div><h4 className="font-black">4. LaunchDarkly feature-flag rollout</h4><p className="text-xs text-slate-500">Use canary, progressive, ring, blue/green or kill-switch targeting. The native LaunchDarkly driver owns API credentials, preserves targeting rules, captures the prior state and supports rollback.</p></div>
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="text-xs font-semibold">LaunchDarkly integration<select value={flagForm.integrationId} onChange={e => setFlagForm(x => ({...x,integrationId:e.target.value}))} className="mt-1 w-full rounded-lg border p-2 text-sm dark:bg-slate-950"><option value="">Select verified LaunchDarkly integration</option>{flagIntegrations.map(x => <option key={x._id} value={x._id}>{x.name} · {x.environment}</option>)}</select></label>
         <label className="text-xs font-semibold">Environment<select value={flagForm.environment} onChange={e => setFlagForm(x => ({...x,environment:e.target.value}))} className="mt-1 w-full rounded-lg border p-2 text-sm dark:bg-slate-950">{['development','staging','production'].map(x => <option key={x}>{x}</option>)}</select></label>
@@ -260,7 +273,7 @@ export default function DevOpsDeploymentCenter() {
       <button type="button" onClick={rolloutFlag} disabled={Boolean(busy)} className="rounded-lg bg-violet-700 px-4 py-2 text-sm font-bold text-white">Create feature-flag rollout plan</button>
       <div className="space-y-2">{flagChanges.map(change => <article key={change._id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-50 p-3 dark:bg-slate-800">
         <div><p className="font-bold">{change.flagKey} · {change.strategy} · {change.rolloutPercent}%</p><p className="text-xs text-slate-500">{change.environment} · {change.status} · {change.changeReference}</p><p className="text-xs text-slate-500">Requested by {change.requestedBy} · Approved by {change.approvedBy || 'Pending'}</p></div>
-        <div className="flex gap-2">{change.status === 'PENDING_APPROVAL' && <button type="button" onClick={() => approveFlagChange(change)} disabled={Boolean(busy)} className="rounded-lg border px-2 py-1 text-xs font-bold">Approve</button>}{change.status === 'APPROVED' && <button type="button" onClick={() => executeFlagChange(change)} disabled={Boolean(busy)} className="rounded-lg bg-violet-700 px-2 py-1 text-xs font-bold text-white">Execute rollout</button>}</div>
+        <div className="flex gap-2">{change.status === 'PENDING_APPROVAL' && <button type="button" onClick={() => approveFlagChange(change)} disabled={Boolean(busy)} className="rounded-lg border px-2 py-1 text-xs font-bold">Approve</button>}{change.status === 'APPROVED' && <button type="button" onClick={() => executeFlagChange(change)} disabled={Boolean(busy)} className="rounded-lg bg-violet-700 px-2 py-1 text-xs font-bold text-white">Execute rollout</button>}{change.status === 'SUBMITTED' && <button type="button" onClick={() => rollbackFlagChange(change)} disabled={Boolean(busy)} className="rounded-lg border border-rose-300 px-2 py-1 text-xs font-bold text-rose-700">Rollback flag</button>}</div>
       </article>)}</div>
     </section>
   </section>;
