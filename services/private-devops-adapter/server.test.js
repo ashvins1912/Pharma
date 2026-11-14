@@ -13,7 +13,7 @@ test('adapter refuses weak service credentials at startup',()=>{
 });
 
 import { verifyProviderIdentity } from './drivers/providerIdentity.js';
-import { nativeProviderPreflight, nativeProviderRollback, validateNativeArtifactFiles } from './drivers/nativeExecution.js';
+import { nativeProviderPreflight, nativeProviderRollback, validateNativeArtifactFiles, allocateLaunchDarklyRolloutWeights } from './drivers/nativeExecution.js';
 
 test('native provider identity checks reject unsupported providers without network access', async()=>{
   await assert.rejects(()=>verifyProviderIdentity('unknown',{}),/Unsupported provider/);
@@ -81,4 +81,23 @@ test('native artifact validator permits only the approved AWS ECS resources',()=
 test('native artifact validator blocks Terraform provisioners and duplicate paths',()=>{
   assert.throws(()=>validateNativeArtifactFiles({'terraform/main.tf':'resource "aws_ecs_service" "service" { provisioner "local-exec" { command = "id" } }'},'aws'),/execution hooks/);
   assert.throws(()=>validateNativeArtifactFiles([{path:'kubernetes/a.yaml',content:'one'},{path:'kubernetes/a.yaml',content:'two'}],'kubernetes'),/Duplicate artifact paths/);
+});
+
+
+test('LaunchDarkly rollout weights target the selected variation and preserve the other variation mix',()=>{
+  const two=allocateLaunchDarklyRolloutWeights([
+    {variation:0,weight:70000},{variation:1,weight:30000}
+  ],1,20);
+  assert.deepEqual(two.map(item=>item.weight),[80000,20000]);
+  const three=allocateLaunchDarklyRolloutWeights([
+    {variation:0,weight:50000},{variation:1,weight:30000},{variation:2,weight:20000}
+  ],1,40);
+  assert.deepEqual(three.map(item=>item.weight),[42857,40000,17143]);
+  assert.equal(three.reduce((sum,item)=>sum+item.weight,0),100000);
+});
+
+test('LaunchDarkly rollout weight allocation rejects invalid target variations and percentages',()=>{
+  assert.throws(()=>allocateLaunchDarklyRolloutWeights([{variation:0,weight:100000}],0,50),/at least two/);
+  assert.throws(()=>allocateLaunchDarklyRolloutWeights([{variation:0,weight:50000},{variation:1,weight:50000}],2,50),/target variation/);
+  assert.throws(()=>allocateLaunchDarklyRolloutWeights([{variation:0,weight:50000},{variation:1,weight:50000}],0,101),/between 0 and 100/);
 });
