@@ -39,6 +39,7 @@ const providerPreflightSchema = new mongoose.Schema({
   targetDigest: { type: String, required: true },
   serviceName: { type: String, default: null },
   flagKey: { type: String, default: null },
+  variationId: { type: String, default: null },
   status: { type: String, enum: ['PASS','FAIL','BLOCKED'], required: true, index: true },
   evidenceRunId: { type: String, default: null },
   checkedBy: { type: String, required: true },
@@ -83,6 +84,7 @@ const Deployment = mongoose.models.DevOpsDeployment || mongoose.model('DevOpsDep
 
 const flagChangeSchema = new mongoose.Schema({
   flagKey: { type: String, required: true },
+  variationId: { type: String, default: null },
   environment: { type: String, enum: ['development', 'staging', 'production'], required: true },
   strategy: { type: String, required: true },
   rolloutPercent: { type: Number, min: 0, max: 100, required: true },
@@ -198,7 +200,7 @@ async function assertDeploymentStagingEvidence(deployment, artifact) {
 
 async function assertFlagStagingEvidence(change) {
   if (change.environment === 'development') return;
-  const preflight = await ProviderPreflight.findOne({ provider: 'launchdarkly', environment: 'staging', flagKey: change.flagKey }).sort({ checkedAt: -1 }).lean();
+  const preflight = await ProviderPreflight.findOne({ provider: 'launchdarkly', environment: 'staging', flagKey: change.flagKey, variationId: change.variationId || null }).sort({ checkedAt: -1 }).lean();
   if (!preflight || preflight.status !== 'PASS') throw Object.assign(new Error('The latest LaunchDarkly staging preflight for this flag must pass before approval or execution.'), { code: 'LAUNCHDARKLY_STAGING_PREFLIGHT_REQUIRED', statusCode: 409 });
   const stagedIntegration = await InfrastructureIntegration.findOne({ _id: preflight.integrationId, revokedAt: null }).lean();
   if (!stagedIntegration || stagedIntegration.provider !== 'launchdarkly' || stagedIntegration.environment !== 'staging'
@@ -207,7 +209,7 @@ async function assertFlagStagingEvidence(change) {
   if (change.environment === 'staging' && String(preflight.integrationId) !== String(change.integrationId)) throw Object.assign(new Error('The flag change must use the exact LaunchDarkly integration that passed preflight.'), { code: 'LAUNCHDARKLY_PREFLIGHT_INTEGRATION_MISMATCH', statusCode: 409 });
   if (change.environment === 'production') {
     const stagedChange = await FlagChange.findOne({
-      flagKey: change.flagKey, environment: 'staging', integrationId: preflight.integrationId,
+      flagKey: change.flagKey, variationId: change.variationId || null, environment: 'staging', integrationId: preflight.integrationId,
       strategy: change.strategy, rolloutPercent: change.rolloutPercent, status: { $in: ['SUCCEEDED','ROLLED_BACK'] }
     }).sort({ updatedAt: -1 }).lean();
     if (!stagedChange) throw Object.assign(new Error('The same flag, strategy and percentage must complete in staging against the preflighted target before production approval or execution.'), { code: 'LAUNCHDARKLY_STAGING_ROLLOUT_REQUIRED', statusCode: 409 });
@@ -253,6 +255,8 @@ router.post('/providers/preflight', async (req, res) => {
     if (environment !== 'staging') return res.status(403).json({ success: false, code: 'STAGING_ONLY_PREFLIGHT' });
     const capability = provider === 'launchdarkly' ? 'manage' : 'deploy';
     if (provider === 'launchdarkly' && !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,99}$/.test(String(req.body?.flagKey || ''))) return res.status(400).json({ success: false, code: 'PREFLIGHT_FLAG_KEY_REQUIRED' });
+    if (provider === 'launchdarkly' && !['canary','progressive','blue_green','kill_switch'].includes(req.body?.strategy || 'progressive')) return res.status(400).json({ success: false, code: 'UNSUPPORTED_FLAG_STRATEGY' });
+    if (provider === 'launchdarkly' && (req.body?.strategy || 'progressive') !== 'kill_switch' && !/^[A-Za-z0-9_-]{1,64}$/.test(String(req.body?.variationId || ''))) return res.status(400).json({ success: false, code: 'PREFLIGHT_VARIATION_REQUIRED' });
     const { integration, credentials } = await loadDeployIntegration(req.body?.integrationId, provider, environment, capability);
     let artifact = null;
     if (provider !== 'launchdarkly') {
@@ -272,9 +276,10 @@ router.post('/providers/preflight', async (req, res) => {
       provider, environment, integrationId: integration._id, artifactId: artifact?._id || null,
       artifactDigest: artifact?.digest || null, targetDigest: targetConfigDigest(integration.targetConfig), serviceName: artifact?.serviceName || null,
       flagKey: provider === 'launchdarkly' ? String(req.body?.flagKey || '') : null,
+      variationId: provider === 'launchdarkly' ? (req.body?.variationId || null) : null,
       status: preflightStatus, evidenceRunId: result.evidence?.runId || null, checkedBy: actorOf(req)
     });
-    await audit(req, 'PROVIDER_STAGING_PREFLIGHT', preflightStatus, 'integration', integration._id, { provider, environment, evidenceRunId: result.evidence?.runId || null, evidenceStatus: result.evidence?.status || 'UNKNOWN', artifactDigest: artifact?.digest || null, flagKey: provider === 'launchdarkly' ? String(req.body?.flagKey || '') : null });
+    await audit(req, 'PROVIDER_STAGING_PREFLIGHT', preflightStatus, 'integration', integration._id, { provider, environment, evidenceRunId: result.evidence?.runId || null, evidenceStatus: result.evidence?.status || 'UNKNOWN', artifactDigest: artifact?.digest || null, flagKey: provider === 'launchdarkly' ? String(req.body?.flagKey || '') : null, variationId: provider === 'launchdarkly' ? (req.body?.variationId || null) : null });
     return res.status(result.success ? 200 : 424).json(result);
   } catch (error) {
     return res.status(error.statusCode || 400).json({ success: false, code: error.code || 'PROVIDER_PREFLIGHT_FAILED', message: error.message });
@@ -541,35 +546,38 @@ router.get('/feature-flags/changes', async (_req, res) => {
 
 router.post('/feature-flags/rollout', async (req, res) => {
   try {
-    const { integrationId, environment, flagKey, strategy = 'progressive', rolloutPercent = 100, changeReference } = req.body || {};
+    const { integrationId, environment, flagKey, variationId, strategy = 'progressive', rolloutPercent = 100, changeReference } = req.body || {};
     const key = String(flagKey || '').trim();
+    const targetVariationId = strategy === 'kill_switch' ? null : String(variationId || '').trim();
     if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,99}$/.test(key)) throw new Error('Feature flag key is invalid.');
     if (!['development', 'staging', 'production'].includes(environment)) throw new Error('Feature flag environment is invalid.');
-    if (!['canary', 'progressive', 'ring', 'blue_green', 'kill_switch'].includes(strategy)) throw new Error('Unsupported feature flag rollout strategy.');
+    if (!['canary', 'progressive', 'blue_green', 'kill_switch'].includes(strategy)) throw new Error('Unsupported feature flag rollout strategy.');
     const percent = Number(rolloutPercent);
     if (!Number.isInteger(percent) || percent < 0 || percent > 100) throw new Error('Rollout percentage must be between 0 and 100.');
+    if (strategy !== 'kill_switch' && !/^[A-Za-z0-9_-]{1,64}$/.test(targetVariationId || '')) throw new Error('Select the exact LaunchDarkly variation ID to roll out.');
+    if (strategy === 'blue_green' && ![0,100].includes(percent)) throw new Error('Blue/green requires a 0 or 100 percent traffic switch.');
     const reference = String(changeReference || '').trim().slice(0, 120);
     if (!reference) throw new Error('A change/ticket reference is required for feature flag changes.');
     const { integration } = await loadDeployIntegration(integrationId, 'launchdarkly', environment, 'manage');
     if (environment === 'production') await assertProductionReleaseReady();
     if (environment !== 'development') {
-    const stagedPreflight = await ProviderPreflight.findOne({ provider: 'launchdarkly', environment: 'staging', flagKey: key }).sort({ checkedAt: -1 }).lean();
+    const stagedPreflight = await ProviderPreflight.findOne({ provider: 'launchdarkly', environment: 'staging', flagKey: key, variationId: targetVariationId }).sort({ checkedAt: -1 }).lean();
     if (!stagedPreflight || stagedPreflight.status !== 'PASS') throw Object.assign(new Error('A passing latest LaunchDarkly staging preflight for this flag is required before rollout planning.'), { code: 'LAUNCHDARKLY_STAGING_PREFLIGHT_REQUIRED', statusCode: 409 });
     const stagedIntegration = await InfrastructureIntegration.findOne({ _id: stagedPreflight.integrationId, revokedAt: null }).lean();
     if (!stagedIntegration || stagedIntegration.verification?.authenticated !== true || stagedIntegration.verification?.discoveryPassed !== true || targetConfigDigest(stagedIntegration.targetConfig) !== stagedPreflight.targetDigest) throw Object.assign(new Error('LaunchDarkly staging target changed or its verification expired; run preflight again.'), { code: 'LAUNCHDARKLY_PREFLIGHT_STALE', statusCode: 409 });
     if (environment === 'staging' && String(stagedPreflight.integrationId) !== String(integration._id)) throw Object.assign(new Error('Run LaunchDarkly staging preflight again using the selected integration.'), { code: 'LAUNCHDARKLY_PREFLIGHT_INTEGRATION_MISMATCH', statusCode: 409 });
     if (environment === 'production') {
-      const stagedChange = await FlagChange.findOne({ flagKey: key, environment: 'staging', integrationId: stagedPreflight.integrationId, strategy, rolloutPercent: strategy === 'kill_switch' ? 0 : percent, status: { $in: ['SUCCEEDED','ROLLED_BACK'] } }).sort({ updatedAt: -1 }).lean();
+      const stagedChange = await FlagChange.findOne({ flagKey: key, variationId: targetVariationId, environment: 'staging', integrationId: stagedPreflight.integrationId, strategy, rolloutPercent: strategy === 'kill_switch' ? 0 : percent, status: { $in: ['SUCCEEDED','ROLLED_BACK'] } }).sort({ updatedAt: -1 }).lean();
       if (!stagedChange) throw Object.assign(new Error('The same LaunchDarkly flag strategy and percentage must complete in staging before production rollout planning.'), { code: 'LAUNCHDARKLY_STAGING_ROLLOUT_REQUIRED', statusCode: 409 });
     }
     }
     const change = await FlagChange.create({
-      flagKey: key, environment, strategy,
+      flagKey: key, variationId: targetVariationId, environment, strategy,
       rolloutPercent: strategy === 'kill_switch' ? 0 : percent,
       integrationId: integration._id, requestedBy: actorOf(req), changeReference: reference,
       status: 'PENDING_APPROVAL'
     });
-    await audit(req, 'LAUNCHDARKLY_FLAG_CHANGE_PLANNED', 'PENDING_APPROVAL', 'feature_flag', change._id, { flagKey: key, environment, strategy, rolloutPercent: change.rolloutPercent, changeReference: reference });
+    await audit(req, 'LAUNCHDARKLY_FLAG_CHANGE_PLANNED', 'PENDING_APPROVAL', 'feature_flag', change._id, { flagKey: key, variationId: targetVariationId, environment, strategy, rolloutPercent: change.rolloutPercent, changeReference: reference });
     return res.status(201).json({ success: true, change, message: 'Feature-flag rollout plan created. It must be approved before the LaunchDarkly adapter is called.' });
   } catch (error) {
     await audit(req, 'LAUNCHDARKLY_FLAG_ROLLOUT_PLAN_FAILED', 'FAILED', 'feature_flag', String(req.body?.flagKey || 'unknown'), { errorCode: error.code || 'FLAG_ROLLOUT_FAILED' });
