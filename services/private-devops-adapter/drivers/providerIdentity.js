@@ -23,7 +23,7 @@ function awsSignature({ accessKeyId, secretAccessKey, sessionToken, region = 'us
   const date = amzDate.slice(0, 8);
   const body = 'Action=GetCallerIdentity&Version=2011-06-15';
   const canonicalHeaders = 'content-type:application/x-www-form-urlencoded; charset=utf-8\nhost:' + host + '\nx-amz-date:' + amzDate + '\n' + (sessionToken ? 'x-amz-security-token:' + sessionToken + '\n' : '');
-  const signedHeaders = 'content-type;host;x-amz-date;' + (sessionToken ? 'x-amz-security-token' : '');
+  const signedHeaders = 'content-type;host;x-amz-date' + (sessionToken ? ';x-amz-security-token' : '');
   const canonical = 'POST\n/\n\n' + canonicalHeaders + '\n' + signedHeaders + '\n' + sha256(body);
   const scope = date + '/' + region + '/' + service + '/aws4_request';
   const toSign = 'AWS4-HMAC-SHA256\n' + amzDate + '\n' + scope + '\n' + sha256(canonical);
