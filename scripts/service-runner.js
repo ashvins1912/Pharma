@@ -32,7 +32,7 @@ const definitions = [
   workspace('backend', mode, {
     PORT: ports.backend,
     ...(process.env.PRIVATE_DEVOPS_ADAPTER_TOKEN ? {
-      PRIVATE_DEVOPS_ADAPTER_URL: process.env.PRIVATE_DEVOPS_ADAPTER_URL || `http://localhost:${ports['private-devops-adapter']}`,
+      PRIVATE_DEVOPS_ADAPTER_URL: privateAdapterExplicit ? `http://localhost:${ports['private-devops-adapter']}` : (process.env.PRIVATE_DEVOPS_ADAPTER_URL || `http://localhost:${ports['private-devops-adapter']}`),
       PRIVATE_DEVOPS_ADAPTER_TOKEN: process.env.PRIVATE_DEVOPS_ADAPTER_TOKEN
     } : {})
   }, Number(ports.backend)),
