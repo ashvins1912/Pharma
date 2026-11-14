@@ -49,9 +49,9 @@ function auth(req,res,next) {
   next();
 }
 function validateBase(req,res,next) {
-  const { provider, environment } = req.body || {};
-  if (!PROVIDERS.has(provider) || !ENVIRONMENTS.has(environment)) return res.status(400).json({success:false,code:'INVALID_PROVIDER_OR_ENVIRONMENT'});
-  if (environment === 'production' && !productionEnabled()) return res.status(423).json({success:false,code:'PRODUCTION_LOCKED',message:'Production execution is disabled by adapter policy.'});
+  const { provider, environment } = req.body || {}; const selectedProvider = provider || req.body?.integration?.provider; const selectedEnvironment = environment || req.body?.integration?.environment;
+  if (!PROVIDERS.has(selectedProvider) || !ENVIRONMENTS.has(selectedEnvironment)) return res.status(400).json({success:false,code:'INVALID_PROVIDER_OR_ENVIRONMENT'});
+  if (selectedEnvironment === 'production' && !productionEnabled()) return res.status(423).json({success:false,code:'PRODUCTION_LOCKED',message:'Production execution is disabled by adapter policy.'});
   next();
 }
 function endpointFor(provider) {
@@ -113,7 +113,7 @@ app.post('/v1/deployments/execute',validateBase,async(req,res)=>{
   if(idempotencyKey.length<16||idempotencyKey.length>160) return res.status(400).json({success:false,code:'IDEMPOTENCY_KEY_REQUIRED'});
   if(!Array.isArray(deployment.files) || !deployment.files.length || !deployment.changeReference) return res.status(400).json({success:false,code:'DEPLOYMENT_INPUT_REQUIRED'});
   const existing=await Job.findOne({idempotencyKey});
-  if(existing) return res.status(200).json({success:true,job:publicJob(existing),replayed:true});
+  if(existing) return res.status(200).json({success:true,accepted:true,deploymentId:existing.jobId,status:existing.status,job:publicJob(existing),replayed:true});
   const job=await Job.create({jobId:crypto.randomUUID(),idempotencyKey,provider,operation:'deploy',environment,status:'QUEUED',request:{integrationId:String(integration.id),artifactDigest:deployment.artifactDigest,changeReference:deployment.changeReference}});
   try {
     const result=await driverCall(provider,'/v1/deployments/execute',{jobId:job.jobId,integration:{id:integration.id,endpoint:integration.endpoint},credentials,deployment});
