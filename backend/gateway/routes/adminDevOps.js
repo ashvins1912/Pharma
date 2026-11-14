@@ -166,9 +166,18 @@ router.post('/providers/preflight', async (req, res) => {
     if (environment !== 'staging') return res.status(403).json({ success: false, code: 'STAGING_ONLY_PREFLIGHT' });
     const capability = provider === 'launchdarkly' ? 'manage' : 'deploy';
     const { integration, credentials } = await loadDeployIntegration(req.body?.integrationId, provider, environment, capability);
+    let artifact = null;
+    if (provider !== 'launchdarkly') {
+      if (!validId(req.body?.artifactId)) return res.status(400).json({ success: false, code: 'STAGING_ARTIFACT_REQUIRED', message: 'Select a validated staging artifact before running provider deployment preflight.' });
+      artifact = await Artifact.findById(req.body.artifactId).lean();
+      if (!artifact || artifact.validation?.status !== 'PASS' || artifact.provider !== provider || artifact.environment !== environment) return res.status(422).json({ success: false, code: 'STAGING_ARTIFACT_INVALID' });
+    }
     const result = await adapterRequest('/v1/preflight', {
       provider, environment, capabilities: integration.grantedScopes,
-      integration: { id: String(integration._id), provider, environment, endpoint: integration.endpoint, targetConfig: integration.targetConfig || {} }, credentials
+      integration: { id: String(integration._id), provider, environment, endpoint: integration.endpoint, targetConfig: integration.targetConfig || {} },
+      credentials,
+      deployment: artifact ? { serviceName: artifact.serviceName, files: artifact.files, artifactDigest: artifact.digest } : undefined,
+      flag: provider === 'launchdarkly' ? { key: String(req.body?.flagKey || '') } : undefined
     });
     await audit(req, 'PROVIDER_STAGING_PREFLIGHT', result.success ? 'PASS' : 'BLOCKED', 'integration', integration._id, { provider, environment, evidenceRunId: result.evidence?.runId || null, evidenceStatus: result.evidence?.status || 'UNKNOWN' });
     return res.status(result.success ? 200 : 424).json(result);
