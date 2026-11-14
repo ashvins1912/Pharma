@@ -55,6 +55,7 @@ const deploymentSchema = new mongoose.Schema({
   approvedAt: { type: Date, default: null },
   changeReference: { type: String, required: true },
   remoteDeploymentId: { type: String, default: null },
+  rollbackRequestId: { type: String, default: null },
   remoteStatus: { type: String, default: null },
   lastErrorCode: { type: String, default: null },
   rolloutStages: { type: [mongoose.Schema.Types.Mixed], default: [] }
@@ -368,13 +369,14 @@ router.get('/deployments/:id/status', async (req, res) => {
     const result = await adapterRequest('/v1/deployments/status', {
       integration: { id: String(integration._id), provider: integration.provider, environment: integration.environment, endpoint: integration.endpoint, targetConfig: integration.targetConfig || {} },
       credentials,
-      deployment: { id: String(deployment._id), remoteDeploymentId: deployment.remoteDeploymentId }
+      deployment: { id: String(deployment._id), remoteDeploymentId: deployment.status === 'ROLLBACK_REQUESTED' && deployment.rollbackRequestId ? deployment.rollbackRequestId : deployment.remoteDeploymentId }
     });
     const allowed = new Set(['SUBMITTED', 'RUNNING', 'SUCCEEDED', 'FAILED', 'ROLLBACK_REQUESTED', 'ROLLED_BACK']);
     const state = String(result.status || '').toUpperCase();
     if (!allowed.has(state)) return res.status(502).json({ success: false, message: 'Provider returned an unsupported deployment state.' });
     deployment.status = state;
     deployment.remoteStatus = state;
+    if (state === 'ROLLED_BACK') deployment.rollbackRequestId = null;
     deployment.lastErrorCode = state === 'FAILED' ? String(result.errorCode || 'REMOTE_DEPLOYMENT_FAILED').slice(0, 100) : null;
     await deployment.save();
     await audit(req, 'DEPLOYMENT_STATUS_REFRESHED', state, 'deployment', deployment._id, { provider: deployment.provider, remoteDeploymentId: deployment.remoteDeploymentId });
@@ -398,7 +400,8 @@ router.post('/deployments/:id/rollback', async (req, res) => {
       deployment: { id: String(deployment._id), remoteDeploymentId: deployment.remoteDeploymentId, serviceName: deployment.serviceName, changeReference: deployment.changeReference }
     });
     if (!result.accepted) throw new Error('Provider adapter did not confirm rollback acceptance.');
-    deployment.status = 'ROLLBACK_REQUESTED';
+    deployment.rollbackRequestId = result.job?.jobId || null;
+    deployment.status = result.status === 'ROLLED_BACK' ? 'ROLLED_BACK' : 'ROLLBACK_REQUESTED';
     deployment.remoteStatus = String(result.status || 'ROLLBACK_ACCEPTED').slice(0, 80);
     await deployment.save();
     await audit(req, 'DEPLOYMENT_ROLLBACK_REQUESTED', 'ACCEPTED', 'deployment', deployment._id, { provider: deployment.provider, remoteDeploymentId: deployment.remoteDeploymentId });
