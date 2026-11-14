@@ -1,0 +1,13 @@
+{
+  "name": "@pharma/database-kernel",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.js",
+    "./registry": "./src/registry.js",
+    "./mongoose": "./src/adapters/mongoose.js",
+    "./postgres": "./src/adapters/postgres.js"
+  },
+  "scripts": { "test": "node --test" }
+}
