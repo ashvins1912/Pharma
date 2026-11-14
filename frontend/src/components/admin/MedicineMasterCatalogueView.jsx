@@ -21,6 +21,8 @@ const emptyForm = () => Object.fromEntries([...TEXT_FIELDS, ...ARRAY_FIELDS].map
 export default function MedicineMasterCatalogueView({ onOpenImport }) {
   const { addToast } = useToast();
   const [search, setSearch] = useState('');
+  const [batchesExpanded, setBatchesExpanded] = useState(true);
+  const [publishedExpanded, setPublishedExpanded] = useState(true);
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
   const [data, setData] = useState({ items: [], pagination: { total: 0, totalPages: 0 } });
@@ -433,12 +435,10 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
 
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-4 py-3">
-          <div>
-            <strong className="text-xs text-slate-900">Recent enrichment batches</strong>
-            <p className="mt-1 text-[11px] text-slate-500">
-              <span>Select standalone, unapproved staged or reconciled batches to merge or delete</span>
-            </p>
-          </div>
+          <button type="button" onClick={() => setBatchesExpanded(value => !value)} aria-expanded={batchesExpanded} className="flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2">
+            <span className="min-w-0"><strong className="block text-xs text-slate-900">Recent enrichment batches</strong><span className="mt-1 block text-[11px] text-slate-500">Select standalone, unapproved staged or reconciled batches to merge or delete</span></span>
+            <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" className={`h-5 w-5 shrink-0 text-slate-500 transition-transform duration-200 ${batchesExpanded ? 'rotate-180' : ''}`}><path d="m5 7.5 5 5 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
+          </button>
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
@@ -467,6 +467,8 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
           </div>
         </div>
 
+        {batchesExpanded && (
+        <>
         {imports.length ? (
           <>
             <div className="hidden overflow-x-auto sm:block">
@@ -665,15 +667,19 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
             <span>{historyLoading ? 'Loading batch history…' : 'No enrichment batches have been uploaded yet.'}</span>
           </p>
         )}
+        </>
+        )}
       </section>
 
       <MedicineMatchReviewQueue />
 
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
-        <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-          <strong className="text-xs text-slate-900">Published medicines</strong>
+        <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+          <button type="button" onClick={() => setPublishedExpanded(value => !value)} aria-expanded={publishedExpanded} className="flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"><strong className="text-xs text-slate-900">Published medicines</strong><svg aria-hidden="true" viewBox="0 0 20 20" fill="none" className={`h-5 w-5 shrink-0 text-slate-500 transition-transform duration-200 ${publishedExpanded ? 'rotate-180' : ''}`}><path d="m5 7.5 5 5 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
           <span className="text-[11px] text-slate-500">{Number(data.pagination?.total || 0).toLocaleString()} records</span>
         </div>
+        {publishedExpanded && (
+        <>
         {loading ? (
           <p className="p-8 text-center text-sm text-slate-500"><span>Loading catalogue…</span></p>
         ) : data.items?.length ? (
@@ -768,6 +774,8 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
             </button>
           </div>
         </footer>
+        </>
+        )}
       </div>
 
       {reviewBatch && createPortal(
