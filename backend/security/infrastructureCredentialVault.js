@@ -12,6 +12,7 @@ const integrationSchema = new mongoose.Schema({
   environment: { type: String, enum: ['development', 'staging', 'production'], required: true },
   authMethod: { type: String, required: true, maxlength: 40 },
   endpoint: { type: String, maxlength: 500, default: null },
+  targetConfig: { type: mongoose.Schema.Types.Mixed, default: {}, select: true },
   secretEnvelope: {
     algorithm: { type: String, required: true },
     keyVersion: { type: String, required: true },
@@ -96,4 +97,46 @@ export async function writeInfrastructureAudit({ integrationId, actor, event, ou
   await Audit.create({ integrationId: String(integrationId), actor: String(actor), event, outcome, details: safeDetails, requestId });
 }
 
+
+const TARGET_FIELDS = Object.freeze({
+  aws: ['region','clusterArn','executionRoleArn','subnetIds','securityGroupIds','assignPublicIp','desiredCount','stateBackend'],
+  azure: ['tenantId','subscriptionId','resourceGroupName','location','containerAppEnvironmentId','stateBackend'],
+  gcp: ['projectId','region','stateBackend'],
+  kubernetes: ['namespace','contextName','allowedDeploymentNames'],
+  launchdarkly: ['projectKey','environmentKey']
+});
+export function validateProviderTargetConfig(provider, input = {}) {
+  if (!['aws','azure','gcp','kubernetes','launchdarkly'].includes(provider)) throw new Error('Provider does not support managed deployment targets.');
+  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Provider target configuration must be an object.');
+  const allowed = new Set(TARGET_FIELDS[provider]);
+  for (const key of Object.keys(input)) if (!allowed.has(key)) throw new Error('Unsupported '+provider+' target configuration field: '+key);
+  const value = structuredClone(input);
+  const required = {
+    aws: ['region','clusterArn','executionRoleArn','subnetIds','securityGroupIds','stateBackend'],
+    azure: ['tenantId','subscriptionId','resourceGroupName','location','containerAppEnvironmentId','stateBackend'],
+    gcp: ['projectId','region','stateBackend'],
+    kubernetes: ['namespace'],
+    launchdarkly: ['projectKey','environmentKey']
+  }[provider];
+  if (Object.keys(value).length && required.some(key => value[key] === undefined || value[key] === null || value[key] === '')) throw new Error(provider+' target configuration is missing required fields: '+required.filter(key => value[key] === undefined || value[key] === null || value[key] === '').join(', '));
+  if (provider === 'aws' && Object.keys(value).length) {
+    if (!/^[a-z]{2}(?:-gov)?-[a-z]+-\\d$/.test(value.region)) throw new Error('AWS target region is invalid.');
+    if (!Array.isArray(value.subnetIds) || !value.subnetIds.length || !Array.isArray(value.securityGroupIds) || !value.securityGroupIds.length) throw new Error('AWS subnet and security-group allowlists are required.');
+    if (!/^arn:aws(?:-us-gov)?:iam::\\d{12}:role\\/[A-Za-z0-9+=,.@_/-]+$/.test(value.executionRoleArn)) throw new Error('AWS execution role ARN is invalid.');
+  }
+  if (provider === 'azure' && Object.keys(value).length && (!/^[0-9a-f-]{36}$/i.test(value.tenantId) || !/^[0-9a-f-]{36}$/i.test(value.subscriptionId))) throw new Error('Azure tenant and subscription IDs must be UUIDs.');
+  if (provider === 'gcp' && Object.keys(value).length && !/^[a-z][a-z0-9-]{4,28}[a-z0-9]$/.test(value.projectId)) throw new Error('GCP project ID is invalid.');
+  if (provider === 'kubernetes' && Object.keys(value).length && !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(value.namespace)) throw new Error('Kubernetes namespace must be DNS-safe.');
+  if (provider === 'launchdarkly' && Object.keys(value).length && (!/^[a-zA-Z0-9_-]{1,64}$/.test(value.projectKey) || !/^[a-zA-Z0-9_-]{1,64}$/.test(value.environmentKey))) throw new Error('LaunchDarkly project and environment keys are invalid.');
+  if (['aws','azure','gcp'].includes(provider) && Object.keys(value).length) {
+    const backend = value.stateBackend;
+    if (!backend || typeof backend !== 'object' || Array.isArray(backend) || !['s3','azurerm','gcs'].includes(backend.type)) throw new Error('A supported remote Terraform state backend is required.');
+    const backendFields = {s3:['bucket','key','region'],azurerm:['resourceGroupName','storageAccountName','containerName','key'],gcs:['bucket','prefix']}[backend.type];
+    if (backendFields.some(key => typeof backend[key] !== 'string' || !backend[key].trim())) throw new Error('Terraform remote state backend configuration is incomplete.');
+    if ((provider === 'aws' && backend.type !== 's3') || (provider === 'azure' && backend.type !== 'azurerm') || (provider === 'gcp' && backend.type !== 'gcs')) throw new Error('Terraform state backend type does not match the cloud provider.');
+  }
+  return value;
+}
+
 export { Integration as InfrastructureIntegration, Audit as InfrastructureSecurityAudit };
+
