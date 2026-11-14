@@ -4,7 +4,7 @@ The adapter is the private execution boundary for the Super Admin DevOps control
 
 ## Runtime
 
-Default listen port: `8092` (override with `PORT` or `PRIVATE_DEVOPS_ADAPTER_PORT`). The repository service runner starts this workspace automatically when the private adapter token and MongoDB URI are configured; otherwise it remains an optional service.
+Default listen port: `8092` (override with `PORT` or `PRIVATE_DEVOPS_ADAPTER_PORT`). The repository service runner starts this workspace automatically in development when the private adapter token and MongoDB URI are configured; otherwise it remains optional. Production must use an explicit internal HTTPS PRIVATE_DEVOPS_ADAPTER_URL and deploy the adapter behind a TLS endpoint.
 
 Required:
 - ADAPTER_MONGO_URI (or the existing MONGO_URI)
