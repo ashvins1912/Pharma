@@ -41,7 +41,7 @@ export function validateDeploymentInput(input = {}) {
   if (!Number.isInteger(replicas) || replicas < 1 || replicas > 20) errors.push('Replicas must be an integer from 1 to 20.');
   if (!CPU.test(cpuRequest)) errors.push('CPU request must use a bounded Kubernetes quantity such as 100m or 1.');
   if (!MEMORY.test(memoryRequest)) errors.push('Memory request must use Mi or Gi, for example 128Mi.');
-  if (image && !IMAGE.test(image)) errors.push('Container image must be an explicit tagged image; floating latest tags are not allowed.');
+  if (image && (!IMAGE.test(image) || image.split(':').pop().toLowerCase() === 'latest')) errors.push('Container image must be an explicit immutable-style tagged image; floating latest tags are not allowed.');
 
   return {
     valid: errors.length === 0,
