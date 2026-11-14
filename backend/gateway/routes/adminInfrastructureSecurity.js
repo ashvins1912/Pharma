@@ -93,6 +93,27 @@ router.post('/integrations', async (req, res) => {
   }
 });
 
+router.put('/integrations/:id/target-config', async (req, res) => {
+  const integration = await InfrastructureIntegration.findOne({ _id: req.params.id, revokedAt: null });
+  if (!integration) return res.status(404).json({ success: false, code: 'INTEGRATION_NOT_FOUND' });
+  try {
+    const targetConfig = validateProviderTargetConfig(integration.provider, req.body?.targetConfig || {});
+    integration.targetConfig = targetConfig;
+    integration.updatedBy = actorOf(req);
+    await integration.save();
+    await writeInfrastructureAudit({
+      integrationId: integration._id, actor: actorOf(req),
+      event: 'PROVIDER_TARGET_CONFIGURATION_UPDATED', outcome: 'SUCCESS',
+      details: { provider: integration.provider, environment: integration.environment, targetKeys: Object.keys(targetConfig) },
+      requestId: requestIdOf(req)
+    });
+    res.set('Cache-Control', 'no-store');
+    return res.json({ success: true, integration: publicIntegration(integration) });
+  } catch (error) {
+    return res.status(400).json({ success: false, code: 'INVALID_PROVIDER_TARGET_CONFIG', message: error.message });
+  }
+});
+
 router.post('/integrations/:id/verify', async (req, res) => {
   const integration = await InfrastructureIntegration.findOne({ _id: req.params.id, revokedAt: null });
   if (!integration) return res.status(404).json({ success: false, message: 'Integration not found or revoked.' });
