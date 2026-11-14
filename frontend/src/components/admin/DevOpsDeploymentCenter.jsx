@@ -13,6 +13,7 @@ export default function DevOpsDeploymentCenter() {
   const [integrations, setIntegrations] = useState([]);
   const [configurations, setConfigurations] = useState([]);
   const [flagChanges, setFlagChanges] = useState([]);
+  const [releaseReadiness, setReleaseReadiness] = useState(null);
   const [artifact, setArtifact] = useState(null);
   const [selectedFile, setSelectedFile] = useState('');
   const [busy, setBusy] = useState('');
@@ -31,8 +32,8 @@ export default function DevOpsDeploymentCenter() {
     secretRefs: '{\n  "DATABASE_URL": "secret://pharma/staging/inventory/database-url",\n  "JWT_SECRET": "secret://pharma/staging/inventory/jwt-secret"\n}'
   });
   const [flagForm, setFlagForm] = useState({
-    integrationId: '', environment: 'staging', flagKey: '', strategy: 'progressive',
-    rolloutPercent: 100, changeReference: ''
+    integrationId: '', environment: 'staging', flagKey: '', variationId: '', strategy: 'progressive',
+    rolloutPercent: 10, changeReference: ''
   });
 
   const load = useCallback(async () => {
@@ -43,9 +44,10 @@ export default function DevOpsDeploymentCenter() {
       apiClient.get(`${API}/deployments`),
       apiClient.get('/api/v1/admin/infrastructure/security/integrations'),
       apiClient.get(`${API}/configurations`),
-      apiClient.get(`${API}/feature-flags/changes`)
+      apiClient.get(`${API}/feature-flags/changes`),
+      apiClient.get(`${API}/release-readiness`)
     ]);
-    const [c, a, d, i, cfg, flags] = results;
+    const [c, a, d, i, cfg, flags, readiness] = results;
     if (c.status === 'fulfilled') setCatalog(unwrap(c.value));
     else setError(errorMessage(c.reason));
     if (a.status === 'fulfilled') setArtifacts(unwrap(a.value).artifacts || []);
@@ -53,6 +55,7 @@ export default function DevOpsDeploymentCenter() {
     if (i.status === 'fulfilled') setIntegrations(unwrap(i.value).integrations || []);
     if (cfg.status === 'fulfilled') setConfigurations(unwrap(cfg.value).configurations || []);
     if (flags.status === 'fulfilled') setFlagChanges(unwrap(flags.value).changes || []);
+    if (readiness.status === 'fulfilled') setReleaseReadiness(unwrap(readiness.value));
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -95,6 +98,10 @@ export default function DevOpsDeploymentCenter() {
   });
 
   const planDeployment = () => artifact?.id && run('plan', async () => {
+    if (form.environment === 'staging') {
+      const preflight = await apiClient.post(`${API}/providers/preflight`, { provider: form.provider, environment: 'staging', integrationId, artifactId: artifact.id }, { timeout: 900000 });
+      if (!unwrap(preflight).success) throw new Error('Provider staging preflight did not pass. Review the provider evidence before planning deployment.');
+    }
     const response = await apiClient.post(`${API}/deployments/plan`, {
       artifactId: artifact.id, provider: form.provider, environment: form.environment,
       strategy: form.strategy, integrationId, changeReference
@@ -149,6 +156,14 @@ export default function DevOpsDeploymentCenter() {
   });
 
   const rolloutFlag = () => run('flag', async () => {
+    if (flagForm.environment === 'staging') {
+      const preflight = await apiClient.post(`${API}/providers/preflight`, {
+        provider: 'launchdarkly', environment: 'staging',
+        integrationId: flagForm.integrationId, flagKey: flagForm.flagKey, variationId: flagForm.strategy === 'kill_switch' ? null : flagForm.variationId,
+        strategy: flagForm.strategy, rolloutPercent: Number(flagForm.rolloutPercent)
+      }, { timeout: 60000 });
+      if (!unwrap(preflight).success) throw new Error('LaunchDarkly staging preflight did not pass. Review the provider evidence before planning the flag rollout.');
+    }
     const response = await apiClient.post(`${API}/feature-flags/rollout`, {
       ...flagForm, rolloutPercent: Number(flagForm.rolloutPercent)
     });
@@ -174,6 +189,15 @@ export default function DevOpsDeploymentCenter() {
     });
   };
 
+  const rollbackFlagChange = change => {
+    if (!confirmPhrase('Restore the captured previous LaunchDarkly flag state. This reverses the submitted rollout.', 'ROLLBACK FEATURE FLAG CHANGE')) return;
+    return run(`flag-rollback-${change._id}`, async () => {
+      const response = await apiClient.post(`${API}/feature-flags/changes/${change._id}/rollback`, { confirmation: 'ROLLBACK FEATURE FLAG CHANGE' });
+      setNotice(unwrap(response).message || 'LaunchDarkly prior state restored.');
+      await load();
+    });
+  };
+
   const activeFile = artifact?.files?.find(file => file.path === selectedFile);
 
   return <section className="space-y-5 rounded-2xl border border-sky-200 bg-white p-4 dark:border-sky-900 dark:bg-slate-900">
@@ -189,6 +213,22 @@ export default function DevOpsDeploymentCenter() {
     <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-100">
       <strong>Execution boundary:</strong> no remote terminal, shell playground, arbitrary command runner or generic proxy is exposed. Actions use typed APIs and a private provider adapter. Production requires separate approval; credentials remain server-side.
     </div>
+    <section className="rounded-xl border p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div><h4 className="font-black">Production release gate</h4><p className="text-xs text-slate-500">All five providers must pass staging preflight, deployment and rollback rehearsal before production planning or approval.</p></div>
+        <span className={releaseReadiness?.ready ? 'rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800' : 'rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800'}>{releaseReadiness?.ready ? 'Staging evidence complete' : 'Production locked'}</span>
+      </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+        {(releaseReadiness?.providers || ['aws','azure','gcp','kubernetes','launchdarkly'].map(provider => ({provider,preflight:false,deployment:false,rollback:false}))).map(item => <div key={item.provider} className="rounded-lg bg-slate-50 p-2 text-xs dark:bg-slate-800">
+          <p className="font-bold uppercase">{item.provider}</p>
+          <p className={item.preflight ? 'text-emerald-700 dark:text-emerald-300' : 'text-amber-700 dark:text-amber-300'}>Preflight: {item.preflight ? 'PASS' : 'Pending'}</p>
+          <p className={item.targetVerified ? 'text-emerald-700 dark:text-emerald-300' : 'text-amber-700 dark:text-amber-300'}>Target: {item.targetVerified ? 'Verified' : 'Stale / pending'}</p>
+          <p className={item.deployment ? 'text-emerald-700 dark:text-emerald-300' : 'text-amber-700 dark:text-amber-300'}>Staging deploy: {item.deployment ? 'PASS' : 'Pending'}</p>
+          <p className={item.rollback ? 'text-emerald-700 dark:text-emerald-300' : 'text-amber-700 dark:text-amber-300'}>Rollback: {item.rollback ? 'PASS' : 'Pending'}</p>
+        </div>)}
+      </div>
+      <p className="mt-2 text-xs text-slate-500">{releaseReadiness?.productionEnabled ? 'Production execution policy is enabled, subject to the release gate and two-person approval.' : 'Production execution remains disabled by adapter policy until explicitly enabled after staging validation.'}</p>
+    </section>
     {error && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-800">{error}</p>}
     {notice && <p role="status" className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</p>}
 
@@ -197,13 +237,13 @@ export default function DevOpsDeploymentCenter() {
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <label className="text-xs font-semibold">Service name<input value={form.serviceName} onChange={e => updateForm('serviceName', e.target.value)} maxLength={52} className="mt-1 w-full rounded-lg border p-2 text-sm dark:bg-slate-950" /></label>
         <label className="text-xs font-semibold">Runtime<select value={form.runtime} onChange={e => updateForm('runtime', e.target.value)} className="mt-1 w-full rounded-lg border p-2 text-sm dark:bg-slate-950">{(catalog?.runtimes || ['node','python','go','java']).map(x => <option key={x}>{x}</option>)}</select></label>
-        <label className="text-xs font-semibold">Cloud / platform<select value={form.provider} onChange={e => updateForm('provider', e.target.value)} className="mt-1 w-full rounded-lg border p-2 text-sm dark:bg-slate-950">{(catalog?.providers || ['aws','azure','gcp','kubernetes','generic']).map(x => <option key={x}>{x}</option>)}</select></label>
+        <label className="text-xs font-semibold">Cloud / platform<select value={form.provider} onChange={e => updateForm('provider', e.target.value)} className="mt-1 w-full rounded-lg border p-2 text-sm dark:bg-slate-950">{(catalog?.providers || ['aws','azure','gcp','kubernetes']).filter(x => x !== 'generic').map(x => <option key={x}>{x}</option>)}</select></label>
         <label className="text-xs font-semibold">Environment<select value={form.environment} onChange={e => updateForm('environment', e.target.value)} className="mt-1 w-full rounded-lg border p-2 text-sm dark:bg-slate-950">{['development','staging','production'].map(x => <option key={x}>{x}</option>)}</select></label>
         <label className="text-xs font-semibold">Port<input type="number" min="1" max="65535" value={form.port} onChange={e => updateForm('port', e.target.value)} className="mt-1 w-full rounded-lg border p-2 text-sm dark:bg-slate-950" /></label>
         <label className="text-xs font-semibold">Replicas<input type="number" min="1" max="20" value={form.replicas} onChange={e => updateForm('replicas', e.target.value)} className="mt-1 w-full rounded-lg border p-2 text-sm dark:bg-slate-950" /></label>
         <label className="text-xs font-semibold">CPU request<input value={form.cpuRequest} onChange={e => updateForm('cpuRequest', e.target.value)} className="mt-1 w-full rounded-lg border p-2 text-sm dark:bg-slate-950" /></label>
         <label className="text-xs font-semibold">Memory request<input value={form.memoryRequest} onChange={e => updateForm('memoryRequest', e.target.value)} className="mt-1 w-full rounded-lg border p-2 text-sm dark:bg-slate-950" /></label>
-        <label className="text-xs font-semibold sm:col-span-2">Immutable container image tag (optional)<input value={form.image} onChange={e => updateForm('image', e.target.value)} placeholder="ghcr.io/org/service:1.2.3" className="mt-1 w-full rounded-lg border p-2 text-sm dark:bg-slate-950" /></label>
+        <label className="text-xs font-semibold sm:col-span-2">Container image tag (required for provider preflight)<input value={form.image} onChange={e => updateForm('image', e.target.value)} placeholder="ghcr.io/org/service:1.2.3" className="mt-1 w-full rounded-lg border p-2 text-sm dark:bg-slate-950" /></label>
         <label className="text-xs font-semibold">Release strategy<select value={form.strategy} onChange={e => updateForm('strategy', e.target.value)} className="mt-1 w-full rounded-lg border p-2 text-sm dark:bg-slate-950">{(catalog?.strategies || []).map(x => <option key={x.id} value={x.id}>{x.id.replaceAll('_',' ')}</option>)}</select></label>
       </div>
       <button type="button" onClick={generate} disabled={Boolean(busy)} className="rounded-lg bg-sky-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">{busy === 'generate' ? 'Generating…' : 'Generate Docker / IaC / CI-CD bundle'}</button>
@@ -225,11 +265,11 @@ export default function DevOpsDeploymentCenter() {
       </div>
       {cloudIntegrations.filter(x => x.provider === form.provider && x.environment === form.environment).length === 0 && <p className="text-xs text-amber-700">No verified deploy-capable integration for this provider/environment. Add one in Credential Vault; no provider credentials are needed in this form.</p>}
       <div className="space-y-2">{deployments.map(item => <article key={item._id} className="rounded-lg bg-slate-50 p-3 dark:bg-slate-800">
-        <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="font-bold">{item.serviceName} · {item.environment} · {item.strategy}</p><p className="text-xs text-slate-500">{item.provider} · {item.status} · {item.changeReference}</p><p className="text-xs text-slate-500">Requested by {item.requestedBy} · Approved by {item.approvedBy || 'Pending'}</p></div><div className="flex flex-wrap gap-1">
+        <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="font-bold">{item.serviceName} · {item.environment} · {item.strategy}</p><p className="text-xs text-slate-500">{item.provider} · {item.status} · {item.changeReference}</p><p className="text-xs text-slate-500">Requested by {item.requestedBy} · Approved by {item.approvedBy || 'Pending'}</p>{item.remoteDeploymentId && item.rollbackAvailable === false && <p className="text-xs text-amber-700">No previous successful release snapshot is available for automatic rollback.</p>}</div><div className="flex flex-wrap gap-1">
           {item.status === 'PENDING_APPROVAL' && <button type="button" onClick={() => approve(item)} disabled={Boolean(busy)} className="rounded-lg border px-2 py-1 text-xs font-bold">Approve</button>}
           {item.status === 'APPROVED' && <button type="button" onClick={() => execute(item)} disabled={Boolean(busy)} className="rounded-lg bg-indigo-700 px-2 py-1 text-xs font-bold text-white">Execute</button>}
           {item.remoteDeploymentId && <button type="button" onClick={() => refreshDeployment(item)} disabled={Boolean(busy)} className="rounded-lg border px-2 py-1 text-xs font-bold">Refresh status</button>}
-          {item.remoteDeploymentId && !['ROLLED_BACK','ROLLBACK_REQUESTED'].includes(item.status) && <button type="button" onClick={() => rollback(item)} disabled={Boolean(busy)} className="rounded-lg border border-rose-300 px-2 py-1 text-xs font-bold text-rose-700">Rollback</button>}
+          {item.remoteDeploymentId && item.rollbackAvailable === true && !['ROLLED_BACK','ROLLBACK_REQUESTED'].includes(item.status) && <button type="button" onClick={() => rollback(item)} disabled={Boolean(busy)} className="rounded-lg border border-rose-300 px-2 py-1 text-xs font-bold text-rose-700">Rollback</button>}
         </div></div>
       </article>)}</div>
     </section>
@@ -248,19 +288,20 @@ export default function DevOpsDeploymentCenter() {
     </section>
 
     <section className="space-y-3 rounded-xl border p-3">
-      <div><h4 className="font-black">4. LaunchDarkly feature-flag rollout</h4><p className="text-xs text-slate-500">Use canary, progressive, ring, blue/green or kill-switch targeting. The LaunchDarkly adapter owns API credentials and provider-side rules.</p></div>
+      <div><h4 className="font-black">4. LaunchDarkly feature-flag rollout</h4><p className="text-xs text-slate-500">Use canary/progressive percentage steps, explicit blue/green traffic switches or a kill switch. Select the exact variation ID; targeting rules are preserved and the prior state is captured for rollback.</p></div>
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="text-xs font-semibold">LaunchDarkly integration<select value={flagForm.integrationId} onChange={e => setFlagForm(x => ({...x,integrationId:e.target.value}))} className="mt-1 w-full rounded-lg border p-2 text-sm dark:bg-slate-950"><option value="">Select verified LaunchDarkly integration</option>{flagIntegrations.map(x => <option key={x._id} value={x._id}>{x.name} · {x.environment}</option>)}</select></label>
         <label className="text-xs font-semibold">Environment<select value={flagForm.environment} onChange={e => setFlagForm(x => ({...x,environment:e.target.value}))} className="mt-1 w-full rounded-lg border p-2 text-sm dark:bg-slate-950">{['development','staging','production'].map(x => <option key={x}>{x}</option>)}</select></label>
         <label className="text-xs font-semibold">Feature flag key<input value={flagForm.flagKey} onChange={e => setFlagForm(x => ({...x,flagKey:e.target.value}))} placeholder="new-checkout-flow" className="mt-1 w-full rounded-lg border p-2 text-sm dark:bg-slate-950" /></label>
-        <label className="text-xs font-semibold">Strategy<select value={flagForm.strategy} onChange={e => setFlagForm(x => ({...x,strategy:e.target.value}))} className="mt-1 w-full rounded-lg border p-2 text-sm dark:bg-slate-950">{['canary','progressive','ring','blue_green','kill_switch'].map(x => <option key={x} value={x}>{x.replaceAll('_',' ')}</option>)}</select></label>
+        <label className="text-xs font-semibold">Strategy<select value={flagForm.strategy} onChange={e => setFlagForm(x => ({...x,strategy:e.target.value}))} className="mt-1 w-full rounded-lg border p-2 text-sm dark:bg-slate-950">{['canary','progressive','blue_green','kill_switch'].map(x => <option key={x} value={x}>{x.replaceAll('_',' ')}</option>)}</select></label>
+        {flagForm.strategy !== 'kill_switch' && <label className="text-xs font-semibold">Target variation ID<input value={flagForm.variationId} onChange={e => setFlagForm(x => ({...x,variationId:e.target.value}))} placeholder="Paste the exact LaunchDarkly variation ID" className="mt-1 w-full rounded-lg border p-2 text-sm dark:bg-slate-950" /></label>}
         <label className="text-xs font-semibold">Rollout percentage<input type="number" min="0" max="100" value={flagForm.rolloutPercent} onChange={e => setFlagForm(x => ({...x,rolloutPercent:e.target.value}))} className="mt-1 w-full rounded-lg border p-2 text-sm dark:bg-slate-950" /></label>
         <label className="text-xs font-semibold">Change reference<input value={flagForm.changeReference} onChange={e => setFlagForm(x => ({...x,changeReference:e.target.value}))} className="mt-1 w-full rounded-lg border p-2 text-sm dark:bg-slate-950" /></label>
       </div>
       <button type="button" onClick={rolloutFlag} disabled={Boolean(busy)} className="rounded-lg bg-violet-700 px-4 py-2 text-sm font-bold text-white">Create feature-flag rollout plan</button>
       <div className="space-y-2">{flagChanges.map(change => <article key={change._id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-50 p-3 dark:bg-slate-800">
-        <div><p className="font-bold">{change.flagKey} · {change.strategy} · {change.rolloutPercent}%</p><p className="text-xs text-slate-500">{change.environment} · {change.status} · {change.changeReference}</p><p className="text-xs text-slate-500">Requested by {change.requestedBy} · Approved by {change.approvedBy || 'Pending'}</p></div>
-        <div className="flex gap-2">{change.status === 'PENDING_APPROVAL' && <button type="button" onClick={() => approveFlagChange(change)} disabled={Boolean(busy)} className="rounded-lg border px-2 py-1 text-xs font-bold">Approve</button>}{change.status === 'APPROVED' && <button type="button" onClick={() => executeFlagChange(change)} disabled={Boolean(busy)} className="rounded-lg bg-violet-700 px-2 py-1 text-xs font-bold text-white">Execute rollout</button>}</div>
+        <div><p className="font-bold">{change.flagKey} · {change.strategy} · {change.rolloutPercent}%{change.variationId ? ` · variation ${change.variationId}` : ''}</p><p className="text-xs text-slate-500">{change.environment} · {change.status} · {change.changeReference}</p><p className="text-xs text-slate-500">Requested by {change.requestedBy} · Approved by {change.approvedBy || 'Pending'}</p></div>
+        <div className="flex gap-2">{change.status === 'PENDING_APPROVAL' && <button type="button" onClick={() => approveFlagChange(change)} disabled={Boolean(busy)} className="rounded-lg border px-2 py-1 text-xs font-bold">Approve</button>}{change.status === 'APPROVED' && <button type="button" onClick={() => executeFlagChange(change)} disabled={Boolean(busy)} className="rounded-lg bg-violet-700 px-2 py-1 text-xs font-bold text-white">Execute rollout</button>}{['SUBMITTED','SUCCEEDED'].includes(change.status) && <button type="button" onClick={() => rollbackFlagChange(change)} disabled={Boolean(busy)} className="rounded-lg border border-rose-300 px-2 py-1 text-xs font-bold text-rose-700">Rollback flag</button>}</div>
       </article>)}</div>
     </section>
   </section>;

@@ -41,7 +41,7 @@ export function validateDeploymentInput(input = {}) {
   if (!Number.isInteger(replicas) || replicas < 1 || replicas > 20) errors.push('Replicas must be an integer from 1 to 20.');
   if (!CPU.test(cpuRequest)) errors.push('CPU request must use a bounded Kubernetes quantity such as 100m or 1.');
   if (!MEMORY.test(memoryRequest)) errors.push('Memory request must use Mi or Gi, for example 128Mi.');
-  if (image && !IMAGE.test(image)) errors.push('Container image must be an explicit tagged image; floating latest tags are not allowed.');
+  if (image && (!IMAGE.test(image) || image.split(':').pop().toLowerCase() === 'latest')) errors.push('Container image must be an explicit immutable-style tagged image; floating latest tags are not allowed.');
 
   return {
     valid: errors.length === 0,
@@ -242,6 +242,7 @@ spec:
 function terraform(config, image) {
   const selectedImage = image || `ghcr.io/your-org/${config.serviceName}:CHANGE_ME`;
   if (config.provider === 'aws') return `terraform {
+  backend "s3" {}
   required_version = ">= 1.6.0, < 2.0.0"
   required_providers {
     aws = {
@@ -318,6 +319,7 @@ output "task_definition_arn" {
 }
 `;
   if (config.provider === 'azure') return `terraform {
+  backend "azurerm" {}
   required_version = ">= 1.6.0, < 2.0.0"
   required_providers {
     azurerm = {
@@ -376,6 +378,7 @@ output "container_app_id" {
 }
 `;
   if (config.provider === 'gcp') return `terraform {
+  backend "gcs" {}
   required_version = ">= 1.6.0, < 2.0.0"
   required_providers {
     google = {
@@ -572,19 +575,20 @@ export function generateDeploymentFiles(input = {}) {
   const files = {
     'Dockerfile': dockerfile(config.runtime, config.port),
     'docker-compose.yml': compose(config, image),
-    `kubernetes/${config.serviceName}.yaml`: kubernetes(config, image),
+    [`kubernetes/${config.serviceName}.yaml`]: kubernetes(config, image),
     'terraform/main.tf': terraform(config, image),
     'ansible/deploy.yml': ansible(config),
     '.env.example': `NODE_ENV=${config.environment}\nPORT=${config.port}\nDATABASE_URL=\nJWT_SECRET=\n`,
     'config.schema.json': JSON.stringify(envSchema, null, 2) + '\n',
     'deployment/rollout-strategy.json': JSON.stringify(rollout, null, 2) + '\n',
-    `.github/workflows/${config.serviceName}-deploy.yml`: workflow(config)
+    [`.github/workflows/${config.serviceName}-deploy.yml`]: workflow(config)
   };
   const digest = crypto.createHash('sha256').update(JSON.stringify(files)).digest('hex');
   return { config, files, digest, strategy: rollout };
 }
 
-const SECRET_PATTERN = /(-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|(?:password|client_secret|api[_-]?key|access[_-]?token|jwt[_-]?secret|database_url|private[_-]?key|secret[_-]?key)\s*[:=]\s*[^\s$<][^\n]*)/i;
+// Ignore schema-object declarations; detect only non-empty scalar secret assignments.
+const SECRET_PATTERN = /(-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|(?:password|client_secret|api[_-]?key|access[_-]?token|jwt[_-]?secret|database_url|private[_-]?key|secret[_-]?key)[ \t]*[:=][ \t]*[^\s$<"'{}][^\n]*)/i;
 export function validateGeneratedArtifact(files = {}) {
   const errors = [];
   const paths = Object.keys(files);
@@ -600,6 +604,9 @@ export function validateGeneratedArtifact(files = {}) {
     if (SECRET_PATTERN.test(content)) errors.push(`Potential hard-coded secret detected in ${path}.`);
     if (/\b(?:curl|wget)\s+[^\n]*\|\s*(?:sh|bash)|\b(?:sudo\s+)?(?:rm\s+-rf|mkfs|dd\s+if=)/i.test(content)) {
       errors.push(`Unsafe remote or destructive command pattern detected in ${path}.`);
+    }
+    if (path.startsWith('terraform/') && /\bprovisioner\s+["'](?:local-exec|remote-exec)["']|\bdata\s+["']external["']|\bresource\s+["'](?:null_resource|terraform_data)["']|source\s*=\s*["']hashicorp\/external["']|\bmodule\s+["']/i.test(content)) {
+      errors.push(`Terraform artifact contains an execution hook or unreviewed external module in ${path}.`);
     }
   }
   if (files.Dockerfile && !/\bUSER\s+(?!root\b)\S+/m.test(files.Dockerfile)) errors.push('Dockerfile must declare a non-root USER.');

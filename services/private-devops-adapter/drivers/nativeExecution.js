@@ -1,0 +1,132 @@
+import crypto from 'node:crypto';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { spawn } from 'node:child_process';
+
+const required=(v,n)=>{if(typeof v!=='string'||!v.trim())throw Object.assign(new Error('Missing '+n),{code:'TARGET_CONFIG_REQUIRED'});return v.trim();};
+function launchDarklyBase(integration){
+  const base=new URL(integration.endpoint||'https://app.launchdarkly.com');
+  const allowed=new Set(String(process.env.LAUNCHDARKLY_API_ALLOWED_HOSTS||'app.launchdarkly.com').split(',').map(value=>value.trim().toLowerCase()).filter(Boolean));
+  if(base.protocol!=='https:'||!allowed.has(base.hostname.toLowerCase())||base.username||base.password||base.search||base.hash)throw Object.assign(new Error('LaunchDarkly API host is not allowlisted.'),{code:'LAUNCHDARKLY_HOST_NOT_ALLOWED'});
+  return base;
+}
+
+export function allocateLaunchDarklyRolloutWeights(rollout,targetIndex,percent){
+  if(!Array.isArray(rollout)||rollout.length<2||!Number.isInteger(targetIndex)||targetIndex<0||targetIndex>=rollout.length)throw new Error('A valid target variation and at least two rollout variations are required.');
+  if(!Number.isInteger(percent)||percent<0||percent>100)throw new Error('Rollout percentage must be between 0 and 100.');
+  const targetWeight=percent*1000,otherIndices=rollout.map((item,index)=>index).filter(index=>index!==targetIndex);
+  const oldOtherTotal=otherIndices.reduce((sum,index)=>sum+Math.max(0,Number(rollout[index].weight)||0),0);
+  let remaining=100000-targetWeight;
+  const otherWeights=new Map();
+  otherIndices.forEach((index,position)=>{
+    const weight=position===otherIndices.length-1?remaining:(oldOtherTotal>0?Math.floor(remaining*Math.max(0,Number(rollout[index].weight)||0)/oldOtherTotal):Math.floor(remaining/otherIndices.length));
+    otherWeights.set(index,weight);remaining-=weight;
+  });
+  return rollout.map((item,index)=>({...item,weight:index===targetIndex?targetWeight:otherWeights.get(index)}));
+}
+
+function run(bin,args,options={}){return new Promise((resolve,reject)=>{const safeEnv={PATH:process.env.PATH||'/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',HOME:options.cwd||os.tmpdir(),TMPDIR:options.cwd||os.tmpdir(),TEMP:options.cwd||os.tmpdir(),LANG:'C.UTF-8',...options.env};const p=spawn(bin,args,{cwd:options.cwd,env:safeEnv,shell:false,windowsHide:true,stdio:['ignore','pipe','pipe']});let out='',err='';const timer=setTimeout(()=>p.kill('SIGTERM'),options.timeout||900000);p.stdout.on('data',x=>out=(out+x).slice(-100000));p.stderr.on('data',x=>err=(err+x).slice(-100000));p.on('error',e=>{clearTimeout(timer);reject(Object.assign(new Error('Execution binary unavailable.'),{code:'EXECUTION_BINARY_UNAVAILABLE',cause:e}));});p.on('close',code=>{clearTimeout(timer);if(code===0)resolve({stdout:out,stderr:err});else reject(Object.assign(new Error('Provider operation failed.'),{code:'PROVIDER_OPERATION_FAILED',detail:err.slice(-1500)}));});});}
+function filesOf(files,provider=null){
+  if(Array.isArray(files)){
+    const entries=files.map(item=>[item.path,item.content]);
+    if(new Set(entries.map(item=>item[0])).size!==entries.length)throw new Error('Duplicate artifact paths are not allowed.');
+    files=Object.fromEntries(entries);
+  }
+  if(!files||typeof files!=='object'||Array.isArray(files)||!Object.keys(files).length||Object.keys(files).length>40)throw new Error('Deployment artifact is required.');
+  const result={};
+  const terraformPolicy={
+    aws:{provider:'aws',source:'hashicorp/aws',resources:['aws_ecs_task_definition','aws_ecs_service']},
+    azure:{provider:'azurerm',source:'hashicorp/azurerm',resources:['azurerm_container_app']},
+    gcp:{provider:'google',source:'hashicorp/google',resources:['google_cloud_run_v2_service']}
+  }[provider];
+  for(const [name,value] of Object.entries(files)){
+    if(typeof value!=='string'||Buffer.byteLength(value)>200000||name.startsWith('/')||name.split('/').includes('..')||!/^[A-Za-z0-9._/-]{1,180}$/.test(name))throw new Error('Unsafe deployment artifact.');
+    if(name.startsWith('terraform/')&&/\bprovisioner\s+["'](?:local-exec|remote-exec)["']|\bdata\s+["']external["']|\bresource\s+["'](?:null_resource|terraform_data)["']|\bmodule\s+["']/i.test(value))throw Object.assign(new Error('Terraform execution hooks are not permitted.'),{code:'TERRAFORM_EXECUTION_HOOK_BLOCKED'});
+    if(name.startsWith('terraform/')&&provider==='kubernetes'&&/\.(?:tf|tf\.json)$/.test(name)&&/\b(?:resource|provider|data|module)\s+"/i.test(value))throw Object.assign(new Error('Kubernetes deployment artifacts may not execute Terraform resources.'),{code:'TERRAFORM_PROVIDER_NOT_ALLOWED'});
+    if(name.startsWith('terraform/')&&['aws','azure','gcp'].includes(provider)&&/\.(?:tf|tf\.json)$/.test(name)){
+      if(!terraformPolicy)throw Object.assign(new Error('Terraform is not permitted for this provider.'),{code:'TERRAFORM_PROVIDER_NOT_ALLOWED'});
+      const resources=[...value.matchAll(/\bresource\s+"([^"]+)"/g)].map(match=>match[1]);
+      const providers=[...value.matchAll(/\bprovider\s+"([^"]+)"/g)].map(match=>match[1]);
+      const sources=[...value.matchAll(/\bsource\s*=\s*"([^"]+)"/g)].map(match=>match[1]);
+      if(resources.some(type=>!terraformPolicy.resources.includes(type))||providers.some(type=>type!==terraformPolicy.provider)||sources.some(source=>source!==terraformPolicy.source)||/\bdata\s+"/i.test(value))throw Object.assign(new Error('Terraform resource or provider is outside the approved deployment allowlist.'),{code:'TERRAFORM_RESOURCE_NOT_ALLOWLISTED'});
+    }
+    result[name]=value;
+  }
+  if(['aws','azure','gcp'].includes(provider)&&!Object.keys(result).some(name=>name.startsWith('terraform/')&&/\.(?:tf|tf\.json)$/.test(name)))throw Object.assign(new Error('Provider Terraform module is missing.'),{code:'TERRAFORM_MODULE_REQUIRED'});
+  return result;
+}
+export function validateNativeArtifactFiles(files,provider){filesOf(files,provider);return true;}
+async function writeFiles(root,files){for(const [name,value] of Object.entries(files)){const dest=path.resolve(root,name);if(!dest.startsWith(root+path.sep))throw new Error('Artifact path escape.');await fs.mkdir(path.dirname(dest),{recursive:true,mode:0o700});await fs.writeFile(dest,value,{mode:0o600,flag:'wx'});}}
+function backend(provider,target){const b=target.stateBackend;if(!b)throw Object.assign(new Error('Remote Terraform state backend is required.'),{code:'REMOTE_STATE_REQUIRED'});const type={aws:'s3',azure:'azurerm',gcp:'gcs'}[provider];if(b.type!==type)throw new Error('Remote state backend does not match provider.');const fields={s3:['bucket','key','region','dynamodbTable'],azurerm:['resourceGroupName','storageAccountName','containerName','key'],gcs:['bucket','prefix']}[type];const args=fields.map(k=>'-backend-config='+({resourceGroupName:'resource_group_name',storageAccountName:'storage_account_name',containerName:'container_name',dynamodbTable:'dynamodb_table'}[k]||k)+'='+required(String(b[k]||''),'stateBackend.'+k));if(type==='s3')args.push('-backend-config=encrypt=true');return args;}
+async function terraform(provider,payload,planOnly=false){const {integration,deployment,credentials}=payload,target=integration.targetConfig||{},files=filesOf(deployment.files,provider);if(!Array.isArray(target.allowedServiceNames)||!target.allowedServiceNames.includes(deployment.serviceName))throw Object.assign(new Error('Service is not in the provider target allowlist.'),{code:'SERVICE_NOT_ALLOWLISTED'});if(typeof deployment.image!=='string'||!/^([a-z0-9.-]+(?::[0-9]+)?\/)?[a-z0-9._/-]+:[A-Za-z0-9_.-]{1,64}$/.test(deployment.image)||deployment.image.includes('CHANGE_ME'))throw Object.assign(new Error('A pinned, explicitly tagged container image is required.'),{code:'DEPLOYMENT_IMAGE_REQUIRED'});const backendType={aws:'s3',azure:'azurerm',gcp:'gcs'}[provider];if(!files['terraform/main.tf']||!files['terraform/main.tf'].includes('backend "'+backendType+'"'))throw Object.assign(new Error('Artifact must declare a matching remote Terraform backend.'),{code:'REMOTE_BACKEND_DECLARATION_REQUIRED'});const root=await fs.mkdtemp(path.join(os.tmpdir(),'pharma-tf-'));try{await writeFiles(root,files);const dir=path.join(root,'terraform'),env={TF_IN_AUTOMATION:'1',TF_INPUT:'0',TF_LOG:'OFF'};const vars={};if(provider==='aws'){env.AWS_ACCESS_KEY_ID=required(credentials.accessKeyId,'AWS access key');env.AWS_SECRET_ACCESS_KEY=required(credentials.secretAccessKey,'AWS secret');if(credentials.sessionToken)env.AWS_SESSION_TOKEN=credentials.sessionToken;env.AWS_DEFAULT_REGION=required(target.region,'AWS region');Object.assign(vars,{region:target.region,cluster_arn:target.clusterArn,execution_role_arn:target.executionRoleArn,subnet_ids:target.subnetIds,security_group_ids:target.securityGroupIds,assign_public_ip:target.assignPublicIp===true,desired_count:Number(target.desiredCount||2)});}if(provider==='azure'){env.ARM_CLIENT_ID=required(credentials.clientId,'Azure client ID');env.ARM_CLIENT_SECRET=required(credentials.clientSecret,'Azure client secret');env.ARM_TENANT_ID=required(target.tenantId,'Azure tenant');env.ARM_SUBSCRIPTION_ID=required(target.subscriptionId,'Azure subscription');Object.assign(vars,{resource_group_name:target.resourceGroupName,location:target.location,container_app_environment_id:target.containerAppEnvironmentId});}if(provider==='gcp'){const account={type:'service_account',client_email:required(credentials.clientEmail,'GCP client email'),private_key:required(credentials.privateKey,'GCP private key').replace(/\\n/g,'\n'),project_id:required(target.projectId,'GCP project')};const keyPath=path.join(root,'gcp-key.json');await fs.writeFile(keyPath,JSON.stringify(account),{mode:0o600});env.GOOGLE_APPLICATION_CREDENTIALS=keyPath;Object.assign(vars,{project_id:target.projectId,region:target.region});}if(deployment.image)vars.image=deployment.image;const tfvars=Object.entries(vars).map(([k,v])=>k+' = '+JSON.stringify(v)).join('\n')+'\n';await fs.writeFile(path.join(dir,'terraform.auto.tfvars'),tfvars,{mode:0o600});const bin=process.env.TERRAFORM_BIN||'terraform';await run(bin,['init','-input=false','-no-color',...backend(provider,target)],{cwd:dir,env,timeout:600000});await run(bin,['validate','-no-color'],{cwd:dir,env});const plan=path.join(dir,'plan.tfplan');const result=await run(bin,['plan','-input=false','-no-color','-out='+plan],{cwd:dir,env,timeout:600000});if(planOnly)return {status:'PASS',code:'TERRAFORM_PLAN_VALIDATED',summary:result.stdout.slice(-1000)};await run(bin,['apply','-input=false','-no-color','-auto-approve',plan],{cwd:dir,env,timeout:900000});return {status:'SUCCEEDED',operationId:crypto.randomUUID(),summary:'Terraform apply completed using remote state.'};}finally{await fs.rm(root,{recursive:true,force:true});}}
+function kubeconfig(server,token,namespace){return 'apiVersion: v1\nkind: Config\nclusters:\n- name: target\n  cluster:\n    server: '+JSON.stringify(server)+'\nusers:\n- name: deployer\n  user:\n    token: '+JSON.stringify(token)+'\ncontexts:\n- name: target\n  context:\n    cluster: target\n    user: deployer\n    namespace: '+namespace+'\ncurrent-context: target\n';}
+async function kubernetes(payload,planOnly=false){const {integration,credentials,deployment}=payload,target=integration.targetConfig||{},namespace=required(target.namespace,'Kubernetes namespace'),server=required(integration.endpoint||credentials.server,'Kubernetes API server'),token=required(credentials.token,'Kubernetes token');if(!Array.isArray(target.allowedDeploymentNames)||!target.allowedDeploymentNames.includes(deployment.serviceName))throw Object.assign(new Error('Deployment name is not in the Kubernetes target allowlist.'),{code:'DEPLOYMENT_NOT_ALLOWLISTED'});const url=new URL(server);if(url.protocol!=='https:'||url.username||url.password||url.search||url.hash)throw new Error('Kubernetes API must use HTTPS without embedded credentials.');const files=filesOf(deployment.files,'kubernetes'),key=Object.keys(files).find(k=>k.startsWith('kubernetes/')&&k.endsWith('.yaml'));if(!key)throw new Error('Kubernetes manifest missing.');if(typeof deployment.image!=='string'||!/^([a-z0-9.-]+(?::[0-9]+)?\/)?[a-z0-9._/-]+:[A-Za-z0-9_.-]{1,64}$/.test(deployment.image)||deployment.image.includes('CHANGE_ME'))throw Object.assign(new Error('A pinned, explicitly tagged container image is required.'),{code:'DEPLOYMENT_IMAGE_REQUIRED'});const root=await fs.mkdtemp(path.join(os.tmpdir(),'pharma-k8s-'));try{const cfg=path.join(root,'config'),manifest=path.join(root,'deployment.yaml');await fs.writeFile(cfg,kubeconfig(url.toString(),token,namespace),{mode:0o600});await fs.writeFile(manifest,files[key].replace(/^(\s*namespace:\s*)[^\r\n]+$/gm,'$1'+namespace).replace(/image:\s*ghcr\.io\/your-org\/[^\s]+:CHANGE_ME/g,'image: '+deployment.image),{mode:0o600});const env={KUBECONFIG:cfg},bin=process.env.KUBECTL_BIN||'kubectl';if(planOnly){await run(bin,['apply','--dry-run=server','-f',manifest],{cwd:root,env});return {status:'PASS',code:'KUBERNETES_SERVER_DRY_RUN_PASS'};}await run(bin,['apply','-f',manifest],{cwd:root,env,timeout:300000});await run(bin,['rollout','status','deployment/'+required(deployment.serviceName,'service name'),'-n',namespace,'--timeout=180s'],{cwd:root,env,timeout:240000});return {status:'SUCCEEDED',operationId:crypto.randomUUID(),summary:'Kubernetes apply and rollout health check passed.'};}finally{await fs.rm(root,{recursive:true,force:true});}}
+async function launchDarkly(payload){
+  const {integration,credentials,flag}=payload,target=integration.targetConfig||{};
+  const project=required(target.projectKey||credentials.projectKey,'LaunchDarkly project');
+  const environment=required(target.environmentKey||credentials.environmentKey,'LaunchDarkly environment');
+  const apiKey=required(credentials.apiKey,'LaunchDarkly API key');
+  const key=required(flag.key,'flag key');
+  const strategy=flag.strategy||'progressive';
+  if(!Array.isArray(target.allowedFlagKeys)||!target.allowedFlagKeys.includes(key))throw Object.assign(new Error('Feature flag is not in the LaunchDarkly target allowlist.'),{code:'FLAG_NOT_ALLOWLISTED'});
+  if(!['canary','progressive','blue_green','kill_switch'].includes(strategy))throw Object.assign(new Error('Unsupported LaunchDarkly rollout strategy.'),{code:'UNSUPPORTED_FLAG_STRATEGY'});
+  const base=launchDarklyBase(integration);
+  const url=new URL('/api/v2/flags/'+encodeURIComponent(project)+'/'+encodeURIComponent(key),base);
+  const headers={Authorization:apiKey,'LD-API-Version':'20240415',Accept:'application/json'};
+  const read=await fetch(url,{headers,redirect:'error',signal:AbortSignal.timeout(15000)});
+  if(!read.ok)throw new Error('LaunchDarkly flag read failed.');
+  const current=await read.json(),env=current.environments?.[environment];
+  if(!env)throw new Error('LaunchDarkly environment is not configured on this flag.');
+  const rollbackSnapshot={on:env.on,fallthrough:env.fallthrough};
+  const percent=Number(flag.rolloutPercent);
+  if(!Number.isInteger(percent)||percent<0||percent>100||(strategy==='kill_switch'&&percent!==0))throw new Error('Invalid rollout percentage.');
+  let ops;
+  if(strategy==='kill_switch')ops=[{op:'replace',path:'/environments/'+environment+'/on',value:false}];
+  else{
+    const variationId=required(flag.variationId,'LaunchDarkly target variation ID');
+    const variationIndex=(current.variations||[]).findIndex(item=>item._id===variationId);
+    if(variationIndex<0)throw Object.assign(new Error('Target variation does not belong to this LaunchDarkly flag.'),{code:'FLAG_VARIATION_NOT_FOUND'});
+    const rollout=env.fallthrough?.rollout?.variations;
+    if(!Array.isArray(rollout)||rollout.length<2)throw new Error('At least two existing fallthrough variations are required.');
+    const targetIndex=rollout.findIndex(item=>item.variation===variationIndex);
+    if(targetIndex<0)throw Object.assign(new Error('Target variation is not present in the existing fallthrough rollout.'),{code:'FLAG_VARIATION_NOT_IN_ROLLOUT'});
+    if(strategy==='blue_green'&&((current.variations||[]).length!==2||rollout.length!==2||![0,100].includes(percent)))throw Object.assign(new Error('Blue/green requires exactly two variations and a 0 or 100 percent traffic switch.'),{code:'BLUE_GREEN_CONFIGURATION_INVALID'});
+    const weights=allocateLaunchDarklyRolloutWeights(rollout,targetIndex,percent);
+    ops=[{op:'replace',path:'/environments/'+environment+'/fallthrough/rollout/variations',value:weights},{op:'replace',path:'/environments/'+environment+'/on',value:true}];
+  }
+  const update=await fetch(url,{method:'PATCH',headers:{...headers,'Content-Type':'application/json-patch+json'},body:JSON.stringify(ops),redirect:'error',signal:AbortSignal.timeout(15000)});
+  if(!update.ok)throw new Error('LaunchDarkly rejected the approved flag update.');
+  return {status:'SUCCEEDED',operationId:crypto.randomUUID(),rollbackSnapshot,summary:'Flag rollout updated using the explicitly selected variation while preserving targeting rules.'};
+}
+export async function nativeProviderPreflight(provider,payload){if(['aws','azure','gcp'].includes(provider))return terraform(provider,payload,true);if(provider==='kubernetes')return kubernetes(payload,true);if(provider==='launchdarkly'){await launchDarklyReadOnly(payload);return {status:'PASS',code:'LAUNCHDARKLY_FLAG_READ_PASS'};}throw new Error('Unsupported provider.');}
+async function launchDarklyReadOnly(payload){
+  const {integration,credentials,flag}=payload,target=integration.targetConfig||{};
+  const project=required(target.projectKey||credentials.projectKey,'LaunchDarkly project');
+  const environment=required(target.environmentKey||credentials.environmentKey,'LaunchDarkly environment');
+  const apiKey=required(credentials.apiKey,'LaunchDarkly API key');
+  const key=required(flag?.key,'LaunchDarkly preflight flag key');
+  const strategy=flag?.strategy||'progressive';
+  if(!['canary','progressive','blue_green','kill_switch'].includes(strategy))throw Object.assign(new Error('Unsupported LaunchDarkly rollout strategy.'),{code:'UNSUPPORTED_FLAG_STRATEGY'});
+  if(!Array.isArray(target.allowedFlagKeys)||!target.allowedFlagKeys.includes(key))throw Object.assign(new Error('Feature flag is not in the LaunchDarkly target allowlist.'),{code:'FLAG_NOT_ALLOWLISTED'});
+  const base=launchDarklyBase(integration);
+  const headers={Authorization:apiKey,'LD-API-Version':'20240415'};
+  const envUrl=new URL('/api/v2/projects/'+encodeURIComponent(project)+'/environments/'+encodeURIComponent(environment),base);
+  const envResponse=await fetch(envUrl,{headers,redirect:'error',signal:AbortSignal.timeout(15000)});
+  if(!envResponse.ok)throw new Error('LaunchDarkly environment read failed.');
+  const flagUrl=new URL('/api/v2/flags/'+encodeURIComponent(project)+'/'+encodeURIComponent(key),base);
+  const flagResponse=await fetch(flagUrl,{headers,redirect:'error',signal:AbortSignal.timeout(15000)});
+  if(!flagResponse.ok)throw new Error('LaunchDarkly preflight flag read failed.');
+  const data=await flagResponse.json(),env=data.environments?.[environment];
+  if(!env)throw new Error('LaunchDarkly flag is not configured in the selected environment.');
+  if(strategy!=='kill_switch'){
+    const variationId=required(flag?.variationId,'LaunchDarkly target variation ID');
+    const variationIndex=(data.variations||[]).findIndex(item=>item._id===variationId);
+    if(variationIndex<0)throw Object.assign(new Error('Target variation does not belong to this LaunchDarkly flag.'),{code:'FLAG_VARIATION_NOT_FOUND'});
+    const rollout=env.fallthrough?.rollout?.variations;
+    if(!Array.isArray(rollout)||!rollout.some(item=>item.variation===variationIndex))throw Object.assign(new Error('Target variation is not present in the existing fallthrough rollout.'),{code:'FLAG_VARIATION_NOT_IN_ROLLOUT'});
+    if(strategy==='blue_green'&&((data.variations||[]).length!==2||rollout.length!==2||![0,100].includes(Number(flag.rolloutPercent))))throw Object.assign(new Error('Blue/green requires exactly two variations and a 0 or 100 percent traffic switch.'),{code:'BLUE_GREEN_CONFIGURATION_INVALID'});
+  }
+}
+export async function nativeProviderExecute(provider,payload){if(['aws','azure','gcp'].includes(provider))return terraform(provider,payload,false);if(provider==='kubernetes')return kubernetes(payload,false);if(provider==='launchdarkly')return launchDarkly(payload);throw new Error('Unsupported provider.');}
+export async function nativeProviderRollback(provider,payload){if(provider==='launchdarkly'){const {integration,credentials,rollbackSnapshot,flag}=payload,target=integration.targetConfig||{},project=required(target.projectKey||credentials.projectKey,'LaunchDarkly project'),key=required(flag.key,'LaunchDarkly flag key'),apiKey=required(credentials.apiKey,'LaunchDarkly API key'),environment=required(target.environmentKey||credentials.environmentKey,'LaunchDarkly environment');if(!Array.isArray(target.allowedFlagKeys)||!target.allowedFlagKeys.includes(key))throw Object.assign(new Error('Feature flag is not in the LaunchDarkly target allowlist.'),{code:'FLAG_NOT_ALLOWLISTED'});if(!rollbackSnapshot||typeof rollbackSnapshot.on!=='boolean'||!rollbackSnapshot.fallthrough)throw Object.assign(new Error('A captured prior LaunchDarkly state is required.'),{code:'ROLLBACK_SNAPSHOT_REQUIRED'});const url=new URL('/api/v2/flags/'+encodeURIComponent(project)+'/'+encodeURIComponent(key),launchDarklyBase(integration));const response=await fetch(url,{method:'PATCH',headers:{Authorization:apiKey,'LD-API-Version':'20240415','Content-Type':'application/json-patch+json'},body:JSON.stringify([{op:'replace',path:'/environments/'+environment+'/on',value:rollbackSnapshot.on},{op:'replace',path:'/environments/'+environment+'/fallthrough',value:rollbackSnapshot.fallthrough}]),redirect:'error',signal:AbortSignal.timeout(15000)});if(!response.ok)throw new Error('LaunchDarkly prior state restore failed.');return {status:'ROLLED_BACK',operationId:crypto.randomUUID()};}if(['aws','azure','gcp'].includes(provider)){if(!Array.isArray(payload.deployment.previousFiles)||!payload.deployment.previousFiles.length||!payload.deployment.previousImage)throw Object.assign(new Error('A prior immutable deployment artifact is required for cloud rollback.'),{code:'ROLLBACK_SNAPSHOT_REQUIRED'});const result=await terraform(provider,{...payload,deployment:{...payload.deployment,files:payload.deployment.previousFiles,image:payload.deployment.previousImage}},false);return {...result,status:'ROLLED_BACK'};}if(provider!=='kubernetes')throw Object.assign(new Error('LaunchDarkly rollback requires a captured prior flag state.'),{code:'ROLLBACK_SNAPSHOT_REQUIRED'});const {integration,credentials,deployment}=payload,target=integration.targetConfig||{},namespace=required(target.namespace,'Kubernetes namespace'),server=required(integration.endpoint||credentials.server,'Kubernetes API server');if(!Array.isArray(target.allowedDeploymentNames)||!target.allowedDeploymentNames.includes(deployment.serviceName))throw Object.assign(new Error('Deployment name is not in the Kubernetes target allowlist.'),{code:'DEPLOYMENT_NOT_ALLOWLISTED'});const root=await fs.mkdtemp(path.join(os.tmpdir(),'pharma-k8s-'));try{const cfg=path.join(root,'config');await fs.writeFile(cfg,kubeconfig(server,required(credentials.token,'Kubernetes token'),namespace),{mode:0o600});const env={KUBECONFIG:cfg},name=required(deployment.serviceName,'service name');if(!Array.isArray(target.allowedDeploymentNames)||!target.allowedDeploymentNames.includes(name))throw Object.assign(new Error('Deployment name is not in the Kubernetes target allowlist.'),{code:'DEPLOYMENT_NOT_ALLOWLISTED'});await run(process.env.KUBECTL_BIN||'kubectl',['rollout','undo','deployment/'+name,'-n',namespace],{cwd:root,env});await run(process.env.KUBECTL_BIN||'kubectl',['rollout','status','deployment/'+name,'-n',namespace,'--timeout=180s'],{cwd:root,env,timeout:240000});return {status:'ROLLED_BACK',operationId:crypto.randomUUID()};}finally{await fs.rm(root,{recursive:true,force:true});}}
