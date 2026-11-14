@@ -253,7 +253,7 @@ router.post('/configurations', async (req, res) => {
       if (key === 'PORT' && (!Number.isInteger(Number(value)) || Number(value) < 1 || Number(value) > 65535)) throw new Error('PORT must be an integer from 1 to 65535.');
       if (key === 'LOG_LEVEL' && !['fatal', 'error', 'warn', 'info', 'debug'].includes(String(value))) throw new Error('LOG_LEVEL must be fatal, error, warn, info or debug.');
       if (key === 'FEATURE_FLAG_ENVIRONMENT' && !['development', 'staging', 'production'].includes(String(value))) throw new Error('FEATURE_FLAG_ENVIRONMENT is invalid.');
-      if (key === 'HEALTH_PATH' && (typeof value !== 'string' || !/^\\/[a-zA-Z0-9/_-]{0,100}$/.test(value))) throw new Error('HEALTH_PATH must be a local absolute path.');
+      if (key === 'HEALTH_PATH' && (typeof value !== 'string' || !/^\/[a-zA-Z0-9/_-]{0,100}$/.test(value))) throw new Error('HEALTH_PATH must be a local absolute path.');
       if (key === 'PUBLIC_BASE_URL') { const url = new URL(String(value)); if (url.protocol !== 'https:' || url.username || url.password) throw new Error('PUBLIC_BASE_URL must be an HTTPS URL without credentials.'); }
     }
     for (const [key, ref] of Object.entries(secretRefs)) {
