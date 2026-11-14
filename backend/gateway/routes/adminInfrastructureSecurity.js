@@ -71,7 +71,7 @@ router.get('/integrations', async (_req, res) => {
 
 router.post('/integrations', async (req, res) => {
   try {
-    const { name, provider, environment, authMethod, endpoint, credentials, requestedScopes = ['read', 'monitor'], requestedCapabilities = ['read', 'monitor'] } = req.body || {};
+    const { name, provider, environment, authMethod, endpoint, credentials, targetConfig = {}, requestedScopes = ['read', 'monitor'], requestedCapabilities = ['read', 'monitor'] } = req.body || {};
     const normalizedProvider = String(provider || '').toLowerCase();
     if (!/^[a-z][a-z0-9_-]{0,63}$/.test(normalizedProvider) || normalizedProvider === 'render') return res.status(400).json({ success: false, message: 'Enter a valid non-reserved provider identifier.' });
     if (!String(name || '').trim() || !['development', 'staging', 'production'].includes(environment) || !allowedAuth.has(authMethod)) return res.status(400).json({ success: false, message: 'Service name, environment and supported authentication method are required.' });
@@ -81,7 +81,7 @@ router.post('/integrations', async (req, res) => {
     const actor = actorOf(req);
     const integration = await InfrastructureIntegration.create({
       name: String(name).trim().slice(0, 120), provider: normalizedProvider, environment, authMethod,
-      endpoint: validateEndpoint(endpoint), secretEnvelope: encryptCredentialPayload(credentials),
+      endpoint: validateEndpoint(endpoint), targetConfig: validateProviderTargetConfig(normalizedProvider, targetConfig), secretEnvelope: encryptCredentialPayload(credentials),
       requestedScopes: [...new Set(requestedScopes)], requestedCapabilities: [...new Set(requestedCapabilities)],
       state: 'PENDING_VERIFICATION', complianceState: 'NOT_ASSESSED', createdBy: actor, updatedBy: actor
     });
