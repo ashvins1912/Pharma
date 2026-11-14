@@ -2,7 +2,7 @@ import express from 'express';
 import { authenticateUser, requireSuperAdmin } from '../../middleware/auth.js';
 import {
   InfrastructureIntegration, encryptCredentialPayload, decryptCredentialPayload,
-  publicIntegration, writeInfrastructureAudit
+  publicIntegration, writeInfrastructureAudit, validateProviderTargetConfig
 } from '../../security/infrastructureCredentialVault.js';
 
 const router = express.Router();
