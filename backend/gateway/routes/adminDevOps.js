@@ -400,7 +400,7 @@ router.post('/deployments/:id/rollback', async (req, res) => {
       deployment: { id: String(deployment._id), remoteDeploymentId: deployment.remoteDeploymentId, serviceName: deployment.serviceName, changeReference: deployment.changeReference }
     });
     if (!result.accepted) throw new Error('Provider adapter did not confirm rollback acceptance.');
-    deployment.rollbackRequestId = result.job?.jobId || null;
+    deployment.rollbackRequestId = result.job?.jobId || result.requestId || result.deploymentId || null;
     deployment.status = result.status === 'ROLLED_BACK' ? 'ROLLED_BACK' : 'ROLLBACK_REQUESTED';
     deployment.remoteStatus = String(result.status || 'ROLLBACK_ACCEPTED').slice(0, 80);
     await deployment.save();
