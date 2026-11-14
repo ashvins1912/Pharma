@@ -72,6 +72,10 @@ Thumbs.db
 bun.lock
 *.lockb
 
+# Shared local environment (private; commit only env/common/.env.example)
+env/local.env
+env/local.env.*
+
 # Isolated Python environments and bytecode
 **/.venv/
 **/__pycache__/

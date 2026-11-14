@@ -1,5 +1,8 @@
+import { loadSharedLocalEnv } from './load-shared-env.mjs';
 import { spawn } from 'node:child_process';
 import net from 'node:net';
+
+loadSharedLocalEnv();
 
 const mode = process.argv[2] || 'dev';
 const productionLike = process.env.NODE_ENV === 'production' || mode === 'start';
@@ -87,7 +90,12 @@ function isPortListening(port, host = '127.0.0.1') {
   });
 }
 
-async function waitForListener(service, timeoutMs = Number(process.env.SERVICE_STARTUP_TIMEOUT_MS || 45000)) {
+const configuredStartupTimeout = Number(process.env.SERVICE_STARTUP_TIMEOUT_MS);
+const startupTimeoutMs = Number.isFinite(configuredStartupTimeout) && configuredStartupTimeout > 0
+  ? Math.max(5000, configuredStartupTimeout)
+  : 60000;
+
+async function waitForListener(service, timeoutMs = startupTimeoutMs) {
   const deadline = Date.now() + timeoutMs;
   while (!shuttingDown && Date.now() < deadline) {
     if (await isPortListening(service.port)) {

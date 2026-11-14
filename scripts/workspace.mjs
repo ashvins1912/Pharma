@@ -1,3 +1,4 @@
+import { loadSharedLocalEnv } from './load-shared-env.mjs';
 import { spawn, spawnSync } from 'node:child_process';
 import net from 'node:net';
 import { fileURLToPath } from 'node:url';
@@ -5,6 +6,8 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+loadSharedLocalEnv();
+
 const mode = process.argv[2] || 'start';
 if (!['start', 'dev'].includes(mode)) {
   console.error('Usage: node scripts/workspace.mjs [start|dev]');
