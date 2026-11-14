@@ -8,6 +8,15 @@ import crypto from 'node:crypto';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 loadSharedLocalEnv();
 
+// Normalize the readiness timeout before spawning child workspaces. In particular,
+// Number("0") is valid JavaScript but would make legacy child runners fail instantly.
+const configuredServiceStartupTimeout = Number(process.env.SERVICE_STARTUP_TIMEOUT_MS);
+process.env.SERVICE_STARTUP_TIMEOUT_MS = String(
+  Number.isFinite(configuredServiceStartupTimeout) && configuredServiceStartupTimeout > 0
+    ? Math.max(5000, configuredServiceStartupTimeout)
+    : 60000
+);
+
 const mode = process.argv[2] || 'start';
 if (!['start', 'dev'].includes(mode)) {
   console.error('Usage: node scripts/workspace.mjs [start|dev]');
