@@ -269,7 +269,7 @@ router.post('/providers/preflight', async (req, res) => {
       integration: { id: String(integration._id), provider, environment, endpoint: integration.endpoint, targetConfig: integration.targetConfig || {} },
       credentials,
       deployment: artifact ? { serviceName: artifact.serviceName, files: artifact.files, image: artifact.config?.image || null, artifactDigest: artifact.digest } : undefined,
-      flag: provider === 'launchdarkly' ? { key: String(req.body?.flagKey || '') } : undefined
+      flag: provider === 'launchdarkly' ? { key: String(req.body?.flagKey || ''), variationId: req.body?.variationId || null, strategy: req.body?.strategy || 'progressive', rolloutPercent: Number(req.body?.rolloutPercent ?? 100) } : undefined
     });
     const preflightStatus = result.success && result.evidence?.status === 'PASS' ? 'PASS' : result.evidence?.status === 'FAIL' ? 'FAIL' : 'BLOCKED';
     await ProviderPreflight.create({
