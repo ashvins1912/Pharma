@@ -196,6 +196,23 @@ async function assertDeploymentStagingEvidence(deployment, artifact) {
   }
 }
 
+async function assertFlagStagingEvidence(change) {
+  const preflight = await ProviderPreflight.findOne({ provider: 'launchdarkly', environment: 'staging', flagKey: change.flagKey }).sort({ checkedAt: -1 }).lean();
+  if (!preflight || preflight.status !== 'PASS') throw Object.assign(new Error('The latest LaunchDarkly staging preflight for this flag must pass before approval or execution.'), { code: 'LAUNCHDARKLY_STAGING_PREFLIGHT_REQUIRED', statusCode: 409 });
+  const stagedIntegration = await InfrastructureIntegration.findOne({ _id: preflight.integrationId, revokedAt: null }).lean();
+  if (!stagedIntegration || stagedIntegration.provider !== 'launchdarkly' || stagedIntegration.environment !== 'staging'
+    || stagedIntegration.verification?.authenticated !== true || stagedIntegration.verification?.discoveryPassed !== true
+    || targetConfigDigest(stagedIntegration.targetConfig) !== preflight.targetDigest) throw Object.assign(new Error('The preflighted LaunchDarkly staging target changed or is no longer verified.'), { code: 'LAUNCHDARKLY_PREFLIGHT_STALE', statusCode: 409 });
+  if (change.environment === 'staging' && String(preflight.integrationId) !== String(change.integrationId)) throw Object.assign(new Error('The flag change must use the exact LaunchDarkly integration that passed preflight.'), { code: 'LAUNCHDARKLY_PREFLIGHT_INTEGRATION_MISMATCH', statusCode: 409 });
+  if (change.environment === 'production') {
+    const stagedChange = await FlagChange.findOne({
+      flagKey: change.flagKey, environment: 'staging', integrationId: preflight.integrationId,
+      strategy: change.strategy, rolloutPercent: change.rolloutPercent, status: { $in: ['SUCCEEDED','ROLLED_BACK'] }
+    }).sort({ updatedAt: -1 }).lean();
+    if (!stagedChange) throw Object.assign(new Error('The same flag, strategy and percentage must complete in staging against the preflighted target before production approval or execution.'), { code: 'LAUNCHDARKLY_STAGING_ROLLOUT_REQUIRED', statusCode: 409 });
+  }
+}
+
 async function assertProductionReleaseReady() {
   const readiness = await getProductionReleaseReadiness();
   if (!readiness.ready) {
@@ -562,6 +579,7 @@ router.post('/feature-flags/changes/:id/approve', async (req, res) => {
   const change = await FlagChange.findById(req.params.id);
   if (!change) return res.status(404).json({ success: false, message: 'Feature-flag change not found.' });
   if (change.status !== 'PENDING_APPROVAL') return res.status(409).json({ success: false, message: 'Only pending feature-flag changes can be approved.' });
+  try { await assertFlagStagingEvidence(change); } catch (error) { return res.status(error.statusCode || 409).json({ success: false, code: error.code || 'LAUNCHDARKLY_STAGING_EVIDENCE_REQUIRED', message: error.message }); }
   if (change.environment === 'production') { try { await assertProductionReleaseReady(); } catch (error) { return res.status(error.statusCode || 423).json({ success: false, code: error.code || 'PRODUCTION_STAGING_GATE_BLOCKED', message: error.message }); } }
   if (req.body?.confirmation !== 'APPROVE FEATURE FLAG CHANGE') return res.status(400).json({ success: false, code: 'CONFIRMATION_REQUIRED', message: 'Type APPROVE FEATURE FLAG CHANGE to continue.' });
   if (change.environment === 'production' && change.requestedBy === actorOf(req)) return res.status(403).json({ success: false, code: 'SEPARATION_OF_DUTIES_REQUIRED', message: 'A different Super Admin must approve production feature-flag changes.' });
@@ -578,6 +596,7 @@ router.post('/feature-flags/changes/:id/execute', async (req, res) => {
   const change = await FlagChange.findById(req.params.id);
   if (!change) return res.status(404).json({ success: false, message: 'Feature-flag change not found.' });
   if (change.status !== 'APPROVED') return res.status(409).json({ success: false, message: 'Feature-flag change must be approved before execution.' });
+  try { await assertFlagStagingEvidence(change); } catch (error) { return res.status(error.statusCode || 409).json({ success: false, code: error.code || 'LAUNCHDARKLY_STAGING_EVIDENCE_REQUIRED', message: error.message }); }
   if (change.environment === 'production') { try { await assertProductionReleaseReady(); } catch (error) { return res.status(error.statusCode || 423).json({ success: false, code: error.code || 'PRODUCTION_STAGING_GATE_BLOCKED', message: error.message }); } }
   if (req.body?.confirmation !== 'EXECUTE FEATURE FLAG CHANGE') return res.status(400).json({ success: false, code: 'CONFIRMATION_REQUIRED', message: 'Type EXECUTE FEATURE FLAG CHANGE to continue.' });
   try {
