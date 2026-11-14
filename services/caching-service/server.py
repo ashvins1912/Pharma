@@ -16,6 +16,10 @@ PORT = int(os.getenv("PORT", "8080"))
 CACHE_SERVICE_TOKEN = os.getenv("CACHE_SERVICE_TOKEN", "")
 EVENT_STREAM = "pharma:shared-events"
 MAX_STREAM_LENGTH = int(os.getenv("CACHE_EVENT_STREAM_MAXLEN", "10000"))
+MAX_EVENT_BLOCK_MS = 10000
+REDIS_SOCKET_TIMEOUT_SECONDS = float(os.getenv("REDIS_SOCKET_TIMEOUT_SECONDS", "15"))
+if REDIS_SOCKET_TIMEOUT_SECONDS <= MAX_EVENT_BLOCK_MS / 1000:
+    raise ValueError("REDIS_SOCKET_TIMEOUT_SECONDS must exceed the maximum Redis event block duration (10 seconds).")
 EVENT_CURSOR_KEY = "pharma:shared-events:websocket-cursor"
 redis_client: Optional[aioredis.Redis] = None
 
@@ -25,7 +29,7 @@ async def lifespan(app: FastAPI):
     global redis_client
     redis_client = aioredis.from_url(
         REDIS_URL, decode_responses=True, max_connections=50,
-        socket_timeout=3.0, socket_connect_timeout=3.0,
+        socket_timeout=REDIS_SOCKET_TIMEOUT_SECONDS, socket_connect_timeout=3.0,
     )
     try:
         await redis_client.ping()
@@ -199,7 +203,7 @@ async def acknowledge_events(payload: dict,
 
 @app.get("/v1/events/poll")
 async def poll_events(cursor: str = Query(default="0-0", max_length=64),
-                      blockMs: int = Query(default=5000, ge=1000, le=10000),
+                      blockMs: int = Query(default=5000, ge=1000, le=MAX_EVENT_BLOCK_MS),
                       x_cache_service_token: Optional[str] = Header(default=None)):
     require_internal_token(x_cache_service_token)
     try:
