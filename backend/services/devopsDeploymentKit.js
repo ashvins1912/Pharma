@@ -605,6 +605,9 @@ export function validateGeneratedArtifact(files = {}) {
     if (/\b(?:curl|wget)\s+[^\n]*\|\s*(?:sh|bash)|\b(?:sudo\s+)?(?:rm\s+-rf|mkfs|dd\s+if=)/i.test(content)) {
       errors.push(`Unsafe remote or destructive command pattern detected in ${path}.`);
     }
+    if (path.startsWith('terraform/') && /\bprovisioner\s+["'](?:local-exec|remote-exec)["']|\bdata\s+["']external["']|\bresource\s+["'](?:null_resource|terraform_data)["']|source\s*=\s*["']hashicorp\/external["']|\bmodule\s+["']/i.test(content)) {
+      errors.push(`Terraform artifact contains an execution hook or unreviewed external module in ${path}.`);
+    }
   }
   if (files.Dockerfile && !/\bUSER\s+(?!root\b)\S+/m.test(files.Dockerfile)) errors.push('Dockerfile must declare a non-root USER.');
   if (files.Dockerfile && /:latest\b/.test(files.Dockerfile)) errors.push('Floating latest image tags are not permitted.');
