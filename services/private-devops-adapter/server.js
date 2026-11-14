@@ -1,6 +1,7 @@
 import express from 'express';
 import mongoose from 'mongoose';
 import crypto from 'node:crypto';
+import { verifyProviderIdentity } from './drivers/providerIdentity.js';
 
 const app = express();
 app.disable('x-powered-by');
@@ -103,13 +104,15 @@ app.post('/v1/preflight',validateBase,async(req,res)=>{
   if (!integration?.id || !credentials || typeof credentials !== 'object' || Array.isArray(credentials)) return res.status(400).json({success:false,code:'INTEGRATION_CONTEXT_REQUIRED'});
   const checks=[];
   let driver=null;
-  try { driver=endpointFor(provider); } catch { /* reported below */ }
-  checks.push({name:'driver_configured',status:driver?'PASS':'BLOCKED'});
-  checks.push({name:'driver_auth_configured',status:String(process.env['DEVOPS_DRIVER_'+provider.toUpperCase()+'_TOKEN']||'').length>=32?'PASS':'BLOCKED'});
+  try { driver=endpointFor(provider); } catch { /* endpoint policy failure is represented as blocked */ }
+  const driverToken=String(process.env['DEVOPS_DRIVER_'+provider.toUpperCase()+'_TOKEN']||'');
+  checks.push({name:'deployment_driver_configured',status:driver?'PASS':'BLOCKED',code:driver?'DRIVER_ENDPOINT_CONFIGURED':'DRIVER_NOT_CONFIGURED'});
+  checks.push({name:'deployment_driver_auth_configured',status:driverToken.length>=32?'PASS':'BLOCKED',code:driverToken.length>=32?'DRIVER_AUTH_CONFIGURED':'DRIVER_AUTH_NOT_CONFIGURED'});
   checks.push({name:'environment_policy',status:environment==='production'&&!productionEnabled()?'BLOCKED':'PASS'});
-  let remote={};
-  if(driver && checks[1].status==='PASS') {
-    try { remote=await driverCall(provider,'/v1/preflight',{provider,environment,capabilities,integration:{id:integration.id,endpoint:integration.endpoint},credentials}); const providerChecks=safeChecks(remote.checks); checks.push(...providerChecks); if (!providerChecks.length) checks.push({name:'provider_evidence',status:'FAIL',code:'EMPTY_PROVIDER_EVIDENCE'}); }
+  try { checks.push(await verifyProviderIdentity(provider,credentials,{id:integration.id,endpoint:integration.endpoint})); }
+  catch(error){checks.push({name:'provider_identity',status:'FAIL',code:SAFE_CODE.test(String(error.code||''))?error.code:'PROVIDER_IDENTITY_FAILED'});}
+  if(driver && driverToken.length>=32) {
+    try { const remote=await driverCall(provider,'/v1/preflight',{provider,environment,capabilities,integration:{id:integration.id,endpoint:integration.endpoint},credentials}); const providerChecks=safeChecks(remote.checks); checks.push(...providerChecks); if (!providerChecks.length) checks.push({name:'provider_evidence',status:'FAIL',code:'EMPTY_PROVIDER_EVIDENCE'}); }
     catch(error){checks.push({name:'provider_preflight',status:'FAIL',code:SAFE_CODE.test(String(error.code||''))?error.code:'PREFLIGHT_FAILED'});}
   }
   const passed=checks.length>0 && checks.every(c=>c.status==='PASS');
