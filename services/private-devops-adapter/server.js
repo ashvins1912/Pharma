@@ -163,7 +163,7 @@ app.post('/v1/deployments/execute',validateBase,async(req,res)=>{
       integrationId:String(integration.id),artifactDigest:deployment.artifactDigest,changeReference:deployment.changeReference,
       serviceName:deployment.serviceName,artifactSnapshotId:snapshotId,previousSnapshotId:previous?.request?.artifactSnapshotId||null
     }});
-  } catch(error) { await ArtifactSnapshot.deleteOne({snapshotId}); throw error; }
+  } catch(error) { await ArtifactSnapshot.deleteOne({snapshotId}); if(error?.code===11000){const raced=await Job.findOne({idempotencyKey});if(raced)return res.status(200).json({success:true,accepted:true,deploymentId:raced.jobId,status:raced.status,job:publicJob(raced),replayed:true});} throw error; }
   try {
     const result=await providerCall(provider,'execute',{jobId:job.jobId,integration:{id:integration.id,endpoint:integration.endpoint,targetConfig:integration.targetConfig||{}},credentials,deployment});
     job.status=String(result.status||'SUBMITTED');
