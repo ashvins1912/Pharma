@@ -13,7 +13,7 @@ test('adapter refuses weak service credentials at startup',()=>{
 });
 
 import { verifyProviderIdentity } from './drivers/providerIdentity.js';
-import { nativeProviderPreflight, nativeProviderRollback } from './drivers/nativeExecution.js';
+import { nativeProviderPreflight, nativeProviderRollback, validateNativeArtifactFiles } from './drivers/nativeExecution.js';
 
 test('native provider identity checks reject unsupported providers without network access', async()=>{
   await assert.rejects(()=>verifyProviderIdentity('unknown',{}),/Unsupported provider/);
@@ -61,4 +61,24 @@ test('AWS identity preflight validates configured region before network access',
 });
 test('GCP identity preflight consumes the saved project target before network access',async()=>{
   await assert.rejects(()=>verifyProviderIdentity('gcp',{clientEmail:'svc@example.test',privateKey:'not-a-private-key'},{targetConfig:{projectId:'pharma-staging'}}),error=>error.name!=='ReferenceError');
+});
+
+
+test('native artifact validator permits the generated Kubernetes manifest and neutral Terraform contract',()=>{
+  assert.equal(validateNativeArtifactFiles([
+    {path:'kubernetes/inventory-service.yaml',content:'apiVersion: apps/v1\nkind: Deployment\n'},
+    {path:'terraform/main.tf',content:'variable "service_name" { type = string }\noutput "deployment_contract" { value = var.service_name }\n'}
+  ],'kubernetes'),true);
+});
+
+test('native artifact validator permits only the approved AWS ECS resources',()=>{
+  const valid='terraform { required_providers { aws = { source = "hashicorp/aws" } } }\nprovider "aws" {}\nresource "aws_ecs_service" "service" {}';
+  assert.equal(validateNativeArtifactFiles({'terraform/main.tf':valid},'aws'),true);
+  const unsafe='terraform { required_providers { aws = { source = "hashicorp/aws" } } }\nprovider "aws" {}\nresource "aws_s3_bucket" "unexpected" {}';
+  assert.throws(()=>validateNativeArtifactFiles({'terraform/main.tf':unsafe},'aws'),/allowlist/);
+});
+
+test('native artifact validator blocks Terraform provisioners and duplicate paths',()=>{
+  assert.throws(()=>validateNativeArtifactFiles({'terraform/main.tf':'resource "aws_ecs_service" "service" { provisioner "local-exec" { command = "id" } }'},'aws'),/execution hooks/);
+  assert.throws(()=>validateNativeArtifactFiles([{path:'kubernetes/a.yaml',content:'one'},{path:'kubernetes/a.yaml',content:'two'}],'kubernetes'),/Duplicate artifact paths/);
 });
