@@ -276,7 +276,7 @@ router.post('/providers/preflight', async (req, res) => {
       provider, environment, integrationId: integration._id, artifactId: artifact?._id || null,
       artifactDigest: artifact?.digest || null, targetDigest: targetConfigDigest(integration.targetConfig), serviceName: artifact?.serviceName || null,
       flagKey: provider === 'launchdarkly' ? String(req.body?.flagKey || '') : null,
-      variationId: provider === 'launchdarkly' ? (req.body?.variationId || null) : null,
+      variationId: provider === 'launchdarkly' && req.body?.strategy !== 'kill_switch' ? (req.body?.variationId || null) : null,
       status: preflightStatus, evidenceRunId: result.evidence?.runId || null, checkedBy: actorOf(req)
     });
     await audit(req, 'PROVIDER_STAGING_PREFLIGHT', preflightStatus, 'integration', integration._id, { provider, environment, evidenceRunId: result.evidence?.runId || null, evidenceStatus: result.evidence?.status || 'UNKNOWN', artifactDigest: artifact?.digest || null, flagKey: provider === 'launchdarkly' ? String(req.body?.flagKey || '') : null, variationId: provider === 'launchdarkly' ? (req.body?.variationId || null) : null });
