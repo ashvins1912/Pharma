@@ -135,7 +135,7 @@ async function start() {
         }
       });
     }
-    await Promise.all(definitions.filter(service => service.port).map(waitForListener));
+    await Promise.all(definitions.filter(service => service.port).map(service => waitForListener(service)));
     if (!shuttingDown) console.log('[workspace] All configured services are LISTENING. Application health checks remain separate.');
   } catch (error) {
     console.error('[workspace] Startup failed:', error.message);

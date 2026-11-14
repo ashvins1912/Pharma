@@ -151,6 +151,7 @@ const pythonServices = [
     cwd: path.join(root, 'services/prescription-service'),
     port: Number(process.env.PRESCRIPTION_SERVICE_PORT || 3002),
     module: 'main:app',
+    pythonEnv: 'PRESCRIPTION_SERVICE_PYTHON_BIN',
     dependencies: ['fastapi', 'pydantic', 'jwt']
   },
   {
@@ -158,6 +159,7 @@ const pythonServices = [
     cwd: path.join(root, 'services/caching-service'),
     port: Number(process.env.CACHE_SERVICE_PORT || 8081),
     module: 'server:app',
+    pythonEnv: 'CACHE_SERVICE_PYTHON_BIN',
     dependencies: ['fastapi', 'pydantic', 'redis']
   }
 ];
@@ -200,26 +202,44 @@ async function main() {
   ]);
   readiness.push(waitForPort('shell-host', Number(process.env.SHELL_HOST_PORT || 5000)));
 
-  if (canImportPythonModule(python, 'uvicorn')) {
-    for (const service of pythonServices) {
-      if (service.name === 'caching-service' && !redisAvailable) continue;
-      const missing = service.dependencies.filter(moduleName => !canImportPythonModule(python, moduleName));
-      if (missing.length) {
-        console.warn(`[workspace] ${service.name} skipped; missing Python modules: ${missing.join(', ')}. Install ${path.relative(root, path.join(service.cwd, 'requirements.txt'))}.`);
-        continue;
-      }
-      launch(service.name, python, [
-        '-m', 'uvicorn', service.module,
-        '--host', '0.0.0.0',
-        '--port', String(service.port)
-      ], {
-        cwd: service.cwd,
-        env: { PORT: String(service.port) }
-      });
-      readiness.push(waitForPort(service.name, service.port));
+  for (const service of pythonServices) {
+    if (service.name === 'caching-service' && !redisAvailable) continue;
+
+    const venvPython = path.join(
+      service.cwd,
+      process.platform === 'win32'
+        ? '.venv/Scripts/python.exe'
+        : '.venv/bin/python'
+    );
+
+    const servicePython = process.env[service.pythonEnv] || (
+      canImportPythonModule(venvPython, 'uvicorn') ? venvPython : python
+    );
+
+    if (!canImportPythonModule(servicePython, 'uvicorn')) {
+      console.warn(`[workspace] ${service.name} skipped: ${servicePython} cannot import uvicorn.`);
+      continue;
     }
-  } else {
-    console.warn(`[workspace] Python services skipped: ${python} cannot import uvicorn. Install each service's requirements.txt, then rerun.`);
+
+    const missing = service.dependencies.filter(
+      moduleName => !canImportPythonModule(servicePython, moduleName)
+    );
+
+    if (missing.length) {
+      console.warn(`[workspace] ${service.name} skipped; missing Python modules: ${missing.join(', ')}. Install ${path.relative(root, path.join(service.cwd, 'requirements.txt'))}.`);
+      continue;
+    }
+
+    launch(service.name, servicePython, [
+      '-m', 'uvicorn', service.module,
+      '--host', '0.0.0.0',
+      '--port', String(service.port)
+    ], {
+      cwd: service.cwd,
+      env: { PORT: String(service.port) }
+    });
+
+    readiness.push(waitForPort(service.name, service.port));
   }
 
   await Promise.all(readiness);

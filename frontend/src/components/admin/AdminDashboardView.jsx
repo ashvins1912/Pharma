@@ -76,6 +76,9 @@ export default function AdminDashboardView() {
   const canImportMedicineMaster = ['SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(String(user?.app_metadata?.role || user?.role || role || '').toUpperCase());
   const [adminTab, setAdminTab] = useState('tenantProfile');
   const [catalogueImportOpen, setCatalogueImportOpen] = useState(false);
+  useEffect(() => {
+    console.log('CATALOGUE MODAL STATE:', catalogueImportOpen);
+  }, [catalogueImportOpen]);
   const [dashboardPeriod, setDashboardPeriod] = useState('today');
   const [workspaceSearch, setWorkspaceSearch] = useState('');
   const [commandClock, setCommandClock] = useState(() => new Date());

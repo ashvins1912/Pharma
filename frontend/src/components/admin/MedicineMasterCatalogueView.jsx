@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import apiClient from '../../api/apiClient';
 import { useToast } from '../../context/ToastContext';
 import MedicineMatchReviewQueue from './MedicineMatchReviewQueue';
@@ -95,9 +96,16 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
     } finally { setBatchActionBusy(false); }
   };
   const openBatchReview = async batchId => {
+    console.log('OPEN BATCH REVIEW:', batchId);
     setBatchActionBusy(true);
     try {
-      const response = await apiClient.get(`/api/v1/inventory/catalogue/imports/${encodeURIComponent(batchId)}`, { timeout: 30000 });
+      const response = await apiClient.get(
+          `/api/v1/inventory/catalogue/imports/${encodeURIComponent(batchId)}`,
+          { timeout: 30000 }
+      );
+
+      console.log('BATCH REVIEW API RESPONSE:', response.data);
+
       setReviewBatch(response.data);
       setReviewConfirmed(false);
       setReviewResolutionDrafts({});
@@ -105,8 +113,11 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
       setReviewRecordsSearch('');
       await loadBatchRecords(batchId, 1, '');
     } catch (error) {
+      console.error('BATCH REVIEW ERROR:', error.response?.data || error);
       addToast(error.response?.data?.message || 'Could not load the staged batch report.', 'error');
-    } finally { setBatchActionBusy(false); }
+    } finally {
+      setBatchActionBusy(false);
+    }
   };
   const loadBatchRecords = async (batchId, nextPage = reviewRecordsPage, searchValue = reviewRecordsSearch) => {
     if (!batchId) return;
@@ -759,7 +770,7 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
         </footer>
       </div>
 
-      {reviewBatch && (
+      {reviewBatch && createPortal(
         <div className="catalogue-review-overlay fixed inset-0 z-[125] flex h-[100dvh] items-center justify-center overflow-hidden overscroll-none bg-slate-500/40 p-0 backdrop-blur-sm sm:p-3" role="presentation">
           <section
             role="dialog"
@@ -1061,10 +1072,11 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
               </div>
             </footer>
           </section>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {selected && (
+      {selected && createPortal(
         <div className="fixed inset-0 z-[130] flex items-center justify-center overflow-hidden bg-slate-500/40 p-0 backdrop-blur-sm sm:p-4" role="dialog" aria-modal="true" aria-labelledby="medicine-master-detail-title" onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); setSelected(null); setEditing(false); } }}>
           <section className="mx-auto flex h-[100dvh] max-h-[100dvh] min-h-0 w-full max-w-4xl flex-col overflow-hidden border border-slate-200 bg-white shadow-sm sm:h-auto sm:max-h-[calc(100dvh-2rem)] sm:rounded-2xl">
             <header className="flex items-center justify-between border-b border-slate-200 bg-white p-4 sm:p-5">
@@ -1153,7 +1165,7 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
               )}
             </footer>
           </section>
-        </div>
+        </div>,document.body
       )}
     </section>
   );

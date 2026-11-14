@@ -25,7 +25,7 @@ async def lifespan(app: FastAPI):
     global redis_client
     redis_client = aioredis.from_url(
         REDIS_URL, decode_responses=True, max_connections=50,
-        socket_timeout=3.0, socket_connect_timeout=3.0,
+        socket_timeout=15.0, socket_connect_timeout=3.0,
     )
     try:
         await redis_client.ping()
