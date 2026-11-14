@@ -95,7 +95,7 @@ async function kubernetes(credentials, integration) {
   const url = new URL(server);
   if (url.protocol !== 'https:') throw new Error('Kubernetes API endpoint must use HTTPS.');
   if (url.username || url.password || url.search || url.hash) throw new Error('Kubernetes API endpoint is invalid.');
-  if (process.env.NODE_ENV === 'production' || process.env.KUBERNETES_API_ALLOWED_HOSTS) assertAllowedHost(url, 'KUBERNETES_API_ALLOWED_HOSTS');
+  assertAllowedHost(url, 'KUBERNETES_API_ALLOWED_HOSTS');
   const token = required(credentials.token, 'kubernetes.token');
   const namespace = required(target.namespace || credentials.namespace, 'kubernetes.namespace');
   if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(namespace)) throw new Error('Kubernetes namespace is invalid.');
