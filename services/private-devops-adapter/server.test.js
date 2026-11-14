@@ -36,9 +36,9 @@ test('LaunchDarkly identity check requires project-scoped credentials', async()=
 
 test('AWS native preflight refuses placeholder images before Terraform execution',async()=>{
   await assert.rejects(()=>nativeProviderPreflight('aws',{
-    integration:{targetConfig:{stateBackend:{type:'s3',bucket:'staging-state',key:'service.tfstate',region:'us-east-1'}}},
+    integration:{targetConfig:{stateBackend:{type:'s3',bucket:'staging-state',key:'service.tfstate',region:'us-east-1'},allowedServiceNames:['inventory-service']}},
     credentials:{accessKeyId:'x',secretAccessKey:'y'},
-    deployment:{files:{'terraform/main.tf':'terraform { backend "s3" {} }'},image:'ghcr.io/example/service:CHANGE_ME'}
+    deployment:{serviceName:'inventory-service',files:{'terraform/main.tf':'terraform { backend "s3" {} }'},image:'ghcr.io/example/service:CHANGE_ME'}
   }),/pinned, explicitly tagged container image/);
 });
 test('Kubernetes native preflight requires an explicit target namespace',async()=>{
@@ -50,7 +50,7 @@ test('Kubernetes native preflight requires an explicit target namespace',async()
 });
 test('LaunchDarkly rollback refuses to run without a captured prior state',async()=>{
   await assert.rejects(()=>nativeProviderRollback('launchdarkly',{
-    integration:{targetConfig:{projectKey:'project',environmentKey:'staging'}},
+    integration:{targetConfig:{projectKey:'project',environmentKey:'staging',allowedFlagKeys:['test-flag']}},
     credentials:{apiKey:'test-api-key'},
     flag:{key:'test-flag'}
   }),/captured prior LaunchDarkly state/);
