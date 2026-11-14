@@ -38,7 +38,7 @@ function awsSignature({ accessKeyId, secretAccessKey, sessionToken, region = 'us
 async function aws(credentials) {
   const accessKeyId = required(credentials.accessKeyId, 'aws.accessKeyId');
   const secretAccessKey = required(credentials.secretAccessKey, 'aws.secretAccessKey');
-  const region = String(credentials.region || 'us-east-1');
+  const region = String((integration.targetConfig||{}).region || credentials.region || 'us-east-1');
   if (!/^[a-z]{2}(?:-gov)?-[a-z]+-\d$/.test(region)) throw new Error('AWS region is invalid.');
   const signed = awsSignature({ accessKeyId, secretAccessKey, sessionToken: credentials.sessionToken, region });
   const headers = {
@@ -63,14 +63,14 @@ async function azure(credentials) {
   if (!token.access_token) throw Object.assign(new Error('Azure did not issue an access token.'), { code: 'AZURE_TOKEN_FAILED' });
   const subs = await jsonRequest('https://management.azure.com/subscriptions?api-version=2022-12-01', { headers: { Authorization: 'Bearer ' + token.access_token } });
   if (!Array.isArray(subs.value) || !subs.value.length) throw Object.assign(new Error('Azure identity has no visible subscriptions.'), { code: 'AZURE_SUBSCRIPTION_NOT_FOUND' });
-  const requested = credentials.subscriptionId;
+  const requested = (integration.targetConfig||{}).subscriptionId || credentials.subscriptionId;
   if (requested && !subs.value.some(item => item.subscriptionId === requested)) throw Object.assign(new Error('Configured Azure subscription is not accessible.'), { code: 'AZURE_SUBSCRIPTION_SCOPE_MISMATCH' });
   return { name: 'azure_identity', status: 'PASS', code: 'AZURE_SUBSCRIPTION_VERIFIED' };
 }
 async function gcp(credentials) {
   const email = required(credentials.clientEmail, 'gcp.clientEmail');
   const privateKey = required(credentials.privateKey, 'gcp.privateKey').replace(/\\n/g, '\n');
-  const project = required(credentials.projectId, 'gcp.projectId');
+  const project = required((integration.targetConfig||{}).projectId || credentials.projectId, 'gcp.projectId');
   const now = Math.floor(Date.now() / 1000);
   const b64 = value => Buffer.from(JSON.stringify(value)).toString('base64url');
   const unsigned = b64({ alg: 'RS256', typ: 'JWT' }) + '.' + b64({ iss: email, scope: 'https://www.googleapis.com/auth/cloud-platform', aud: 'https://oauth2.googleapis.com/token', iat: now, exp: now + 900 });
@@ -90,22 +90,24 @@ function assertAllowedHost(url, envName, defaults = []) {
   if (!allowed.includes(url.hostname.toLowerCase())) throw Object.assign(new Error('Provider API host is not allowlisted.'), { code: 'PROVIDER_HOST_NOT_ALLOWLISTED' });
 }
 async function kubernetes(credentials, integration) {
+  const target = integration.targetConfig || {};
   const server = required(integration.endpoint || credentials.server, 'kubernetes.server');
   const url = new URL(server);
   if (url.protocol !== 'https:') throw new Error('Kubernetes API endpoint must use HTTPS.');
   if (url.username || url.password || url.search || url.hash) throw new Error('Kubernetes API endpoint is invalid.');
   if (process.env.NODE_ENV === 'production' || process.env.KUBERNETES_API_ALLOWED_HOSTS) assertAllowedHost(url, 'KUBERNETES_API_ALLOWED_HOSTS');
   const token = required(credentials.token, 'kubernetes.token');
-  const namespace = required(credentials.namespace, 'kubernetes.namespace');
+  const namespace = required(target.namespace || credentials.namespace, 'kubernetes.namespace');
   if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(namespace)) throw new Error('Kubernetes namespace is invalid.');
   await jsonRequest(new URL('/version', url).toString(), { headers: { Authorization: 'Bearer ' + token } });
   await jsonRequest(new URL('/api/v1/namespaces/' + encodeURIComponent(namespace), url).toString(), { headers: { Authorization: 'Bearer ' + token } });
   return { name: 'kubernetes_identity', status: 'PASS', code: 'KUBERNETES_NAMESPACE_VERIFIED' };
 }
 async function launchdarkly(credentials, integration) {
+  const target = integration.targetConfig || {};
   const apiKey = required(credentials.apiKey, 'launchdarkly.apiKey');
-  const project = required(credentials.projectKey, 'launchdarkly.projectKey');
-  const environment = required(credentials.environmentKey, 'launchdarkly.environmentKey');
+  const project = required(target.projectKey || credentials.projectKey, 'launchdarkly.projectKey');
+  const environment = required(target.environmentKey || credentials.environmentKey, 'launchdarkly.environmentKey');
   const base = new URL(integration.endpoint || 'https://app.launchdarkly.com');
   if (base.protocol !== 'https:' || base.username || base.password || base.search || base.hash) throw new Error('LaunchDarkly API endpoint must be a trusted HTTPS URL.');
   assertAllowedHost(base, 'LAUNCHDARKLY_API_ALLOWED_HOSTS', ['app.launchdarkly.com']);
