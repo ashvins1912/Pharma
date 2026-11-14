@@ -25,6 +25,7 @@ import LiveTelemetryTab from './LiveTelemetryTab';
 import RoleFeatureMatrixTab from './RoleFeatureMatrixTab';
 import AutomationTestCenterTab from './AutomationTestCenterTab';
 import FeatureHealthDashboard from './FeatureHealthDashboard';
+import InfrastructureOperations from './InfrastructureOperations';
 import TenantProfileDashboard from './TenantProfileDashboard';
 import { useLanguage } from '../../context/LanguageContext';
 import { getAdminMedicineRequests, getAdminPendingMedicineRequestCount } from '../../api/medicineRequestService';
@@ -242,7 +243,8 @@ export default function AdminDashboardView() {
       isSuperAdmin && 'telemetry',
       isSuperAdmin && 'matrix',
       isSuperAdmin && 'automation',
-      isSuperAdmin && 'featureHealth'
+      isSuperAdmin && 'featureHealth',
+      isSuperAdmin && 'infrastructure'
     ].filter(Boolean);
     if (!allowedTabs.includes(adminTab)) setAdminTab(allowedTabs[0] || '');
   }, [
@@ -327,7 +329,8 @@ export default function AdminDashboardView() {
     telemetry: { category: t('platformSettings'), title: t('liveTelemetry'), icon: '📡' },
     matrix: { category: t('platformSettings'), title: t('roleFeatureMatrix'), icon: '📐' },
     automation: { category: t('platformSettings'), title: t('systemChecks'), icon: '🧪' },
-    featureHealth: { category: t('platformSettings'), title: t('systemHealth'), icon: '🩺' }
+    featureHealth: { category: t('platformSettings'), title: t('systemHealth'), icon: '🩺' },
+    infrastructure: { category: t('platformSettings'), title: 'Infrastructure & DevOps', icon: '⚙️' }
   }[adminTab] || { category: 'Operations', title: 'Workspace', icon: '⚡' };
 
   return (
@@ -702,7 +705,8 @@ export default function AdminDashboardView() {
                 isSuperAdmin && { tab: 'telemetry', label: t('liveTelemetry'), icon: '📡', tone: 'governance' },
                 isSuperAdmin && { tab: 'matrix', label: t('roleFeatureMatrix'), icon: '📐', tone: 'governance' },
                 isSuperAdmin && { tab: 'automation', label: t('systemChecks'), icon: '🧪', tone: 'governance' },
-                isSuperAdmin && { tab: 'featureHealth', label: t('systemHealth'), icon: '🩺', tone: 'governance' }
+                isSuperAdmin && { tab: 'featureHealth', label: t('systemHealth'), icon: '🩺', tone: 'governance' },
+                isSuperAdmin && { tab: 'infrastructure', label: 'Infrastructure & DevOps', icon: '⚙️', tone: 'governance' }
               ]
             }
           ].map(group => {
@@ -781,6 +785,9 @@ export default function AdminDashboardView() {
       )}
       {adminTab === 'featureHealth' && isSuperAdmin && (
         <div className="admin-screen admin-screen--feature-health"><FeatureHealthDashboard /></div>
+      )}
+      {adminTab === 'infrastructure' && isSuperAdmin && (
+        <div className="admin-screen admin-screen--infrastructure"><InfrastructureOperations /></div>
       )}
       {adminTab === 'members' && canManageMembers && <div className="admin-screen admin-screen--members"><TenantStaffManager tenantId={activeTenantId} /></div>}
       {adminTab === 'serviceLogs' && isSuperAdmin && <div className="admin-screen admin-screen--service-logs"><ServiceLogsTab /></div>}
