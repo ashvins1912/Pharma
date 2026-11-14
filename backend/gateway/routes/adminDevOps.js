@@ -183,6 +183,7 @@ router.post('/providers/preflight', async (req, res) => {
     if (!['aws', 'azure', 'gcp', 'kubernetes', 'launchdarkly'].includes(provider)) return res.status(400).json({ success: false, code: 'UNSUPPORTED_PROVIDER' });
     if (environment !== 'staging') return res.status(403).json({ success: false, code: 'STAGING_ONLY_PREFLIGHT' });
     const capability = provider === 'launchdarkly' ? 'manage' : 'deploy';
+    if (provider === 'launchdarkly' && !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,99}$/.test(String(req.body?.flagKey || ''))) return res.status(400).json({ success: false, code: 'PREFLIGHT_FLAG_KEY_REQUIRED' });
     const { integration, credentials } = await loadDeployIntegration(req.body?.integrationId, provider, environment, capability);
     let artifact = null;
     if (provider !== 'launchdarkly') {
