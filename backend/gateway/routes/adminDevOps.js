@@ -73,7 +73,7 @@ const flagChangeSchema = new mongoose.Schema({
   approvedBy: { type: String, default: null },
   approvedAt: { type: Date, default: null },
   changeReference: { type: String, required: true },
-  status: { type: String, enum: ['PENDING_APPROVAL', 'APPROVED', 'SUBMITTED', 'FAILED', 'ROLLED_BACK'], default: 'PENDING_APPROVAL' },
+  status: { type: String, enum: ['PENDING_APPROVAL', 'APPROVED', 'SUBMITTED', 'SUCCEEDED', 'FAILED', 'ROLLED_BACK'], default: 'PENDING_APPROVAL' },
   remoteRequestId: { type: String, default: null },
   remoteStatus: { type: String, default: null }
 }, { timestamps: true, strict: true });
@@ -346,12 +346,12 @@ router.post('/deployments/:id/execute', async (req, res) => {
       }
     });
     if (!result.accepted || !result.deploymentId) throw new Error('Provider adapter did not return a confirmed deployment acceptance.');
-    deployment.status = 'SUBMITTED';
+    deployment.status = result.status === 'SUCCEEDED' ? 'SUCCEEDED' : 'SUBMITTED';
     deployment.remoteDeploymentId = String(result.deploymentId).slice(0, 180);
     deployment.remoteStatus = String(result.status || 'ACCEPTED').slice(0, 80);
     await deployment.save();
     await audit(req, 'DEPLOYMENT_SUBMITTED', 'ACCEPTED', 'deployment', deployment._id, { provider: deployment.provider, remoteDeploymentId: deployment.remoteDeploymentId, changeReference: deployment.changeReference });
-    return res.json({ success: true, accepted: true, deployment, message: 'Provider accepted the deployment request. Poll provider status to verify completion; acceptance is not success.' });
+    return res.json({ success: true, accepted: true, deployment, message: deployment.status === 'SUCCEEDED' ? 'Provider deployment completed and the driver confirmed success.' : 'Provider accepted the deployment request. Poll provider status to verify completion; acceptance is not success.' });
   } catch (error) {
     deployment.lastErrorCode = error.code || 'DEPLOYMENT_SUBMISSION_FAILED';
     await deployment.save();
@@ -473,7 +473,7 @@ router.post('/feature-flags/changes/:id/execute', async (req, res) => {
       flag: { key: change.flagKey, strategy: change.strategy, rolloutPercent: change.rolloutPercent, stages: DEPLOYMENT_STRATEGIES[change.strategy], changeReference: change.changeReference }
     });
     if (!result.accepted) throw new Error('LaunchDarkly adapter did not confirm the flag rollout request.');
-    change.status = 'SUBMITTED';
+    change.status = result.status === 'SUCCEEDED' ? 'SUCCEEDED' : 'SUBMITTED';
     change.remoteRequestId = String(result.requestId || '').slice(0, 180) || null;
     change.remoteStatus = String(result.status || 'ACCEPTED').slice(0, 80);
     await change.save();
@@ -493,7 +493,7 @@ router.post('/feature-flags/changes/:id/rollback', async (req, res) => {
   if (!validId(req.params.id)) return res.status(400).json({ success: false, message: 'Invalid feature-flag change ID.' });
   const change = await FlagChange.findById(req.params.id);
   if (!change) return res.status(404).json({ success: false, message: 'Feature-flag change not found.' });
-  if (change.status !== 'SUBMITTED' || !change.remoteRequestId) return res.status(409).json({ success: false, code: 'FLAG_ROLLBACK_NOT_AVAILABLE', message: 'Only a submitted rollout with a recorded prior-state snapshot can be rolled back.' });
+  if (!['SUBMITTED','SUCCEEDED'].includes(change.status) || !change.remoteRequestId) return res.status(409).json({ success: false, code: 'FLAG_ROLLBACK_NOT_AVAILABLE', message: 'Only a submitted rollout with a recorded prior-state snapshot can be rolled back.' });
   if (req.body?.confirmation !== 'ROLLBACK FEATURE FLAG CHANGE') return res.status(400).json({ success: false, code: 'CONFIRMATION_REQUIRED', message: 'Type ROLLBACK FEATURE FLAG CHANGE to continue.' });
   try {
     const { integration, credentials } = await loadDeployIntegration(change.integrationId, 'launchdarkly', change.environment, 'manage');
