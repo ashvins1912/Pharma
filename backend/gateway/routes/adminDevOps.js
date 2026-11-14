@@ -106,7 +106,7 @@ async function audit(req, event, outcome, targetType, targetId, details = {}) {
 }
 
 function controlPlaneBase() {
-  const raw = String(process.env.INFRASTRUCTURE_CONTROL_PLANE_URL || '').trim();
+  const raw = String(process.env.PRIVATE_DEVOPS_ADAPTER_URL || process.env.INFRASTRUCTURE_CONTROL_PLANE_URL || '').trim();
   if (!raw) throw new Error('Private DevOps control-plane adapter is not configured.');
   const url = new URL(raw);
   if (process.env.NODE_ENV === 'production' && url.protocol !== 'https:') throw new Error('DevOps control-plane adapter must use HTTPS in production.');
@@ -115,7 +115,7 @@ function controlPlaneBase() {
 }
 
 async function adapterRequest(path, body) {
-  const token = String(process.env.INFRASTRUCTURE_CONTROL_PLANE_TOKEN || '').trim();
+  const token = String(process.env.PRIVATE_DEVOPS_ADAPTER_TOKEN || process.env.INFRASTRUCTURE_CONTROL_PLANE_TOKEN || '').trim();
   if (process.env.NODE_ENV === 'production' && token.length < 32) throw new Error('A strong private control-plane service token is required in production.');
   const response = await fetch(new URL(path, controlPlaneBase()), {
     method: 'POST',
