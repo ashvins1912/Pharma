@@ -30,7 +30,9 @@
     "tenant:create": "node scripts/create-tenant.mjs",
     "test:tenant-isolation": "node --test tests/tenantDeliveryIsolation.test.js tests/tenantOwnedRiders.test.js tests/tenantOrderIsolation.test.js tests/orderAssignmentTenantIsolation.test.js tests/surplusSavingsPricing.test.js tests/endToEndUserWorkflowAutomation.test.js backend/modules/delivery/use-cases/RiderLifecycle.test.js",
     "test:e2e": "bash scripts/run-playwright-ci.sh",
-    "test:database-kernel": "npm --workspace packages/database-kernel test"
+    "test:database-kernel": "npm --workspace packages/database-kernel test",
+    "dev:private-devops-adapter": "npm --workspace services/private-devops-adapter run dev",
+    "start:private-devops-adapter": "npm --workspace services/private-devops-adapter run start"
   },
   "dependencies": {
     "recharts": "^3.10.1"
