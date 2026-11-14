@@ -156,6 +156,15 @@ async function adapterRequest(path, body) {
   return payload;
 }
 
+async function assertProductionReleaseReady() {
+  const readiness = await adapterRequest('/v1/release-readiness', {});
+  if (!readiness.ready) {
+    const missing = (readiness.providers || []).filter(item => !item.ready).map(item => item.provider + ': ' + ['preflight','deployment','rollback'].filter(key => !item[key]).join('/')).join('; ');
+    throw Object.assign(new Error('Production remains locked until all five providers pass staging preflight, deployment and rollback rehearsal. Outstanding: ' + (missing || 'provider evidence incomplete')), { code: 'PRODUCTION_STAGING_GATE_BLOCKED', statusCode: 423 });
+  }
+  return readiness;
+}
+
 async function loadDeployIntegration(integrationId, provider, environment, capability = 'deploy') {
   if (!validId(integrationId)) throw new Error('A valid verified provider integration is required.');
   const integration = await InfrastructureIntegration.findOne({ _id: integrationId, revokedAt: null });
@@ -318,6 +327,7 @@ router.post('/deployments/plan', async (req, res) => {
     if (artifact.provider !== provider || artifact.environment !== environment) throw new Error('Deployment provider and environment must match the generated artifact.');
     if (!Object.hasOwn(DEPLOYMENT_STRATEGIES, strategy)) throw new Error('Unsupported deployment strategy.');
     const { integration } = await loadDeployIntegration(integrationId, provider, environment, 'deploy');
+    if (environment === 'production') await assertProductionReleaseReady();
     if (['aws','azure','gcp','kubernetes'].includes(provider)) {
       const stagedPreflight = await ProviderPreflight.findOne({ provider, environment: 'staging', artifactDigest: artifact.digest, serviceName: artifact.serviceName, status: 'PASS' }).sort({ checkedAt: -1 }).lean();
       if (!stagedPreflight) throw Object.assign(new Error('A passing staging provider preflight for this exact artifact is required before creating a deployment plan.'), { code: 'STAGING_PREFLIGHT_REQUIRED', statusCode: 409 });
@@ -355,6 +365,7 @@ router.post('/deployments/:id/approve', async (req, res) => {
   const deployment = await Deployment.findById(req.params.id);
   if (!deployment) return res.status(404).json({ success: false, message: 'Deployment not found.' });
   if (deployment.status !== 'PENDING_APPROVAL') return res.status(409).json({ success: false, message: `Deployment is ${deployment.status}; only pending plans can be approved.` });
+  if (deployment.environment === 'production') { try { await assertProductionReleaseReady(); } catch (error) { return res.status(error.statusCode || 423).json({ success: false, code: error.code || 'PRODUCTION_STAGING_GATE_BLOCKED', message: error.message }); } }
   if (req.body?.confirmation !== 'APPROVE DEPLOYMENT') return res.status(400).json({ success: false, code: 'CONFIRMATION_REQUIRED', message: 'Type APPROVE DEPLOYMENT to continue.' });
   if (deployment.environment === 'production' && deployment.requestedBy === actorOf(req)) return res.status(403).json({ success: false, code: 'SEPARATION_OF_DUTIES_REQUIRED', message: 'A different Super Admin must approve production deployments.' });
   deployment.status = 'APPROVED';
@@ -370,6 +381,7 @@ router.post('/deployments/:id/execute', async (req, res) => {
   const deployment = await Deployment.findById(req.params.id);
   if (!deployment) return res.status(404).json({ success: false, message: 'Deployment not found.' });
   if (deployment.status !== 'APPROVED') return res.status(409).json({ success: false, message: 'Deployment must be approved before execution.' });
+  if (deployment.environment === 'production') { try { await assertProductionReleaseReady(); } catch (error) { return res.status(error.statusCode || 423).json({ success: false, code: error.code || 'PRODUCTION_STAGING_GATE_BLOCKED', message: error.message }); } }
   if (req.body?.confirmation !== 'EXECUTE DEPLOYMENT') return res.status(400).json({ success: false, code: 'CONFIRMATION_REQUIRED', message: 'Type EXECUTE DEPLOYMENT to continue.' });
   try {
     const { integration, credentials } = await loadDeployIntegration(deployment.integrationId, deployment.provider, deployment.environment, 'deploy');
@@ -471,6 +483,7 @@ router.post('/feature-flags/rollout', async (req, res) => {
     const reference = String(changeReference || '').trim().slice(0, 120);
     if (!reference) throw new Error('A change/ticket reference is required for feature flag changes.');
     const { integration } = await loadDeployIntegration(integrationId, 'launchdarkly', environment, 'manage');
+    if (environment === 'production') await assertProductionReleaseReady();
     const stagedPreflight = await ProviderPreflight.findOne({ provider: 'launchdarkly', environment: 'staging', flagKey: key, status: 'PASS' }).sort({ checkedAt: -1 }).lean();
     if (!stagedPreflight) throw Object.assign(new Error('A passing LaunchDarkly staging preflight for this flag is required before rollout planning.'), { code: 'LAUNCHDARKLY_STAGING_PREFLIGHT_REQUIRED', statusCode: 409 });
     const stagedIntegration = await InfrastructureIntegration.findOne({ _id: stagedPreflight.integrationId, revokedAt: null }).lean();
@@ -499,6 +512,7 @@ router.post('/feature-flags/changes/:id/approve', async (req, res) => {
   const change = await FlagChange.findById(req.params.id);
   if (!change) return res.status(404).json({ success: false, message: 'Feature-flag change not found.' });
   if (change.status !== 'PENDING_APPROVAL') return res.status(409).json({ success: false, message: 'Only pending feature-flag changes can be approved.' });
+  if (change.environment === 'production') { try { await assertProductionReleaseReady(); } catch (error) { return res.status(error.statusCode || 423).json({ success: false, code: error.code || 'PRODUCTION_STAGING_GATE_BLOCKED', message: error.message }); } }
   if (req.body?.confirmation !== 'APPROVE FEATURE FLAG CHANGE') return res.status(400).json({ success: false, code: 'CONFIRMATION_REQUIRED', message: 'Type APPROVE FEATURE FLAG CHANGE to continue.' });
   if (change.environment === 'production' && change.requestedBy === actorOf(req)) return res.status(403).json({ success: false, code: 'SEPARATION_OF_DUTIES_REQUIRED', message: 'A different Super Admin must approve production feature-flag changes.' });
   change.status = 'APPROVED';
@@ -514,6 +528,7 @@ router.post('/feature-flags/changes/:id/execute', async (req, res) => {
   const change = await FlagChange.findById(req.params.id);
   if (!change) return res.status(404).json({ success: false, message: 'Feature-flag change not found.' });
   if (change.status !== 'APPROVED') return res.status(409).json({ success: false, message: 'Feature-flag change must be approved before execution.' });
+  if (change.environment === 'production') { try { await assertProductionReleaseReady(); } catch (error) { return res.status(error.statusCode || 423).json({ success: false, code: error.code || 'PRODUCTION_STAGING_GATE_BLOCKED', message: error.message }); } }
   if (req.body?.confirmation !== 'EXECUTE FEATURE FLAG CHANGE') return res.status(400).json({ success: false, code: 'CONFIRMATION_REQUIRED', message: 'Type EXECUTE FEATURE FLAG CHANGE to continue.' });
   try {
     const { integration, credentials } = await loadDeployIntegration(change.integrationId, 'launchdarkly', change.environment, 'manage');
