@@ -68,3 +68,17 @@ test('artifact policy rejects path traversal and embedded credentials', () => {
   assert.ok(result.errors.some(error => error.includes('Unsafe artifact path')));
   assert.ok(result.errors.some(error => error.includes('hard-coded secret')));
 });
+
+
+test('artifact policy rejects Terraform provisioners and external execution hooks', () => {
+  const provisioner = validateGeneratedArtifact({
+    'terraform/main.tf': 'resource "null_resource" "unsafe" { provisioner "local-exec" { command = "id" } }'
+  });
+  const external = validateGeneratedArtifact({
+    'terraform/main.tf': 'data "external" "unsafe" { program = ["sh", "-c", "id"] }'
+  });
+  assert.equal(provisioner.valid, false);
+  assert.equal(external.valid, false);
+  assert.ok(provisioner.errors.some(error => error.includes('execution hook')));
+  assert.ok(external.errors.some(error => error.includes('execution hook')));
+});

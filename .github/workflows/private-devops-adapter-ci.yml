@@ -1,0 +1,42 @@
+name: Private DevOps Adapter CI
+on:
+  pull_request:
+    paths:
+      - 'services/private-devops-adapter/**'
+      - 'backend/gateway/routes/adminDevOps.js'
+      - 'backend/gateway/routes/adminInfrastructureSecurity.js'
+      - 'backend/security/infrastructureCredentialVault.js'
+      - 'backend/services/devopsDeploymentKit.js'
+      - 'frontend/src/components/admin/InfrastructureSecurityPanel.jsx'
+  push:
+    branches: [feat/private-devops-provider-adapter]
+    paths:
+      - 'services/private-devops-adapter/**'
+      - 'backend/gateway/routes/adminDevOps.js'
+jobs:
+  adapter:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: services/private-devops-adapter/package.json
+      - name: Install adapter dependencies
+        working-directory: services/private-devops-adapter
+        run: npm install --ignore-scripts
+      - name: Syntax check
+        run: |
+          node --check services/private-devops-adapter/server.js
+          node --check services/private-devops-adapter/drivers/providerIdentity.js
+          node --check services/private-devops-adapter/drivers/nativeExecution.js
+          node --check backend/gateway/routes/adminDevOps.js
+          node --check backend/gateway/routes/adminInfrastructureSecurity.js
+          node --check backend/security/infrastructureCredentialVault.js
+          node --check backend/services/devopsDeploymentKit.js
+      - name: Adapter tests
+        working-directory: services/private-devops-adapter
+        run: npm test
+      - name: Build provider execution container
+        run: docker build --pull -t pharma-private-devops-adapter:test services/private-devops-adapter
