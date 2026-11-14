@@ -32,8 +32,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-      - run: npm ci
+      - run: npm install --ignore-scripts
       - name: Test deployment artifact generation and safety policies
         run: node --test backend/services/__tests__/devopsDeploymentKit.test.js
       - name: Build frontend
