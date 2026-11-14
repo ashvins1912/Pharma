@@ -95,6 +95,9 @@ async function driverCall(provider,path,payload) {
   return data;
 }
 async function providerCall(provider, operation, payload) {
+  if (['execute','rollback','flag','flagRollback'].includes(operation)) {
+    await verifyProviderIdentity(provider, payload.credentials, payload.integration || {});
+  }
   let configured = false;
   try { configured = Boolean(endpointFor(provider)); } catch (error) { throw Object.assign(error,{code:'DRIVER_ENDPOINT_INVALID'}); }
   if (configured) {
