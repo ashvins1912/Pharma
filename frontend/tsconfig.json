@@ -16,7 +16,11 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true,
-    "allowJs": true
+    "allowJs": true,
+    "baseUrl": ".",
+    "paths": {
+      "@pharma/algorithm-kernel": ["../packages/algorithm-kernel/src/index.js"]
+    }
   },
   "include": ["src"]
 }

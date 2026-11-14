@@ -1,7 +1,11 @@
 import { isPermissionGranted } from '@pharma/service-kernel';
 
 const CAPABILITIES = [
-  // Super-admin infrastructure visibility and lifecycle operations.
+  // Super-admin infrastructure visibility, code-level RBAC, and lifecycle operations.
+  ['GET', /^\/api\/v1\/admin\/rbac(?:\/|$)/, 'users.read'],
+  ['POST', /^\/api\/v1\/admin\/rbac(?:\/|$)/, 'users.manage'],
+  ['PUT', /^\/api\/v1\/admin\/rbac(?:\/|$)/, 'users.manage'],
+  ['PATCH', /^\/api\/v1\/admin\/rbac(?:\/|$)/, 'users.manage'],
   ['GET', /^\/api\/v1\/admin\/devops(?:\/|$)/, 'users.read'],
   ['POST', /^\/api\/v1\/admin\/devops(?:\/|$)/, 'users.manage'],
   ['GET', /^\/api\/v1\/admin\/infrastructure(?:\/|$)/, 'users.read'],
@@ -158,7 +162,7 @@ const CAPABILITIES = [
   ['POST', /^\/api\/v1\/inventory\/catalogue\/imports\/jobs\/[^/]+\/restart$/, 'inventory.catalogue.import'],
   ['GET', /^\/api\/v1\/inventory\/catalogue\/imports\/[^/]+\/records$/, 'inventory.catalogue.import'],
   ['GET', /^\/api\/v1\/inventory\/catalogue\/imports\/[^/]+$/, 'inventory.catalogue.import'],
-  ['POST', /^\/api\/v1\/inventory\/catalogue\/imports\/[^/]+\/(?:approve|publish)$/, 'inventory.catalogue.import'],
+  ['POST', /^\/api\/v1\/inventory\/catalogue\/imports\/[^/]+\/(?:reconcile|conflicts\/resolve|approve|publish)$/, 'inventory.catalogue.import'],
   ['POST', /^\/api\/v1\/inventory\/imports\/preview$/, 'inventory.import'],
   ['POST', /^\/api\/v1\/inventory\/imports\/?$/, 'inventory.import'],
   ['GET', /^\/api\/v1\/inventory\/imports\/[^/]+(?:\/failures(?:\/download)?)?$/, 'inventory.import'],

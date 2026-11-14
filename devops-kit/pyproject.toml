@@ -1,0 +1,86 @@
+[build-system]
+requires = ["hatchling>=1.21.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "devops-kit"
+version = "1.0.0"
+description = "Unified IaaS, PaaS, and SaaS Multi-Environment Dynamic Configuration, Sizing, Routing & Zero-Code Injection Platform"
+readme = "docs/PLUGIN_AND_DAY2_RUNBOOK.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+authors = [
+  { name = "Platform Architecture Team", email = "platform@internal.dev" }
+]
+keywords = ["devops", "iac", "opentofu", "crossplane", "kubernetes", "finops", "platform-engineering"]
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "Intended Audience :: Developers",
+  "Intended Audience :: System Administrators",
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: System :: Systems Administration",
+]
+
+dependencies = [
+  "pydantic>=2.6.0,<3.0.0",
+  "typer>=0.12.0,<1.0.0",
+  "rich>=13.7.0,<14.0.0",
+  "pyyaml>=6.0.1,<7.0.0",
+  "httpx>=0.27.0,<1.0.0",
+]
+
+[project.optional-dependencies]
+aws = ["boto3>=1.34.0", "botocore>=1.34.0"]
+gcp = ["google-cloud-secret-manager>=2.18.0", "google-cloud-run>=0.10.0"]
+azure = ["azure-identity>=1.15.0", "azure-keyvault-secrets>=4.8.0"]
+k8s = ["kubernetes>=29.0.0"]
+saas = ["auth0-python>=4.7.0", "cloudflare>=3.0.0"]
+local = ["docker>=7.0.0"]
+all = [
+  "devops-kit[aws,gcp,azure,k8s,saas,local]",
+]
+dev = [
+  "pytest>=8.0.0",
+  "pytest-asyncio>=0.23.0",
+  "ruff>=0.3.0",
+  "mypy>=1.9.0",
+]
+
+[project.scripts]
+devops-kit = "devops_kit.cli:main"
+kit = "devops_kit.cli:main"
+
+[project.entry-points."devops_kit.drivers"]
+"aws-iaas" = "devops_kit.plugins.builtin_drivers:AwsIaasDriver"
+"gcp-iaas" = "devops_kit.plugins.builtin_drivers:GcpIaasDriver"
+"azure-iaas" = "devops_kit.plugins.builtin_drivers:AzureIaasDriver"
+"kubernetes-paas" = "devops_kit.plugins.builtin_drivers:KubernetesPaasDriver"
+"cloudrun-paas" = "devops_kit.plugins.builtin_drivers:CloudRunPaasDriver"
+"local-docker" = "devops_kit.plugins.builtin_drivers:LocalDockerDriver"
+"cloudflare-auth0-saas" = "devops_kit.plugins.saas_cloudflare_auth0:CloudflareAuth0SaasDriver"
+
+[project.entry-points."devops_kit.stores"]
+"aws-ssm" = "devops_kit.plugins.builtin_drivers:AwsSsmSecretStore"
+"gcp-sm" = "devops_kit.plugins.builtin_drivers:GcpSecretManagerStore"
+"vault" = "devops_kit.plugins.builtin_drivers:HashiCorpVaultStore"
+"local-env" = "devops_kit.plugins.builtin_drivers:LocalFileSecretStore"
+
+[project.entry-points."devops_kit.allocators"]
+"deterministic-v1" = "devops_kit.allocator.sizing_engine:DeterministicSizingEngine"
+
+[project.entry-points."devops_kit.routers"]
+"gateway-api" = "devops_kit.injection.route_manager:GatewayApiRouteManager"
+"envoy-proxy" = "devops_kit.injection.route_manager:EnvoyRouteManager"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/devops_kit"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.mypy]
+python_version = "3.11"
+strict = true

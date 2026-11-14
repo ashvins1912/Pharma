@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { useLanguage } from '../../context/LanguageContext';
 import { useApp } from '../../context/AppContext';
 import { useToast } from '../../context/ToastContext';
-import { getReadableErrorMessage } from '../../utils/errorMessage';
 
 export default function WhatsAppConnectModal({ isOpen, onClose }) {
   const { t } = useLanguage();
@@ -61,7 +60,7 @@ export default function WhatsAppConnectModal({ isOpen, onClose }) {
       await generateWhatsAppQR();
       addToast('New WhatsApp QR code generated.', 'info');
     } catch (err) {
-      addToast(getReadableErrorMessage(err, t('whatsappQrFailed')), 'error');
+      addToast(err?.message || t('whatsappQrFailed'), 'error');
     } finally {
       setLoading(false);
     }

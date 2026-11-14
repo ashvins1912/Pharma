@@ -1,6 +1,10 @@
 import react from '@vitejs/plugin-react';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import federation from '@originjs/vite-plugin-federation';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // One Vite configuration is used for local development and Render builds.
 // API requests stay on /api so local Vite proxying and the production Render
@@ -22,6 +26,9 @@ export default defineConfig(({ mode }) => ({
     })
   ],
   resolve: {
+    alias: {
+      '@pharma/algorithm-kernel': path.resolve(__dirname, '../packages/algorithm-kernel/src/index.js')
+    },
     extensions: ['.mjs', '.js', '.jsx', '.ts', '.tsx', '.json']
   },
   server: {

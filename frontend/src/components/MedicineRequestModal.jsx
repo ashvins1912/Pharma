@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { getReadableErrorMessage } from '../utils/errorMessage';
 import apiClient from '../api/apiClient';
 import { useToast } from '../context/ToastContext';
 import { useActionLoading, LOADING_ACTIONS } from '../context/LoadingContext';
@@ -131,7 +130,7 @@ export default function MedicineRequestModal({ isOpen, onClose, initialMedicineN
       setPrescriptionFile(null);
       setAddressError('');
       } catch (err) {
-        addToast(getReadableErrorMessage(err, t('requestSubmitFailed')), 'error');
+        addToast(err.message || t('requestSubmitFailed'), 'error');
       }
     });
   };

@@ -4,7 +4,6 @@ import { buildInventoryAlerts } from './alerts.js';
 import { config } from './config.js';
 import { Audit, Inventory, Product, Reservation } from './models.js';
 import { queueMedicineMatch } from './medicine-match-queue.js';
-import { rankInventorySearchCandidates } from './medicine-search-ranking.js';
 
 const asPositiveQuantity = value => Number.isSafeInteger(value) && value > 0;
 const normalizeItems = items => {
@@ -113,17 +112,14 @@ export async function lookupInventory({ productIds = [], skus = [], tenantId = n
       batchNumber: listingBatch?.batchNumber || '',
       expiryDate: listingBatch?.expiryDate || null,
       tenantId: listingBatch?.tenantId || scopeTenantId,
-      branchId: listingBatch?.branchId || scopeBranchId,
-      ...(fuzzyScoreById.has(String(product._id))
-        ? { searchRelevanceScore: fuzzyScoreById.get(String(product._id)) }
-        : {})
+      branchId: listingBatch?.branchId || scopeBranchId
     };
   });
 }
 
 export async function searchInventoryProducts({
   tenantId = null, branchId = null, query = '', category = '', hideRx = false,
-  includeOutOfStock = false, includeExpiredBatches = false, includeBatchDetails = false, sort = 'default', page = 1, limit = 50
+  includeOutOfStock = false, includeExpiredBatches = false, sort = 'default', page = 1, limit = 50
 } = {}) {
   const scopeTenantId = typeof tenantId === 'string' ? tenantId.trim() : '';
   const scopeBranchId = typeof branchId === 'string' ? branchId.trim() : '';
@@ -207,8 +203,7 @@ export async function searchInventoryProducts({
         } }, 0] },
         { $arrayElemAt: ['$activeBatches', 0] }
       ] },
-      expiredStockQuantity: { $sum: { $map: { input: '$expiredBatches', as: 'batch', in: { $ifNull: ['$batch.stockQuantity', 0] } } } },
-      activeBatchCount: { $size: '$activeBatches' }
+      expiredStockQuantity: { $sum: { $map: { input: '$expiredBatches', as: 'batch', in: { $ifNull: ['$$batch.stockQuantity', 0] } } } }
     } },
     ...(!isSearching && !showOutOfStock ? [{ $match: { availableQuantity: { $gt: 0 } } }] : []),
     { $set: {
@@ -235,52 +230,14 @@ export async function searchInventoryProducts({
           category: 1, requiresPrescription: 1, baseCostPrice: 1,
           discountPercentage: 1, marginTier: 1, price: 1, sellingPrice: 1,
           stockQuantity: 1, reservedQuantity: 1, availableQuantity: 1,
-          ...(includeBatchDetails ? { activeBatches: 1, expiredBatches: 1 } : {}),
-          activeBatchCount: 1, listingBatch: 1, expiredStockQuantity: 1
+          activeBatches: 1, expiredBatches: 1, listingBatch: 1, expiredStockQuantity: 1
         } }
       ]
     } }
   ];
 
-  let [result] = await Product.aggregate(pipeline).allowDiskUse(true);
-  let total = result?.metadata?.[0]?.total || 0;
-  let searchMatchType = isSearching ? (total > 0 ? 'EXACT' : 'NO_MATCH') : 'BROWSE';
-  let fuzzyScoreById = new Map();
-
-  // Exact indexed search stays the fast path. Only when it returns no rows,
-  // run a bounded tenant-scoped fuzzy pass and rank actual catalogue products.
-  if (isSearching && total === 0) {
-    const candidateFilter = { tenantId: scopeTenantId, active: true };
-    if (category && category !== 'All') candidateFilter.category = String(category).trim();
-    if (hideRx === true || String(hideRx).toLowerCase() === 'true') candidateFilter.requiresPrescription = false;
-
-    const candidatePool = await Product.find(candidateFilter)
-      .select('_id sku name genericName strength form')
-      .sort({ name: 1, _id: 1 })
-      .limit(5000)
-      .lean();
-    const rankedCandidates = rankInventorySearchCandidates(normalizedQuery, candidatePool, {
-      limit: 100,
-      minimumScore: 70
-    });
-
-    if (rankedCandidates.length) {
-      const candidateIds = rankedCandidates.map(match => match.product._id);
-      fuzzyScoreById = new Map(rankedCandidates.map(match => [String(match.product._id), match.score]));
-      delete productMatch.$or;
-      productMatch._id = { $in: candidateIds };
-
-      const sortIndex = pipeline.findIndex(stage => stage.$sort);
-      pipeline.splice(sortIndex, 0, {
-        $set: { _searchRelevance: { $indexOfArray: [candidateIds, '$_id'] } }
-      });
-      pipeline[sortIndex + 1].$sort = { _searchRelevance: 1, name: 1, _id: 1 };
-
-      [result] = await Product.aggregate(pipeline).allowDiskUse(true);
-      total = result?.metadata?.[0]?.total || 0;
-      searchMatchType = 'FUZZY';
-    }
-  }
+  const [result] = await Product.aggregate(pipeline).allowDiskUse(true);
+  const total = result?.metadata?.[0]?.total || 0;
   const batchDto = batch => ({
     batchNumber: batch.batchNumber || '',
     expiryDate: batch.expiryDate || null,
@@ -308,12 +265,9 @@ export async function searchInventoryProducts({
       stock: product.stockQuantity, quantity: product.availableQuantity,
       stockStatus: product.availableQuantity > 10 ? 'IN_STOCK' : product.availableQuantity > 0 ? 'LOW_STOCK' : 'OUT_OF_STOCK',
       batchNumber: listingBatch?.batchNumber || '', expiryDate: listingBatch?.expiryDate || null,
-      batchCount: product.activeBatchCount ?? batches.length,
-      expiredStockQuantity: showExpired ? (product.expiredStockQuantity || 0) : 0,
-      ...(includeBatchDetails ? {
-        expiredBatchAvailability: expiredBatches.map(batchDto),
-        batchAvailability: batches.map(batchDto)
-      } : {}),
+      batchCount: batches.length, expiredStockQuantity: showExpired ? (product.expiredStockQuantity || 0) : 0,
+      expiredBatchAvailability: expiredBatches.map(batchDto),
+      batchAvailability: batches.map(batchDto),
       tenantId: listingBatch?.tenantId || scopeTenantId,
       branchId: listingBatch?.branchId || scopeBranchId
     };
@@ -323,7 +277,6 @@ export async function searchInventoryProducts({
     items, total, page: normalizedPage, limit: normalizedLimit,
     pages: Math.ceil(total / normalizedLimit) || 1,
     isSearching,
-    searchMatchType,
     outOfStockHidden: !isSearching && !showOutOfStock
   };
 }

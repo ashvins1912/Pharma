@@ -4,6 +4,7 @@ import multer from 'multer';
 import mongoose from 'mongoose';
 import dataStore from '../dataStore.js';
 import { authenticateUser, requirePermission } from '../middleware/auth.js';
+import { requireDisplayPermission, requireModifyPermission } from '../middleware/authorization.js';
 import { getPrescription, savePrescription } from '../config/prescriptionStorage.js';
 import { getIsConnected } from '../config/db.js';
 import MedicineRequest from '../models/MedicineRequest.js';
@@ -104,7 +105,7 @@ const authorizeCustomerAction = (req, res, next) => {
 
 const authorizeRequestList = (req, res, next) => {
     if (req.baseUrl.startsWith('/api/admin/')) {
-        return requirePermission('medicine_requests.read')(req, res, next);
+        return requireDisplayPermission('medicine_requests.read', { resourceType: 'medicine_request' })(req, res, next);
     }
     return requireCustomer(req, res, next);
 };
@@ -436,23 +437,18 @@ router.post('/', authenticateUser, requirePermission('medicine_requests.create')
                 requestedItems = [];
             }
         }
-        if (!Array.isArray(requestedItems)) requestedItems = [];
-        if (!requestedItems.length) {
-            // Preserve legacy single-item shorthand, but allow prescription-only
-            // requests to remain item-empty until pharmacist review. A synthetic
-            // blank medicine row violates the request schema and misrepresents
-            // an OCR result that could not be read.
-            const shorthandName = String(req.body.requestedName || req.body.medicineName || '').trim();
-            if (shorthandName) {
-                requestedItems = [{
-                    requestedName: shorthandName,
+        if (!requestedItems || !requestedItems.length) {
+            // Single-item shorthand support from form fields
+            requestedItems = [
+                {
+                    requestedName: req.body.requestedName || req.body.medicineName || '',
                     strength: req.body.strength || '',
                     dosageForm: req.body.dosageForm || '',
                     manufacturer: req.body.manufacturer || '',
                     quantity: Number(req.body.quantity) || 1,
                     originalAvailabilityStatus: req.body.originalAvailabilityStatus || 'NOT_IN_CATALOG'
-                }];
-            }
+                }
+            ];
         }
 
         let prescriptionUrl = req.body.prescriptionUrl || null;
@@ -639,7 +635,7 @@ const getAdminMedicineRequests = async (req, res) => {
 };
 
 // Legacy/admin UI contract. Must remain before /:id.
-router.get('/admin/all', authenticateUser, requirePermission('medicine_requests.read'), getAdminMedicineRequests);
+router.get('/admin/all', authenticateUser, requireDisplayPermission('medicine_requests.read', { resourceType: 'medicine_request' }), getAdminMedicineRequests);
 
 // Get customer's medicine requests
 router.get('/', authenticateUser, authorizeRequestList, async (req, res) => {
@@ -1300,7 +1296,7 @@ router.delete('/:id', authenticateUser, requirePermission('medicine_requests.dec
 // -------------------------------------------------------------
 
 // Metrics
-router.get('/metrics/overview', authenticateUser, requirePermission('medicine_requests.read'), async (req, res) => {
+router.get('/metrics/overview', authenticateUser, requireDisplayPermission('medicine_requests.read', { resourceType: 'medicine_request_metrics' }), async (req, res) => {
     if (!requireDatabase(res)) return;
     try {
         const tenantId = isPlatformRequestAdmin(req) ? null : getRequestActorTenantId(req);
@@ -1314,7 +1310,7 @@ router.get('/metrics/overview', authenticateUser, requirePermission('medicine_re
 });
 
 // Review request
-router.put('/:id/review', authenticateUser, requirePermission('medicine_requests.manage'), authorizeRequestDetails, async (req, res) => {
+router.put('/:id/review', authenticateUser, requireModifyPermission('medicine_requests.manage', { resourceType: 'medicine_request', auditOnAllow: true }), authorizeRequestDetails, async (req, res) => {
     if (!requireDatabase(res)) return;
     try {
         const actorName = req.user.user_metadata?.name || req.user.email || 'Pharmacist';
@@ -1328,7 +1324,7 @@ router.put('/:id/review', authenticateUser, requirePermission('medicine_requests
 });
 
 // Create/Send proposal
-router.post('/:id/proposal', authenticateUser, requirePermission('medicine_requests.proposal'), authorizeRequestDetails, async (req, res) => {
+router.post('/:id/proposal', authenticateUser, requireModifyPermission('medicine_requests.proposal', { resourceType: 'medicine_request', auditOnAllow: true }), authorizeRequestDetails, async (req, res) => {
     if (!requireDatabase(res)) return;
     try {
         const actorName = req.user.user_metadata?.name || req.user.email || 'Pharmacist';
@@ -1342,7 +1338,7 @@ router.post('/:id/proposal', authenticateUser, requirePermission('medicine_reque
 });
 
 // Update proposal
-router.put('/:id/proposal', authenticateUser, requirePermission('medicine_requests.proposal'), authorizeRequestDetails, async (req, res) => {
+router.put('/:id/proposal', authenticateUser, requireModifyPermission('medicine_requests.proposal', { resourceType: 'medicine_request', auditOnAllow: true }), authorizeRequestDetails, async (req, res) => {
     if (!requireDatabase(res)) return;
     try {
         const actorName = req.user.user_metadata?.name || req.user.email || 'Pharmacist';
@@ -1356,7 +1352,7 @@ router.put('/:id/proposal', authenticateUser, requirePermission('medicine_reques
 });
 
 // Pharmacy rejects request
-router.post('/:id/reject-request', authenticateUser, requirePermission('medicine_requests.manage'), authorizeRequestDetails, async (req, res) => {
+router.post('/:id/reject-request', authenticateUser, requireModifyPermission('medicine_requests.manage', { resourceType: 'medicine_request', auditOnAllow: true }), authorizeRequestDetails, async (req, res) => {
     if (!requireDatabase(res)) return;
     try {
         const actorName = req.user.user_metadata?.name || req.user.email || 'Pharmacist';

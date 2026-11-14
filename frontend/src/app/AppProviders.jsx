@@ -1,5 +1,6 @@
 import React from 'react';
-import App from '../App.jsx';
+import { RouterProvider } from 'react-router-dom';
+import { appRouter } from '../routes/adminRoutes';
 import { AuthProvider } from '../context/AuthContext.jsx';
 import { LanguageProvider } from '../context/LanguageContext.jsx';
 import { ToastProvider } from '../context/ToastContext.jsx';
@@ -25,7 +26,7 @@ export default function AppProviders() {
                 <AppProvider>
                   <TranslationProvider>
                     <DashboardAnalyticsProvider>
-                      <App />
+                      <RouterProvider router={appRouter} />
                     </DashboardAnalyticsProvider>
                   </TranslationProvider>
                 </AppProvider>

@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { getReadableErrorMessage } from '../../../utils/errorMessage';
 import { createPortal } from 'react-dom';
 import { useToast } from '../../../context/ToastContext';
 import apiClient from '../../../api/apiClient';
@@ -136,7 +135,7 @@ export default function AdminProposalModal({ request, isOpen, onClose, onRefresh
           .catch((error) => {
             if (active) {
               setReviewReady(false);
-              addToast(getReadableErrorMessage(error, 'Could not start request review.'), 'error');
+              addToast(error.message || 'Could not start request review.', 'error');
             }
           });
       }
@@ -366,7 +365,7 @@ export default function AdminProposalModal({ request, isOpen, onClose, onRefresh
       onRefresh();
       onClose();
     } catch (err) {
-      addToast(getReadableErrorMessage(err, 'Failed to submit proposal.'), 'error');
+      addToast(err.response?.data?.message || err.message || 'Failed to submit proposal.', 'error');
     } finally {
       setSaving(false);
     }
@@ -381,7 +380,7 @@ export default function AdminProposalModal({ request, isOpen, onClose, onRefresh
       onRefresh();
       onClose();
     } catch (err) {
-      addToast(getReadableErrorMessage(err, 'Failed to reject request.'), 'error');
+      addToast(err.response?.data?.message || err.message || 'Failed to reject request.', 'error');
     } finally {
       setSaving(false);
     }
@@ -389,7 +388,7 @@ export default function AdminProposalModal({ request, isOpen, onClose, onRefresh
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-slate-950/60 p-3 backdrop-blur-sm sm:p-4"
+      className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-slate-800/35 p-3 backdrop-blur-sm sm:p-4"
       onClick={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
@@ -440,20 +439,20 @@ export default function AdminProposalModal({ request, isOpen, onClose, onRefresh
         <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2.5 text-xs">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             <div>
-              <span className="text-[10px] text-slate-400 font-extrabold uppercase block">Customer</span>
+              <span className="text-[10px] text-slate-600 font-extrabold uppercase block">Customer</span>
               <p className="font-bold text-slate-900">
                 {request.customerName} {request.customerPhone && `• ${request.customerPhone}`}
               </p>
-              <p className="text-[11px] text-slate-500 truncate max-w-xs mt-0.5">
+              <p className="text-[11px] text-slate-600 truncate max-w-xs mt-0.5">
                 📍 {request.deliveryAddress}
               </p>
             </div>
             <div>
-              <span className="text-[10px] text-slate-400 font-extrabold uppercase block">Requested Formulation</span>
+              <span className="text-[10px] text-slate-600 font-extrabold uppercase block">Requested Formulation</span>
               <p className="font-bold text-slate-900">
                 {firstItem.requestedName} (x{firstItem.quantity || 1})
               </p>
-              <p className="text-[11px] text-slate-500 mt-0.5">
+              <p className="text-[11px] text-slate-600 mt-0.5">
                 Preferred timing: <span className="font-semibold text-slate-700">{request.preferredDeliveryPreference || 'Flexible'}</span>
               </p>
             </div>
@@ -473,13 +472,13 @@ export default function AdminProposalModal({ request, isOpen, onClose, onRefresh
                 href={request.prescriptionUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-1.5 text-[11px] font-extrabold bg-blue-50 text-blue-700 hover:bg-blue-100 px-3 py-1.5 rounded-xl border border-blue-200 transition"
+                className="min-h-11 inline-flex items-center gap-1.5 text-xs font-extrabold bg-blue-50 text-blue-700 hover:bg-blue-100 px-3 py-2 rounded-xl border border-blue-200 transition"
               >
                 <span>📄</span>
                 <span>View Prescription Attachment</span>
               </a>
             ) : (
-              <span className="text-[11px] text-slate-400">📄 No prescription attached</span>
+              <span className="text-[11px] text-slate-600">📄 No prescription attached</span>
             )}
 
             {request.productImageUrl && (

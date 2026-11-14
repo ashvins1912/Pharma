@@ -1,0 +1,80 @@
+name: DevOps Kit Multi-Cloud Delivery & Drift Pipeline
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 * * * *" # Hourly automated drift detection
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+jobs:
+  validate-and-size:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install devops-kit
+        run: pip install -e "./devops-kit[aws,gcp,saas]"
+      - name: Validate Contract & Policy Gates
+        run: |
+          cd devops-kit
+          kit validate --contract contracts/env-contract.yaml
+          kit allocate-preview --contract contracts/env-contract.yaml
+          kit inject-preview --contract contracts/env-contract.yaml
+
+  ephemeral-pr-preview:
+    if: github.event_name == 'pull_request'
+    needs: validate-and-size
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install & Build Image (Zero-Dockerfile)
+        run: |
+          pip install -e "./devops-kit"
+          cd devops-kit
+          kit build --contract contracts/env-contract.yaml --dry-run
+          kit apply --contract contracts/env-contract.yaml
+          kit route --contract contracts/env-contract.yaml --canary 10 --pr-header "pr-${{ github.event.number }}"
+
+  deploy-prod:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: validate-and-size
+    environment: production
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Provision & Progressive Canary Rollout
+        run: |
+          pip install -e "./devops-kit[aws,k8s,saas]"
+          cd devops-kit
+          kit plan --contract contracts/env-contract.yaml
+          kit apply --contract contracts/env-contract.yaml
+          kit route --contract contracts/env-contract.yaml --canary 10
+
+  drift-detection:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run Drift Scan
+        run: |
+          pip install -e "./devops-kit[aws]"
+          cd devops-kit
+          kit drift-check --contract contracts/env-contract.yaml --iac-dir iac/opentofu

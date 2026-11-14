@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { getReadableErrorMessage } from '../utils/errorMessage';
 import apiClient from '../api/apiClient';
 import { useAuth } from '../context/AuthContext';
 import { useTenant } from '../context/TenantContext';
@@ -43,7 +42,7 @@ export function useRiderManagement({ includeDisabled = false } = {}) {
                 : [];
             setRiders(riderArray);
         } catch (err) {
-            setRidersError(getReadableErrorMessage(err, 'Failed to load riders.'));
+            setRidersError(err.response?.data?.message || err.message || 'Failed to load riders.');
         } finally {
             setLoadingRiders(false);
         }
@@ -72,7 +71,7 @@ export function useRiderManagement({ includeDisabled = false } = {}) {
             setRiders((prev) => prev.map((r) => (r.id === riderId ? res.data.rider : r)));
             return res.data;
         } catch (err) {
-            throw new Error(getReadableErrorMessage(err, 'Could not update rider status.'));
+            throw new Error(err.response?.data?.message || err.message || 'Could not update rider status.');
         }
     };
 
@@ -88,7 +87,7 @@ export function useRiderManagement({ includeDisabled = false } = {}) {
             setRiders((prev) => prev.map((r) => (r.id === riderId ? res.data.rider : r)));
             return res.data;
         } catch (err) {
-            throw new Error(getReadableErrorMessage(err, 'Could not update rider availability.'));
+            throw new Error(err.response?.data?.message || err.message || 'Could not update rider availability.');
         }
     };
 

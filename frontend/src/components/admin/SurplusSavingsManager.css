@@ -55,8 +55,9 @@
 .surplus-campaign-title-row { display:flex; align-items:center; flex-wrap:wrap; gap:.6rem; } .surplus-campaign-title-row h4 { margin:0; color:#0f172a; font-size:.85rem; font-weight:900; overflow-wrap:anywhere; }
 .surplus-status-pill { padding:.3rem .55rem; border-radius:999px; font-size:.62rem; font-weight:900; letter-spacing:.03em; } .surplus-status-pill--active { background:#d1fae5; color:#047857; } .surplus-status-pill--draft { background:#f1f5f9; color:#475569; } .surplus-status-pill--paused { background:#fef3c7; color:#92400e; } .surplus-status-pill--expired { background:#fee2e2; color:#b91c1c; }
 .surplus-campaign-offer { margin:.45rem 0 0; color:#334155; font-size:.75rem; font-weight:800; } .surplus-campaign-offer span { padding:0 .25rem; color:#cbd5e1; } .surplus-campaign-dates { margin:.3rem 0 0; color:#64748b; font-size:.68rem; line-height:1.5; overflow-wrap:anywhere; } .surplus-campaign-dates span { padding:0 .2rem; }
-.surplus-redemption { max-width:28rem; margin-top:.75rem; } .surplus-redemption-label { display:flex; justify-content:space-between; gap:.5rem; color:#64748b; font-size:.65rem; font-weight:750; } .surplus-progress-track { height:.35rem; margin-top:.4rem; overflow:hidden; border-radius:999px; background:#f1f5f9; } .surplus-progress-track span { display:block; height:100%; border-radius:inherit; background:#d49a28; transition:width .2s ease; }
+.surplus-redemption { max-width:28rem; margin-top:.75rem; } .surplus-redemption-label { display:flex; justify-content:space-between; gap:.5rem; color:#64748b; font-size:.65rem; font-weight:750; font-variant-numeric:tabular-nums; } .surplus-progress-track { height:.35rem; margin-top:.4rem; overflow:hidden; border-radius:999px; background:#f1f5f9; } .surplus-progress-track span { display:block; height:100%; border-radius:inherit; background:#d49a28; transition:width .2s ease; }
 .surplus-campaign-actions { display:flex; flex:0 0 auto; gap:.5rem; } .surplus-campaign-actions button { min-height:2.5rem; padding:.6rem .85rem; border:0; border-radius:.7rem; font-size:.7rem; font-weight:850; cursor:pointer; } .surplus-activate-button { background:#d1fae5; color:#047857; } .surplus-pause-button { background:#fef3c7; color:#92400e; }
+.surplus-hero-action:focus-visible, .surplus-refresh-button:focus-visible, .surplus-form-actions button:focus-visible, .surplus-campaign-actions button:focus-visible { outline:2px solid #2563eb; outline-offset:2px; }
 .surplus-empty-state,.surplus-loading-state { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.5rem; min-height:10rem; padding:2rem 1rem; text-align:center; color:#64748b; font-size:.8rem; } .surplus-empty-state > span { display:grid; place-items:center; width:2.5rem; height:2.5rem; border-radius:.8rem; background:#fff7e6; color:#a16207; font-size:1.2rem; } .surplus-empty-state strong { color:#334155; font-size:.9rem; } .surplus-empty-state p { margin:0; max-width:26rem; line-height:1.5; } .surplus-empty-state a { margin-top:.25rem; color:#a16207; font-weight:850; text-decoration:none; } .surplus-empty-state a:hover { text-decoration:underline; }
 html.dark .admin-screen--surplus-savings { color:#f1f5f9; }
 html.dark .surplus-page-hero { border-color:#713f12; background:radial-gradient(ellipse at 90% 0%,rgba(180,120,12,.2),transparent 42%),linear-gradient(135deg,#1c1a15,#211b10); }
@@ -89,7 +90,7 @@ html.dark .surplus-progress-track { background:#334155; } html.dark .surplus-emp
   .surplus-form-actions button { width:100%; }
   .surplus-campaign-card { align-items:stretch; flex-direction:column; gap:.85rem; }
   .surplus-campaign-actions { justify-content:flex-end; }
-  .surplus-campaign-actions button { flex:1 1 auto; }
+  .surplus-campaign-actions button { flex:1 1 auto; min-height:2.75rem; }
   .surplus-history-heading { flex-wrap:wrap; }
   .surplus-refresh-button { width:100%; }
 }

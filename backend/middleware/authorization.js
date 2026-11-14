@@ -56,3 +56,9 @@ export async function resolveAuthorization(req, res, next) {
     return sendAuthorizationError(req, res, error);
   }
 }
+
+export {
+  requireOperationPermission,
+  requireDisplayPermission,
+  requireModifyPermission
+} from '../authorization/CentralRbacService.js';

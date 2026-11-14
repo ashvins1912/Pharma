@@ -5,7 +5,6 @@ import apiClient from '../../api/apiClient';
 import { useActionLoading, LOADING_ACTIONS } from '../../context/LoadingContext';
 import { useToast } from '../../context/ToastContext';
 import { normalizePrescriptionBlob } from '../../utils/prescriptionFile';
-import { getReadableErrorMessage } from '../../utils/errorMessage';
 import Pagination from '../common/Pagination';
 import FulfillmentTabs from './FulfillmentTabs';
 
@@ -201,7 +200,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh, dateRange = 
     }).catch(error => {
       if (isCurrentRequest) {
         setDeliveredOrders([]);
-        setDeliveredError(getReadableErrorMessage(error, 'Unable to load delivered orders. Please try again.'));
+        setDeliveredError(error.response?.data?.message || error.message || 'Unable to load delivered orders. Please try again.');
       }
     }).finally(() => {
       if (isCurrentRequest) setDeliveredLoading(false);
@@ -222,7 +221,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh, dateRange = 
       }).catch(error => {
         if (isCurrentRequest) {
           setCancelledOrders([]);
-          setCancelledError(getReadableErrorMessage(error, 'Unable to load cancelled order history.'));
+          setCancelledError(error.response?.data?.message || error.message || 'Unable to load cancelled order history.');
         }
       }).finally(() => { if (isCurrentRequest) setCancelledLoading(false); });
     return () => { isCurrentRequest = false; };
@@ -243,7 +242,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh, dateRange = 
     }).catch(error => {
       if (isCurrentRequest) {
         setSearchOrders([]);
-        setSearchError(getReadableErrorMessage(error, 'Unable to search orders. Please try again.'));
+        setSearchError(error.message || 'Unable to search orders. Please try again.');
       }
     }).finally(() => {
       if (isCurrentRequest) setSearchLoading(false);
@@ -314,7 +313,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh, dateRange = 
       })
       .catch((err) => {
         if (isCurrentRequest) {
-          setAvailableRidersError(getReadableErrorMessage(err, t('couldNotLoadRiders')));
+          setAvailableRidersError(err.response?.data?.message || err.message || t('couldNotLoadRiders'));
         }
       })
       .finally(() => {
@@ -346,7 +345,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh, dateRange = 
       addToast(res.data.message || t('orderShifted').replace('{status}', newStatus), 'success');
       refreshBoard();
     } catch (err) {
-      addToast(getReadableErrorMessage(err, 'State transition failed'), 'error');
+      addToast(err.response?.data?.message || err.message || 'State transition failed', 'error');
     } finally {
       setUpdatingId(null);
       setAssignRiderModal(null);
@@ -374,7 +373,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh, dateRange = 
       setVerifiedOrderIds(prev => prev.filter(id => id !== orderId));
       refreshBoard();
     } catch (err) {
-      addToast(getReadableErrorMessage(err, t('orderReviewFailed')), 'error');
+      addToast(err.message || t('orderReviewFailed'), 'error');
     } finally {
       setUpdatingId(null);
     }
@@ -387,7 +386,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh, dateRange = 
       addToast(res.data.message || t('orderDispatched'), 'success');
       refreshBoard();
     } catch (err) {
-      addToast(getReadableErrorMessage(err, t('orderDispatchFailed')), 'error');
+      addToast(err.message || t('orderDispatchFailed'), 'error');
     } finally {
       setUpdatingId(null);
       setAssignRiderModal(null);
@@ -409,7 +408,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh, dateRange = 
       }
       refreshBoard();
     } catch (err) {
-      addToast(getReadableErrorMessage(err, t('prescriptionVerificationRestartFailed')), 'error');
+      addToast(err.response?.data?.message || err.message || t('prescriptionVerificationRestartFailed'), 'error');
     } finally {
       setUpdatingId(null);
     }
@@ -472,7 +471,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh, dateRange = 
       }
       refreshBoard();
     } catch (err) {
-      addToast(getReadableErrorMessage(err, 'Manual prescription approval failed.'), 'error');
+      addToast(err.response?.data?.message || err.message || 'Manual prescription approval failed.', 'error');
     } finally {
       setUpdatingId(null);
     }
@@ -612,7 +611,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh, dateRange = 
         }
         await onRefresh();
       } catch (error) {
-        addToast(getReadableErrorMessage(error, `Could not ${decision} prescription.`), 'error');
+        addToast(error.message || `Could not ${decision} prescription.`, 'error');
       }
     });
   };
@@ -1029,7 +1028,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh, dateRange = 
                                   if (typeof onRefresh === 'function') onRefresh();
                                   else window.location.reload();
                                 } catch (err) {
-                                  addToast(getReadableErrorMessage(err, 'Auto-assignment failed.'), 'error');
+                                  addToast(err.response?.data?.message || err.message || 'Auto-assignment failed.', 'error');
                                 } finally {
                                   setUpdatingId(null);
                                 }
@@ -1154,7 +1153,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh, dateRange = 
                                       if (typeof onRefresh === 'function') onRefresh();
                                       else window.location.reload();
                                     } catch (err) {
-                                      addToast(getReadableErrorMessage(err, 'Auto-assignment failed.'), 'error');
+                                      addToast(err.response?.data?.message || err.message || 'Auto-assignment failed.', 'error');
                                     } finally {
                                       setUpdatingId(null);
                                     }
@@ -1197,7 +1196,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh, dateRange = 
                                            setDeliveryOtps(prev => ({ ...prev, [order._id]: otp }));
                                            addToast(`Revealed Customer OTP (Cached 24h): ${otp}`, 'info');
                                          } catch (err) {
-                                           addToast(getReadableErrorMessage(err, t('otpFromCacheFailed')), 'error');
+                                           addToast(err.response?.data?.message || err.message || t('otpFromCacheFailed'), 'error');
                                          }
                                        }}
                                       className="text-[10px] font-black text-amber-800 bg-amber-100 px-2.5 py-0.5 rounded-lg hover:bg-amber-200 transition cursor-pointer"
@@ -1239,7 +1238,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh, dateRange = 
                                            addToast('Delivery verified successfully by server!', 'success');
                                            refreshBoard();
                                          } catch (err) {
-                                           addToast(getReadableErrorMessage(err, 'OTP verification failed.'), 'error');
+                                           addToast(err.response?.data?.message || err.message || 'OTP verification failed.', 'error');
                                          } finally {
                                            setUpdatingId(null);
                                          }
@@ -1262,7 +1261,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh, dateRange = 
                                            }
                                            addToast('New delivery OTP generated, cached for 24h, and sent to customer!', 'success');
                                          } catch (err) {
-                                           addToast(getReadableErrorMessage(err, 'Could not resend OTP.'), 'error');
+                                           addToast(err.response?.data?.message || err.message || 'Could not resend OTP.', 'error');
                                          }
                                        }}
                                       className="text-[10px] font-extrabold text-blue-600 hover:underline cursor-pointer"

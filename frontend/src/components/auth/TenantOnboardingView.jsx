@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { getReadableErrorMessage } from '../../utils/errorMessage';
 import apiClient from '../../api/apiClient';
 import { useLanguage } from '../../context/LanguageContext';
 
@@ -146,7 +145,7 @@ export default function TenantOnboardingView({ onSuccess }) {
       setSuccessMsg(`Tenant "${response.data.shopName}" successfully registered and onboarded!`);
       if (onSuccess) onSuccess(response.data);
     } catch (err) {
-      setError(getReadableErrorMessage(err, 'Tenant onboarding failed'));
+      setError(err?.response?.data?.message || err.message || 'Tenant onboarding failed');
     } finally {
       setLoading(false);
     }

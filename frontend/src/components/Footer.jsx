@@ -70,10 +70,10 @@ export default function Footer({ onNavigate, onOpenGuide }) {
                 </button>
               </li>
               <li>
-                <span className="text-slate-400">{t('codPolicy')}</span>
+                <span className="text-slate-600">{t('codPolicy')}</span>
               </li>
               <li>
-                <span className="text-slate-400">{t('prescriptionRules')}</span>
+                <span className="text-slate-600">{t('prescriptionRules')}</span>
               </li>
             </ul>
           </div>
@@ -94,10 +94,10 @@ export default function Footer({ onNavigate, onOpenGuide }) {
 
         </div>
 
-        <div className="app-footer__bottom border-t border-slate-100 mt-10 pt-6 flex flex-col sm:flex-row justify-between items-center gap-3 text-slate-400 text-[11px]">
+        <div className="app-footer__bottom border-t border-slate-200 mt-10 pt-6 flex flex-col sm:flex-row justify-between items-center gap-3 text-slate-600 text-xs">
           <p>© {new Date().getFullYear()} QuickMeds Rx. {t('allRightsReserved')}</p>
           <div className="app-footer__legal flex flex-wrap items-center gap-4">
-            <label className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500">
+            <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
               <span aria-hidden="true">🌐</span>
               <span>{t("language")}</span>
               <select aria-label={t("language")} value={language} onChange={(event) => setLanguage(event.target.value)} className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700">

@@ -9,6 +9,7 @@ import SearchMetricIngestionService from '../services/SearchMetricIngestionServi
 import { inventoryClient } from '../services/inventory-client/InventoryClient.js';
 import { tenantService } from '../services/tenant-service/TenantService.js';
 import { authorizationService } from '../authorization/AuthorizationService.js';
+import { requireDisplayPermission, requireModifyPermission } from '../middleware/authorization.js';
 import { cacheService } from '../services/cache/CacheService.js';
 import Medicine from '../models/Medicine.js';
 import Order from '../models/Order.js';
@@ -36,7 +37,7 @@ const publicMedicine = medicine => {
 };
 
 // Full inventory and CRUD are protected by inventory.read / inventory.write capabilities.
-router.get('/admin/inventory', authenticateUser, async (req, res) => {
+router.get('/admin/inventory', authenticateUser, requireDisplayPermission('inventory.read', { resourceType: 'inventory' }), async (req, res) => {
     try {
         const { search, category, sort, page, limit } = req.query;
         const scope = await getVerifiedInventoryScope(req, 'inventory.read');
@@ -48,7 +49,6 @@ router.get('/admin/inventory', authenticateUser, async (req, res) => {
             page: page || 1,
             limit: limit || 16,
             includeOutOfStock: true,
-            includeBatchDetails: true,
             userId: req.user?.sub || 'inventory-admin'
         });
         return res.json({
@@ -68,7 +68,7 @@ router.get('/admin/inventory', authenticateUser, async (req, res) => {
     }
 });
 
-router.get(['/admin/suggest-restock', '/suggest-restock'], authenticateUser, async (req, res) => {
+router.get(['/admin/suggest-restock', '/suggest-restock'], authenticateUser, requireDisplayPermission('inventory.read', { resourceType: 'inventory_restock' }), async (req, res) => {
     try {
         const scope = await getVerifiedInventoryScope(req, 'inventory.read');
         const { tenantId, branchId } = scope;
@@ -181,7 +181,7 @@ router.get(['/admin/suggest-restock', '/suggest-restock'], authenticateUser, asy
     }
 });
 
-router.post(['/admin/apply-restock', '/apply-restock'], authenticateUser, async (req, res) => {
+router.post(['/admin/apply-restock', '/apply-restock'], authenticateUser, requireModifyPermission('inventory.write', { resourceType: 'inventory_restock', auditOnAllow: true }), async (req, res) => {
     try {
         const scope = await getVerifiedInventoryScope(req, 'inventory.write');
         const { tenantId, branchId } = scope;
@@ -287,7 +287,7 @@ const getVerifiedInventoryScope = async (req, requiredPermission = 'inventory.re
     return { tenantId: requestedTenantId, branchId: requestedBranchId };
 };
 
-router.post('/', authenticateUser, async (req, res) => {
+router.post('/', authenticateUser, requireModifyPermission('inventory.write', { resourceType: 'inventory', auditOnAllow: true }), async (req, res) => {
     try {
         const scope = await getVerifiedInventoryScope(req, 'inventory.write');
         const result = await inventoryClient.createProduct({
@@ -303,7 +303,7 @@ router.post('/', authenticateUser, async (req, res) => {
     }
 });
 
-router.put('/:medicineId', authenticateUser, async (req, res) => {
+router.put('/:medicineId', authenticateUser, requireModifyPermission('inventory.write', { resourceType: 'inventory', auditOnAllow: true }), async (req, res) => {
     try {
         const scope = await getVerifiedInventoryScope(req, 'inventory.write');
         const result = await inventoryClient.updateProduct({
@@ -320,7 +320,7 @@ router.put('/:medicineId', authenticateUser, async (req, res) => {
     }
 });
 
-router.delete('/:medicineId', authenticateUser, async (req, res) => {
+router.delete('/:medicineId', authenticateUser, requireModifyPermission('inventory.write', { resourceType: 'inventory', auditOnAllow: true }), async (req, res) => {
     try {
         const scope = await getVerifiedInventoryScope(req, 'inventory.write');
         const result = await inventoryClient.archiveProduct({
@@ -423,10 +423,6 @@ router.get('/', async (req, res) => {
         }
 
         const medicines = (result?.items || []).map(publicMedicine);
-        // Public catalogue data is tenant/branch scoped by the query string. A short
-        // private browser cache reuses identical reads without exposing one pharmacy's
-        // inventory to shared caches; checkout still revalidates stock server-side.
-        res.set('Cache-Control', 'private, max-age=10, stale-while-revalidate=20');
         if (typeof search === 'string' && search.trim()) {
             const skuIds = medicines.map(medicine => medicine.sku || medicine.code)
                 .filter(sku => typeof sku === 'string' && sku.trim());
@@ -596,7 +592,7 @@ router.get('/alerts', authenticateUser, async (req, res) => {
 });
 
 // Inventory merge audits
-router.get('/audits', authenticateUser, async (req, res) => {
+router.get('/audits', authenticateUser, requireDisplayPermission('inventory.read', { resourceType: 'inventory_audit' }), async (req, res) => {
     try {
         const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
         const limit = Math.min(50, Math.max(1, Number.parseInt(req.query.limit, 10) || 10));

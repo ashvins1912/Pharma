@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { getReadableErrorMessage } from '../../utils/errorMessage';
 import apiClient from '../../api/apiClient';
 import { useToast } from '../../context/ToastContext';
 import { useLanguage } from '../../context/LanguageContext';
@@ -29,7 +28,7 @@ export default function AdminMedicineRequestsView() {
       // Admin API returns a paginated envelope; keep the component state array-shaped.
       setRequests(Array.isArray(res.data) ? res.data : (res.data?.requests || res.data?.items || []));
     } catch (err) {
-      addToast(getReadableErrorMessage(err, t('couldNotLoadQueue')), 'error');
+      addToast(err.message || t('couldNotLoadQueue'), 'error');
     } finally {
       setLoading(false);
     }
@@ -90,7 +89,7 @@ export default function AdminMedicineRequestsView() {
       setProposalModalRequest(null);
       await loadAllRequests();
     } catch (err) {
-      addToast(getReadableErrorMessage(err, t('couldNotSubmitProposal')), 'error');
+      addToast(err.message || t('couldNotSubmitProposal'), 'error');
     } finally {
       setSubmittingProposal(false);
     }

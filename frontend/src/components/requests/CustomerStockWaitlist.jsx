@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { getReadableErrorMessage } from '../../utils/errorMessage';
 import apiClient from '../../api/apiClient';
 import { useToast } from '../../context/ToastContext';
 import { useApp } from '../../context/AppContext';
@@ -18,7 +17,7 @@ export default function CustomerStockWaitlist() {
       const response = await apiClient.get('/api/orders/fulfillment/waitlist');
       setItems(response.data?.items || []);
     } catch (error) {
-      addToast(getReadableErrorMessage(error, t('couldNotLoadStockWatch')), 'error');
+      addToast(error.response?.data?.message || t('couldNotLoadStockWatch'), 'error');
     } finally {
       setLoading(false);
     }
@@ -45,7 +44,7 @@ export default function CustomerStockWaitlist() {
       addToast(response.data?.message || t('stockReservedOrderCreated'), 'success');
       await Promise.all([load(), loadUserOrders()]);
     } catch (error) {
-      addToast(getReadableErrorMessage(error, t('stockChangedRetry')), 'warning');
+      addToast(error.response?.data?.message || t('stockChangedRetry'), 'warning');
       await load();
     } finally {
       setBusyId('');
@@ -62,7 +61,7 @@ export default function CustomerStockWaitlist() {
       addToast(response.data?.message || 'Selected remaining quantity cancelled.', 'info');
       await Promise.all([load(), loadUserOrders()]);
     } catch (error) {
-      addToast(getReadableErrorMessage(error, 'Could not cancel this medicine quantity.'), 'error');
+      addToast(error.response?.data?.message || 'Could not cancel this medicine quantity.', 'error');
       await load();
     } finally {
       setBusyId('');
@@ -77,7 +76,7 @@ export default function CustomerStockWaitlist() {
       addToast(t('stockWatchCancelled'), 'info');
       await Promise.all([load(), loadUserOrders()]);
     } catch (error) {
-      addToast(getReadableErrorMessage(error, t('couldNotCancelStockWatch')), 'error');
+      addToast(error.response?.data?.message || t('couldNotCancelStockWatch'), 'error');
     } finally {
       setBusyId('');
     }

@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { getReadableErrorMessage } from '../../utils/errorMessage';
 import apiClient from '../../api/apiClient';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
@@ -84,7 +83,7 @@ export default function TenantProfileDashboard({ tenantId: platformTenantId = ''
     } catch (err) {
       if (requestVersion === profileRequestVersion.current) {
         setProfile(emptyProfile); setDraft(emptyProfile); setPersonnel([]);
-        setError(getReadableErrorMessage(err, 'Pharmacy profile could not be loaded.'));
+        setError(err?.response?.data?.message || err.message || 'Pharmacy profile could not be loaded.');
       }
     } finally {
       if (requestVersion === profileRequestVersion.current) setLoading(false);
@@ -104,7 +103,7 @@ export default function TenantProfileDashboard({ tenantId: platformTenantId = ''
         setAvailableTenants(valid);
         setSelectedTenantId(current => current && valid.some(item => String(item.id || item._id) === String(current)) ? current : String(valid[0]?.id || valid[0]?._id || ''));
       })
-      .catch(err => { if (!cancelled) setError(getReadableErrorMessage(err, 'Could not load platform tenants.')); })
+      .catch(err => { if (!cancelled) setError(err?.response?.data?.message || err.message || 'Could not load platform tenants.'); })
       .finally(() => { if (!cancelled) setTenantsLoading(false); });
     return () => { cancelled = true; };
   }, [isSuperAdmin, showTenantSelector, platformTenantId]);
@@ -151,7 +150,7 @@ export default function TenantProfileDashboard({ tenantId: platformTenantId = ''
       setNotice(response.data?.message || 'Pharmacy details saved.');
       setBranchRegistryVersion(version => version + 1);
     } catch (err) {
-      setError(getReadableErrorMessage(err, 'Pharmacy details could not be saved.'));
+      setError(err?.response?.data?.message || 'Pharmacy details could not be saved.');
     } finally {
       setSaving(false);
     }
@@ -166,7 +165,7 @@ export default function TenantProfileDashboard({ tenantId: platformTenantId = ''
       setPharmacyCanEdit(response.data?.data?.pharmacyCanEdit === true);
       setNotice(enabled ? 'Pharmacy editing has been enabled.' : 'Pharmacy editing has been disabled.');
     } catch (err) {
-      setError(getReadableErrorMessage(err, 'Could not update pharmacy edit permission.'));
+      setError(err?.response?.data?.message || 'Could not update pharmacy edit permission.');
     } finally {
       setPolicySaving(false);
     }

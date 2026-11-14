@@ -1,0 +1,43 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: CompositeResourceDefinition
+metadata:
+  name: xservicestacks.platform.devops-kit.io
+spec:
+  group: platform.devops-kit.io
+  names:
+    kind: XServiceStack
+    plural: xservicestacks
+  claimNames:
+    kind: ServiceStackClaim
+    plural: servicestackclaims
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required: [provider, region, parameters]
+              properties:
+                provider:
+                  type: string
+                region:
+                  type: string
+                parameters:
+                  type: object
+                  properties:
+                    computeInstanceFamily:
+                      type: string
+                    nodeCount:
+                      type: integer
+                    databaseEnabled:
+                      type: boolean
+                    databaseTier:
+                      type: string
+                    cacheTier:
+                      type: string
+                    complianceTier:
+                      type: string

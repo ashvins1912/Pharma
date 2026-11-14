@@ -1,23 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import express from 'express';
 import mongoose from 'mongoose';
-import { createServiceDatabase } from '@pharma/database-kernel';
 import { config, validateConfig } from './config.js';
 import routes from './routes.js';
 import { Order, OrderEvent } from './models.js';
 import { reconcilePendingPrescriptionOrders } from './orders.js';
 
 validateConfig();
-const database = createServiceDatabase({
-  serviceName: 'order-service',
-  mongoose,
-  mongoOptions: {
-    serverSelectionTimeoutMS: 5000,
-    maxPoolSize: config.mongoMaxPoolSize,
-    minPoolSize: 0,
-    maxIdleTimeMS: 30_000
-  }
-});
 const app = express();
 app.disable('x-powered-by');
 app.use((req, res, next) => {
@@ -57,7 +46,7 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: '1mb' }));
 app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'order-service' }));
 app.get('/ready', (_req, res) => {
-  const ready = database.isReady();
+  const ready = mongoose.connection.readyState === 1;
   res.status(ready ? 200 : 503).json({
     status: ready ? 'ready' : 'not-ready',
     database: ready ? 'connected' : 'disconnected'
@@ -79,7 +68,11 @@ app.use((error, req, res, _next) => {
   });
 });
 
-await database.connect();
+await mongoose.connect(config.mongoUri, {
+  dbName: config.dbName,
+  serverSelectionTimeoutMS: 5000,
+  maxPoolSize: 20
+});
 await Promise.all([Order.init(), OrderEvent.init()]);
 
 const server = app.listen(config.port, '0.0.0.0', () => {
@@ -123,7 +116,7 @@ if (config.prescriptionServiceUrl) {
 const shutdown = async () => {
   if (reconciliationTimer) clearInterval(reconciliationTimer);
   server.close();
-  await database.disconnect();
+  await mongoose.disconnect();
 };
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);

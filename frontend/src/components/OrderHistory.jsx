@@ -141,7 +141,7 @@ export default function OrderHistory() {
         </div>
       ) : error && orders.length === 0 ? (
         <div className="rounded-2xl border border-rose-100 bg-rose-50 p-4 text-sm text-rose-800" role="alert">
-          <p>{error}</p>
+          <p>{typeof error === 'string' ? error : String(error?.message || error?.error || error || '')}</p>
           <button type="button" onClick={() => loadOrderHistory()} className="mt-2 font-bold underline underline-offset-2">
             Try again
           </button>
@@ -153,7 +153,7 @@ export default function OrderHistory() {
         </div>
       ) : (
         <>
-        {error && <div className="rounded-2xl border border-rose-100 bg-rose-50 p-4 text-sm text-rose-800" role="alert"><p>{error}</p><button type="button" onClick={() => loadOrderHistory(pageRef.current, { append: failedAppendRef.current })} className="mt-2 font-bold underline underline-offset-2">{t('tryAgain')}</button></div>}
+        {error && <div className="rounded-2xl border border-rose-100 bg-rose-50 p-4 text-sm text-rose-800" role="alert"><p>{typeof error === 'string' ? error : String(error?.message || error?.error || error || '')}</p><button type="button" onClick={() => loadOrderHistory(pageRef.current, { append: failedAppendRef.current })} className="mt-2 font-bold underline underline-offset-2">{t('tryAgain')}</button></div>}
         <ul className="space-y-3">
           {orders.map((order) => {
             const id = String(order._id || order.id || '');
