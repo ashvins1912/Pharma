@@ -59,7 +59,7 @@ Azure requires `tenantId`, `subscriptionId`, `resourceGroupName`, `location`, `c
 
 - AWS, Azure and GCP use the generated provider-specific Terraform module, an existing remote state backend, a saved target allowlist, a pinned image and a Terraform plan before apply. The runtime never creates a state bucket or guesses resource identifiers.
 - Kubernetes uses a generated manifest, a temporary mode-0600 kubeconfig, server-side dry-run, API apply and rollout health verification. Rollback uses the Kubernetes Deployment revision history.
-- LaunchDarkly reads the current flag/environment, modifies only the approved fallthrough rollout or kill-switch field, captures the previous `on` and `fallthrough` state, and supports restoring that snapshot.
+- LaunchDarkly reads the current flag/environment, modifies only the approved fallthrough rollout or kill-switch field, captures the previous `on` and `fallthrough` state, and supports restoring that snapshot. Each approved request applies one percentage step; promotion to the next stage remains a separate reviewed change, not an unattended timer.
 - Cloud rollback reapplies the previous successful immutable artifact against the same remote state. A first deployment without a previous successful artifact cannot be rolled back automatically.
 - Deployment execution requires an explicit image tag; generated `CHANGE_ME` placeholders are rejected.
 - Provider acceptance is not success. Native synchronous execution reports success only after Terraform apply or Kubernetes rollout completes; external runner mode still requires status reconciliation.
