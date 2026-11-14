@@ -99,6 +99,11 @@ router.put('/integrations/:id/target-config', async (req, res) => {
   try {
     const targetConfig = validateProviderTargetConfig(integration.provider, req.body?.targetConfig || {});
     integration.targetConfig = targetConfig;
+    integration.verification = null;
+    integration.grantedScopes = [];
+    integration.state = 'PENDING_VERIFICATION';
+    integration.complianceState = 'NOT_ASSESSED';
+    integration.lastVerifiedAt = null;
     integration.updatedBy = actorOf(req);
     await integration.save();
     await writeInfrastructureAudit({
