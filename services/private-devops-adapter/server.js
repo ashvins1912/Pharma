@@ -147,8 +147,10 @@ app.post('/v1/preflight',validateBase,async(req,res)=>{
   const {provider,environment,capabilities=[],integration,credentials}=req.body;
   if (!integration?.id || !credentials || typeof credentials !== 'object' || Array.isArray(credentials)) return res.status(400).json({success:false,code:'INTEGRATION_CONTEXT_REQUIRED'});
   const checks=[];
-  if(req.body.deployment?.artifactDigest && artifactDigest(req.body.deployment.files)!==req.body.deployment.artifactDigest) checks.push({name:'artifact_integrity',status:'FAIL',code:'ARTIFACT_DIGEST_MISMATCH'});
-  else if(req.body.deployment?.artifactDigest) checks.push({name:'artifact_integrity',status:'PASS',code:'ARTIFACT_DIGEST_VERIFIED'});
+  if(provider!=='launchdarkly') {
+    if(!req.body.deployment?.artifactDigest || artifactDigest(req.body.deployment.files)!==req.body.deployment.artifactDigest) checks.push({name:'artifact_integrity',status:'FAIL',code:'ARTIFACT_DIGEST_MISMATCH'});
+    else checks.push({name:'artifact_integrity',status:'PASS',code:'ARTIFACT_DIGEST_VERIFIED'});
+  }
   checks.push({name:'native_execution_driver',status:'PASS',code:'NATIVE_DRIVER_AVAILABLE'});
   checks.push({name:'environment_policy',status:environment==='production'&&!productionEnabled()?'BLOCKED':'PASS'});
   let identityPassed=false;
@@ -170,6 +172,7 @@ app.post('/v1/deployments/execute',validateBase,async(req,res)=>{
   const idempotencyKey='deployment:'+String(deployment.id);
   if(idempotencyKey.length<16||idempotencyKey.length>160) return res.status(400).json({success:false,code:'IDEMPOTENCY_KEY_REQUIRED'});
   if(!Array.isArray(deployment.files) || !deployment.files.length || !deployment.changeReference) return res.status(400).json({success:false,code:'DEPLOYMENT_INPUT_REQUIRED'});
+  if(!deployment.artifactDigest || artifactDigest(deployment.files)!==deployment.artifactDigest) return res.status(409).json({success:false,code:'ARTIFACT_DIGEST_MISMATCH'});
   if(typeof deployment.image!=='string'||!/^([a-z0-9.-]+(?::[0-9]+)?\/)?[a-z0-9._/-]+:[A-Za-z0-9_.-]{1,64}$/.test(deployment.image)||deployment.image.includes('CHANGE_ME')||deployment.image.split(':').pop().toLowerCase()==='latest') return res.status(400).json({success:false,code:'DEPLOYMENT_IMAGE_REQUIRED'});
   const existing=await Job.findOne({idempotencyKey});
   if(existing) return res.status(200).json({success:true,accepted:true,deploymentId:existing.jobId,status:existing.status,job:publicJob(existing),replayed:true});
