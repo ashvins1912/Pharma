@@ -10,7 +10,7 @@ const [
   expressModule, cookieParserModule, mongooseModule,
   envModule, dbModule, contextModule, corsModule, headersModule,
   tenantsModule, featureHealthModule, serviceLogsModule, cleanupModule,
-  infrastructureModule, infrastructureSecurityModule,
+  infrastructureModule, infrastructureSecurityModule, devOpsModule,
   whatsappModule, riderAdminModule, assignmentAdminModule, paymentReminderModule, medicineRequestModule
 ] = await Promise.all([
   import('express'), import('cookie-parser'), import('mongoose'),
@@ -23,6 +23,7 @@ const [
   import('../../backend/gateway/routes/adminDatabaseCleanup.js'),
   import('../../backend/gateway/routes/adminInfrastructure.js'),
   import('../../backend/gateway/routes/adminInfrastructureSecurity.js'),
+  import('../../backend/gateway/routes/adminDevOps.js'),
   import('../../backend/routes/whatsappRoutes.js'),
   import('../../backend/modules/delivery/routes/riderRoutes.js'),
   import('../../backend/modules/delivery/routes/assignmentRoutes.js'),
@@ -76,6 +77,7 @@ app.get('/ready', (_req, res) => {
 // middleware. Security routes must be mounted before the broader infrastructure
 // router so they are never shadowed by provider resource routes.
 app.use('/api/v1/admin/infrastructure/security', infrastructureSecurityModule.default);
+app.use('/api/v1/admin/devops', devOpsModule.default);
 app.use('/api/v1/admin/infrastructure', infrastructureModule.default);
 app.use('/api/v1/admin/tenants', tenantsModule.default);
 app.use('/api/v1/admin/feature-health', featureHealthModule.default);

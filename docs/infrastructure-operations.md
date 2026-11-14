@@ -229,3 +229,8 @@ Deploy `services/admin-control-plane` with start command `npm --workspace servic
 ### Migration boundary
 
 This is the first deployable extraction boundary, not a claim that every admin-related workflow in the application has been moved. Tenant-scoped operational routes and domain-specific admin actions that still depend on backend-only modules remain available through the backend until each route has explicit ownership, authorization tests, data-access contracts and a migration. During the transition, unset `ADMIN_SERVICE_URL` to retain the consolidated deployment; route only the migrated allow-listed paths after the new service passes health and integration checks.
+
+
+## DevOps deployment and IaC control center
+
+See [DevOps Deployment Control Plane](./devops-deployment-control-plane.md) for the Super Admin artifact generator, Docker/Compose, Kubernetes, Terraform, Ansible, GitHub Actions, versioned configuration, approval gates, rollback and LaunchDarkly rollout adapter contract. This workflow uses declarative artifacts and typed provider APIs; it does not provide a remote shell or playground console.

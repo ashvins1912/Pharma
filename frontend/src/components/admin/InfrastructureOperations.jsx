@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import apiClient from '../../api/apiClient';
 import InfrastructureSecurityPanel from './InfrastructureSecurityPanel';
+import DevOpsDeploymentCenter from './DevOpsDeploymentCenter';
 
 const bytes = value => {
   if (value === null || value === undefined) return 'Not reported';
@@ -55,6 +56,7 @@ export default function InfrastructureOperations({ onOpenDatabaseCleanup }) {
 
   return <section className="space-y-5">
     <InfrastructureSecurityPanel />
+    <DevOpsDeploymentCenter />
     <header className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div><p className="text-xs font-bold uppercase tracking-wider text-slate-500">Super Admin · Task Operations</p><h2 className="mt-1 text-xl font-black">Infrastructure & Resource Operations</h2><p className="mt-2 max-w-3xl text-sm text-slate-600 dark:text-slate-300">Universal provider-neutral control plane for cloud resources, hosted services, remote APIs and databases. Review resource state, memory, CPU, bandwidth and MongoDB storage; start, stop or restart supported compute services.</p></div>
