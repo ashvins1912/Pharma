@@ -282,6 +282,7 @@ app.post('/v1/release-readiness',async(_req,res)=>{
     const sourceField=provider==='launchdarkly'?'request.sourceRequestId':'request.sourceJobId';
     const rollbackCandidate=latestJob?await Job.findOne({provider,environment:'staging',operation:rollbackOperation,status:'ROLLED_BACK',[sourceField]:latestJob.jobId}).lean():null;
     const latestJobPassed=Boolean(latestJob&&new Date(latestJob.createdAt)>=new Date(preflight?.checkedAt||0)&&(provider==='launchdarkly'?latestJob.status==='SUCCEEDED':['SUCCEEDED','ROLLED_BACK'].includes(latestJob.status)));
+    const rollbackPassed=Boolean(latestJobPassed&&rollbackCandidate&&new Date(rollbackCandidate.createdAt)>=new Date(latestJob.createdAt));
     const preflightPassed=preflight?.status==='PASS';
     const deploymentPassed=latestJobPassed;
     results.push({provider,preflight:preflightPassed,deployment:deploymentPassed,rollback:rollbackPassed,ready:preflightPassed&&deploymentPassed&&rollbackPassed,evidenceRunId:preflight?.runId||null});
