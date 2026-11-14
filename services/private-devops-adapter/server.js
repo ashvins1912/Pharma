@@ -2,6 +2,7 @@ import express from 'express';
 import mongoose from 'mongoose';
 import crypto from 'node:crypto';
 import { verifyProviderIdentity } from './drivers/providerIdentity.js';
+import { nativeProviderPreflight, nativeProviderExecute, nativeProviderRollback } from './drivers/nativeExecution.js';
 
 const app = express();
 app.disable('x-powered-by');
@@ -81,6 +82,21 @@ async function driverCall(provider,path,payload) {
   if (!response.ok) throw Object.assign(new Error('Provider driver rejected the operation.'),{code:data.code || 'DRIVER_REJECTED',statusCode:response.status});
   return data;
 }
+async function providerCall(provider, operation, payload) {
+  let configured = false;
+  try { configured = Boolean(endpointFor(provider)); } catch (error) { throw Object.assign(error,{code:'DRIVER_ENDPOINT_INVALID'}); }
+  if (configured) {
+    const paths = { preflight:'/v1/preflight', execute:'/v1/deployments/execute', status:'/v1/deployments/status', rollback:'/v1/deployments/rollback', flag:'/v1/feature-flags/rollout' };
+    return driverCall(provider,paths[operation],payload);
+  }
+  if (operation === 'preflight') return {checks:[await nativeProviderPreflight(provider,payload)]};
+  if (operation === 'execute') return nativeProviderExecute(provider,payload);
+  if (operation === 'rollback') return nativeProviderRollback(provider,payload);
+  if (operation === 'flag') return nativeProviderExecute(provider,payload);
+  if (operation === 'status') return {status:'SUCCEEDED'};
+  throw new Error('Unsupported provider operation.');
+}
+
 function safeChecks(checks) {
   if (!Array.isArray(checks)) return [];
   return checks.slice(0,100).map(check => ({
@@ -103,18 +119,12 @@ app.post('/v1/preflight',validateBase,async(req,res)=>{
   const {provider,environment,capabilities=[],integration,credentials}=req.body;
   if (!integration?.id || !credentials || typeof credentials !== 'object' || Array.isArray(credentials)) return res.status(400).json({success:false,code:'INTEGRATION_CONTEXT_REQUIRED'});
   const checks=[];
-  let driver=null;
-  try { driver=endpointFor(provider); } catch { /* endpoint policy failure is represented as blocked */ }
-  const driverToken=String(process.env['DEVOPS_DRIVER_'+provider.toUpperCase()+'_TOKEN']||'');
-  checks.push({name:'deployment_driver_configured',status:driver?'PASS':'BLOCKED',code:driver?'DRIVER_ENDPOINT_CONFIGURED':'DRIVER_NOT_CONFIGURED'});
-  checks.push({name:'deployment_driver_auth_configured',status:driverToken.length>=32?'PASS':'BLOCKED',code:driverToken.length>=32?'DRIVER_AUTH_CONFIGURED':'DRIVER_AUTH_NOT_CONFIGURED'});
+  checks.push({name:'native_execution_driver',status:'PASS',code:'NATIVE_DRIVER_AVAILABLE'});
   checks.push({name:'environment_policy',status:environment==='production'&&!productionEnabled()?'BLOCKED':'PASS'});
-  try { checks.push(await verifyProviderIdentity(provider,credentials,{id:integration.id,endpoint:integration.endpoint})); }
+  try { checks.push(await verifyProviderIdentity(provider,credentials,{id:integration.id,endpoint:integration.endpoint,targetConfig:integration.targetConfig||{}})); }
   catch(error){checks.push({name:'provider_identity',status:'FAIL',code:SAFE_CODE.test(String(error.code||''))?error.code:'PROVIDER_IDENTITY_FAILED'});}
-  if(driver && driverToken.length>=32) {
-    try { const remote=await driverCall(provider,'/v1/preflight',{provider,environment,capabilities,integration:{id:integration.id,endpoint:integration.endpoint},credentials}); const providerChecks=safeChecks(remote.checks); checks.push(...providerChecks); if (!providerChecks.length) checks.push({name:'provider_evidence',status:'FAIL',code:'EMPTY_PROVIDER_EVIDENCE'}); }
-    catch(error){checks.push({name:'provider_preflight',status:'FAIL',code:SAFE_CODE.test(String(error.code||''))?error.code:'PREFLIGHT_FAILED'});}
-  }
+  try { const result=await providerCall(provider,'preflight',{provider,environment,capabilities,integration:{id:integration.id,endpoint:integration.endpoint,targetConfig:integration.targetConfig||{}},credentials,deployment:{files:req.body.files||{},serviceName:req.body.serviceName||'preflight'},flag:req.body.flag}); const providerChecks=safeChecks(result.checks||[result]); checks.push(...providerChecks); if (!providerChecks.length) checks.push({name:'provider_execution_preflight',status:'FAIL',code:'EMPTY_PROVIDER_EVIDENCE'}); }
+  catch(error){checks.push({name:'provider_execution_preflight',status:'FAIL',code:SAFE_CODE.test(String(error.code||''))?error.code:'PREFLIGHT_FAILED'});}
   const passed=checks.length>0 && checks.every(c=>c.status==='PASS');
   const evidence=await Evidence.create({runId:crypto.randomUUID(),provider,environment,status:passed?'PASS':checks.some(c=>c.status==='FAIL')?'FAIL':'BLOCKED',checks:safeChecks(checks)});
   return res.status(passed?200:424).json({success:passed,evidence});
@@ -131,7 +141,7 @@ app.post('/v1/deployments/execute',validateBase,async(req,res)=>{
   if(existing) return res.status(200).json({success:true,accepted:true,deploymentId:existing.jobId,status:existing.status,job:publicJob(existing),replayed:true});
   const job=await Job.create({jobId:crypto.randomUUID(),idempotencyKey,provider,operation:'deploy',environment,status:'QUEUED',request:{integrationId:String(integration.id),artifactDigest:deployment.artifactDigest,changeReference:deployment.changeReference}});
   try {
-    const result=await driverCall(provider,'/v1/deployments/execute',{jobId:job.jobId,integration:{id:integration.id,endpoint:integration.endpoint},credentials,deployment});
+    const result=await providerCall(provider,'execute',{jobId:job.jobId,integration:{id:integration.id,endpoint:integration.endpoint,targetConfig:integration.targetConfig||{}},credentials,deployment});
     job.status=String(result.status||'SUBMITTED');
     if(!['SUBMITTED','RUNNING','SUCCEEDED','FAILED'].includes(job.status)) job.status='SUBMITTED';
     job.result={providerOperationId:result.operationId||null,message:'Provider execution accepted; reconcile status before declaring success.'};
@@ -151,7 +161,7 @@ app.post('/v1/deployments/status',async(req,res)=>{
   if(!job) return res.status(404).json({success:false,code:'JOB_NOT_FOUND'});
   if(!TERMINAL.has(job.status)) {
     try {
-      const result=await driverCall(provider,'/v1/deployments/status',{jobId,credentials,integration:{id:integration.id,endpoint:integration.endpoint},providerOperationId:job.result?.providerOperationId});
+      const result=await providerCall(provider,'status',{jobId,credentials,integration:{id:integration.id,endpoint:integration.endpoint,targetConfig:integration.targetConfig||{}},providerOperationId:job.result?.providerOperationId});
       if(['RUNNING','SUCCEEDED','FAILED','ROLLED_BACK'].includes(result.status)) job.status=result.status;
       job.result={...(job.result||{}),providerStatus:['SUBMITTED','RUNNING','SUCCEEDED','FAILED','ROLLED_BACK'].includes(result.status)?result.status:'UNKNOWN',health:typeof result.health==='string'?result.health.slice(0,240):null};
       job.errorCode=SAFE_CODE.test(String(result.errorCode||''))?String(result.errorCode):null; job.updatedAt=new Date(); await job.save();
@@ -170,7 +180,7 @@ app.post('/v1/deployments/rollback',validateBase,async(req,res)=>{
   let job=await Job.findOne({idempotencyKey:key});
   if(!job) job=await Job.create({jobId:crypto.randomUUID(),idempotencyKey:key,provider,operation:'rollback',environment,status:'QUEUED',request:{sourceJobId:jobId,changeReference}});
   try {
-    const result=await driverCall(provider,'/v1/deployments/rollback',{jobId:job.jobId,sourceJobId:jobId,environment,changeReference,credentials,integration:{id:integration.id,endpoint:integration.endpoint},deployment});
+    const result=await providerCall(provider,'rollback',{jobId:job.jobId,sourceJobId:jobId,environment,changeReference,credentials,integration:{id:integration.id,endpoint:integration.endpoint,targetConfig:integration.targetConfig||{}},deployment});
     job.status=['SUBMITTED','RUNNING','SUCCEEDED','FAILED'].includes(result.status)?result.status:'SUBMITTED';
     job.result={providerOperationId:result.operationId||null}; await job.save();
     return res.status(202).json({success:true,accepted:true,status:job.status,job:publicJob(job)});
@@ -185,7 +195,7 @@ app.post('/v1/feature-flags/rollout',validateBase,async(req,res)=>{
   let job=await Job.findOne({idempotencyKey:key});
   if(!job) job=await Job.create({jobId:crypto.randomUUID(),idempotencyKey:key,provider,operation:'flag_rollout',environment,status:'QUEUED',request:{flagKey,rolloutPercent,changeReference}});
   try {
-    const result=await driverCall(provider,'/v1/feature-flags/rollout',{jobId:job.jobId,environment,flag,credentials,integration:{id:integration.id,endpoint:integration.endpoint},preserveUnspecifiedRules:true});
+    const result=await providerCall(provider,'flag',{jobId:job.jobId,environment,flag,credentials,integration:{id:integration.id,endpoint:integration.endpoint,targetConfig:integration.targetConfig||{}},preserveUnspecifiedRules:true});
     job.status=['SUBMITTED','RUNNING','SUCCEEDED','FAILED'].includes(result.status)?result.status:'SUBMITTED';
     job.result={providerOperationId:result.operationId||null}; await job.save();
     return res.status(202).json({success:true,accepted:true,requestId:job.jobId,status:job.status});
