@@ -40,6 +40,8 @@ const providerPreflightSchema = new mongoose.Schema({
   serviceName: { type: String, default: null },
   flagKey: { type: String, default: null },
   variationId: { type: String, default: null },
+  strategy: { type: String, default: null },
+  rolloutPercent: { type: Number, default: null },
   status: { type: String, enum: ['PASS','FAIL','BLOCKED'], required: true, index: true },
   evidenceRunId: { type: String, default: null },
   checkedBy: { type: String, required: true },
@@ -200,7 +202,7 @@ async function assertDeploymentStagingEvidence(deployment, artifact) {
 
 async function assertFlagStagingEvidence(change) {
   if (change.environment === 'development') return;
-  const preflight = await ProviderPreflight.findOne({ provider: 'launchdarkly', environment: 'staging', flagKey: change.flagKey, variationId: change.variationId || null }).sort({ checkedAt: -1 }).lean();
+  const preflight = await ProviderPreflight.findOne({ provider: 'launchdarkly', environment: 'staging', flagKey: change.flagKey, variationId: change.variationId || null, strategy: change.strategy, rolloutPercent: change.rolloutPercent }).sort({ checkedAt: -1 }).lean();
   if (!preflight || preflight.status !== 'PASS') throw Object.assign(new Error('The latest LaunchDarkly staging preflight for this flag must pass before approval or execution.'), { code: 'LAUNCHDARKLY_STAGING_PREFLIGHT_REQUIRED', statusCode: 409 });
   const stagedIntegration = await InfrastructureIntegration.findOne({ _id: preflight.integrationId, revokedAt: null }).lean();
   if (!stagedIntegration || stagedIntegration.provider !== 'launchdarkly' || stagedIntegration.environment !== 'staging'
@@ -277,6 +279,8 @@ router.post('/providers/preflight', async (req, res) => {
       artifactDigest: artifact?.digest || null, targetDigest: targetConfigDigest(integration.targetConfig), serviceName: artifact?.serviceName || null,
       flagKey: provider === 'launchdarkly' ? String(req.body?.flagKey || '') : null,
       variationId: provider === 'launchdarkly' && req.body?.strategy !== 'kill_switch' ? (req.body?.variationId || null) : null,
+      strategy: provider === 'launchdarkly' ? (req.body?.strategy || 'progressive') : null,
+      rolloutPercent: provider === 'launchdarkly' ? Number(req.body?.strategy === 'kill_switch' ? 0 : req.body?.rolloutPercent ?? 100) : null,
       status: preflightStatus, evidenceRunId: result.evidence?.runId || null, checkedBy: actorOf(req)
     });
     await audit(req, 'PROVIDER_STAGING_PREFLIGHT', preflightStatus, 'integration', integration._id, { provider, environment, evidenceRunId: result.evidence?.runId || null, evidenceStatus: result.evidence?.status || 'UNKNOWN', artifactDigest: artifact?.digest || null, flagKey: provider === 'launchdarkly' ? String(req.body?.flagKey || '') : null, variationId: provider === 'launchdarkly' ? (req.body?.variationId || null) : null });
@@ -561,7 +565,7 @@ router.post('/feature-flags/rollout', async (req, res) => {
     const { integration } = await loadDeployIntegration(integrationId, 'launchdarkly', environment, 'manage');
     if (environment === 'production') await assertProductionReleaseReady();
     if (environment !== 'development') {
-    const stagedPreflight = await ProviderPreflight.findOne({ provider: 'launchdarkly', environment: 'staging', flagKey: key, variationId: targetVariationId }).sort({ checkedAt: -1 }).lean();
+    const stagedPreflight = await ProviderPreflight.findOne({ provider: 'launchdarkly', environment: 'staging', flagKey: key, variationId: targetVariationId, strategy, rolloutPercent: strategy === 'kill_switch' ? 0 : percent }).sort({ checkedAt: -1 }).lean();
     if (!stagedPreflight || stagedPreflight.status !== 'PASS') throw Object.assign(new Error('A passing latest LaunchDarkly staging preflight for this flag is required before rollout planning.'), { code: 'LAUNCHDARKLY_STAGING_PREFLIGHT_REQUIRED', statusCode: 409 });
     const stagedIntegration = await InfrastructureIntegration.findOne({ _id: stagedPreflight.integrationId, revokedAt: null }).lean();
     if (!stagedIntegration || stagedIntegration.verification?.authenticated !== true || stagedIntegration.verification?.discoveryPassed !== true || targetConfigDigest(stagedIntegration.targetConfig) !== stagedPreflight.targetDigest) throw Object.assign(new Error('LaunchDarkly staging target changed or its verification expired; run preflight again.'), { code: 'LAUNCHDARKLY_PREFLIGHT_STALE', statusCode: 409 });
