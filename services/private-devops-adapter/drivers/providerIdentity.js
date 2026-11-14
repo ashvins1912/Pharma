@@ -84,11 +84,17 @@ async function gcp(credentials) {
   await jsonRequest('https://cloudresourcemanager.googleapis.com/v3/projects/' + encodeURIComponent(project), { headers: { Authorization: 'Bearer ' + token.access_token } });
   return { name: 'gcp_identity', status: 'PASS', code: 'GCP_PROJECT_VERIFIED' };
 }
+function assertAllowedHost(url, envName, defaults = []) {
+  const configured = String(process.env[envName] || '').split(',').map(value => value.trim().toLowerCase()).filter(Boolean);
+  const allowed = configured.length ? configured : defaults;
+  if (!allowed.includes(url.hostname.toLowerCase())) throw Object.assign(new Error('Provider API host is not allowlisted.'), { code: 'PROVIDER_HOST_NOT_ALLOWLISTED' });
+}
 async function kubernetes(credentials, integration) {
   const server = required(integration.endpoint || credentials.server, 'kubernetes.server');
   const url = new URL(server);
-  if (url.protocol !== 'https:' && process.env.NODE_ENV === 'production') throw new Error('Kubernetes API endpoint must use HTTPS in production.');
+  if (url.protocol !== 'https:') throw new Error('Kubernetes API endpoint must use HTTPS.');
   if (url.username || url.password || url.search || url.hash) throw new Error('Kubernetes API endpoint is invalid.');
+  if (process.env.NODE_ENV === 'production' || process.env.KUBERNETES_API_ALLOWED_HOSTS) assertAllowedHost(url, 'KUBERNETES_API_ALLOWED_HOSTS');
   const token = required(credentials.token, 'kubernetes.token');
   const namespace = required(credentials.namespace, 'kubernetes.namespace');
   if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(namespace)) throw new Error('Kubernetes namespace is invalid.');
@@ -102,6 +108,7 @@ async function launchdarkly(credentials, integration) {
   const environment = required(credentials.environmentKey, 'launchdarkly.environmentKey');
   const base = new URL(integration.endpoint || 'https://app.launchdarkly.com');
   if (base.protocol !== 'https:' || base.username || base.password || base.search || base.hash) throw new Error('LaunchDarkly API endpoint must be a trusted HTTPS URL.');
+  assertAllowedHost(base, 'LAUNCHDARKLY_API_ALLOWED_HOSTS', ['app.launchdarkly.com']);
   await jsonRequest(new URL('/api/v2/projects/' + encodeURIComponent(project) + '/environments/' + encodeURIComponent(environment), base), {
     headers: { Authorization: apiKey, 'LD-API-Version': '20240415' }
   });
