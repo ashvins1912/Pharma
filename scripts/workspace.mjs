@@ -104,7 +104,12 @@ function canImportPythonModule(python, moduleName) {
   return check.status === 0;
 }
 
-function waitForPort(name, port, timeoutMs = Number(process.env.SERVICE_STARTUP_TIMEOUT_MS || 60000)) {
+const configuredStartupTimeout = Number(process.env.SERVICE_STARTUP_TIMEOUT_MS);
+const startupTimeoutMs = Number.isFinite(configuredStartupTimeout) && configuredStartupTimeout > 0
+  ? Math.max(5000, configuredStartupTimeout)
+  : 60000;
+
+function waitForPort(name, port, timeoutMs = startupTimeoutMs) {
   const deadline = Date.now() + timeoutMs;
   return new Promise((resolve, reject) => {
     const probe = () => {
