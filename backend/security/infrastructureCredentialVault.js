@@ -99,11 +99,11 @@ export async function writeInfrastructureAudit({ integrationId, actor, event, ou
 
 
 const TARGET_FIELDS = Object.freeze({
-  aws: ['region','clusterArn','executionRoleArn','subnetIds','securityGroupIds','assignPublicIp','desiredCount','stateBackend'],
-  azure: ['tenantId','subscriptionId','resourceGroupName','location','containerAppEnvironmentId','stateBackend'],
-  gcp: ['projectId','region','stateBackend'],
+  aws: ['region','clusterArn','executionRoleArn','subnetIds','securityGroupIds','assignPublicIp','desiredCount','stateBackend','allowedServiceNames'],
+  azure: ['tenantId','subscriptionId','resourceGroupName','location','containerAppEnvironmentId','stateBackend','allowedServiceNames'],
+  gcp: ['projectId','region','stateBackend','allowedServiceNames'],
   kubernetes: ['namespace','contextName','allowedDeploymentNames'],
-  launchdarkly: ['projectKey','environmentKey']
+  launchdarkly: ['projectKey','environmentKey','allowedFlagKeys']
 });
 export function validateProviderTargetConfig(provider, input = {}) {
   if (!['aws','azure','gcp','kubernetes','launchdarkly'].includes(provider)) throw new Error('Provider does not support managed deployment targets.');
@@ -115,7 +115,7 @@ export function validateProviderTargetConfig(provider, input = {}) {
     aws: ['region','clusterArn','executionRoleArn','subnetIds','securityGroupIds','stateBackend'],
     azure: ['tenantId','subscriptionId','resourceGroupName','location','containerAppEnvironmentId','stateBackend'],
     gcp: ['projectId','region','stateBackend'],
-    kubernetes: ['namespace'],
+    kubernetes: ['namespace','allowedDeploymentNames'],
     launchdarkly: ['projectKey','environmentKey']
   }[provider];
   if (Object.keys(value).length && required.some(key => value[key] === undefined || value[key] === null || value[key] === '')) throw new Error(provider+' target configuration is missing required fields: '+required.filter(key => value[key] === undefined || value[key] === null || value[key] === '').join(', '));
@@ -133,8 +133,9 @@ export function validateProviderTargetConfig(provider, input = {}) {
     if (!value.containerAppEnvironmentId.startsWith('/subscriptions/'+value.subscriptionId+'/resourceGroups/'+value.resourceGroupName+'/providers/Microsoft.App/managedEnvironments/')) throw new Error('Azure Container Apps environment must belong to the configured subscription and resource group.');
   }
   if (provider === 'gcp' && Object.keys(value).length && (!/^[a-z][a-z0-9-]{4,28}[a-z0-9]$/.test(value.projectId) || !/^[a-z]+-[a-z]+[0-9]$/.test(value.region))) throw new Error('GCP project ID or region is invalid.');
-  if (provider === 'kubernetes' && Object.keys(value).length && !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(value.namespace)) throw new Error('Kubernetes namespace must be DNS-safe.');
-  if (provider === 'launchdarkly' && Object.keys(value).length && (!/^[a-zA-Z0-9_-]{1,64}$/.test(value.projectKey) || !/^[a-zA-Z0-9_-]{1,64}$/.test(value.environmentKey))) throw new Error('LaunchDarkly project and environment keys are invalid.');
+  if (['aws','azure','gcp'].includes(provider) && Object.keys(value).length && (!Array.isArray(value.allowedServiceNames) || !value.allowedServiceNames.length || value.allowedServiceNames.length > 50 || value.allowedServiceNames.some(name => typeof name !== 'string' || !/^[a-z0-9](?:[a-z0-9-]{0,50}[a-z0-9])?$/.test(name)))) throw new Error('A bounded allowlist of DNS-safe service names is required.');
+  if (provider === 'kubernetes' && Object.keys(value).length && (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(value.namespace) || !Array.isArray(value.allowedDeploymentNames) || !value.allowedDeploymentNames.length || value.allowedDeploymentNames.length > 50 || value.allowedDeploymentNames.some(name => typeof name !== 'string' || !/^[a-z0-9](?:[a-z0-9-]{0,50}[a-z0-9])?$/.test(name)))) throw new Error('Kubernetes namespace and allowed deployment names must be DNS-safe.');
+  if (provider === 'launchdarkly' && Object.keys(value).length && (!/^[a-zA-Z0-9_-]{1,64}$/.test(value.projectKey) || !/^[a-zA-Z0-9_-]{1,64}$/.test(value.environmentKey) || !Array.isArray(value.allowedFlagKeys) || !value.allowedFlagKeys.length || value.allowedFlagKeys.length > 100 || value.allowedFlagKeys.some(key => typeof key !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,99}$/.test(key)))) throw new Error('LaunchDarkly project, environment and allowed flag keys are required and must be valid.');
   if (['aws','azure','gcp'].includes(provider) && Object.keys(value).length) {
     const backend = value.stateBackend;
     if (!backend || typeof backend !== 'object' || Array.isArray(backend) || !['s3','azurerm','gcs'].includes(backend.type)) throw new Error('A supported remote Terraform state backend is required.');
