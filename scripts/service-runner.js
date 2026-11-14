@@ -18,6 +18,7 @@ const ports = {
   'private-devops-adapter': process.env.PRIVATE_DEVOPS_ADAPTER_PORT || '8092'
 };
 const privateAdapterConfigured = Boolean(process.env.PRIVATE_DEVOPS_ADAPTER_TOKEN && (process.env.ADAPTER_MONGO_URI || process.env.MONGO_URI));
+const privateAdapterRemoteConfigured = Boolean(process.env.PRIVATE_DEVOPS_ADAPTER_TOKEN && process.env.PRIVATE_DEVOPS_ADAPTER_URL);
 const privateAdapterExplicit = process.env.START_PRIVATE_DEVOPS_ADAPTER === 'true';
 if (privateAdapterExplicit && !privateAdapterConfigured) throw new Error('START_PRIVATE_DEVOPS_ADAPTER requires PRIVATE_DEVOPS_ADAPTER_TOKEN and ADAPTER_MONGO_URI or MONGO_URI.');
 
@@ -57,7 +58,7 @@ if (privateAdapterExplicit || (privateAdapterConfigured && !process.env.PRIVATE_
     ADAPTER_MONGO_URI: process.env.ADAPTER_MONGO_URI || process.env.MONGO_URI,
     PRIVATE_DEVOPS_ADAPTER_TOKEN: process.env.PRIVATE_DEVOPS_ADAPTER_TOKEN
   }, Number(ports['private-devops-adapter'])));
-} else if (!privateAdapterConfigured) {
+} else if (!privateAdapterConfigured && !privateAdapterRemoteConfigured) {
   console.info('[workspace] Private DevOps adapter is optional and was not started; configure its Mongo URI and 32+ character service token to enable it.');
 }
 
