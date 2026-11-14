@@ -163,7 +163,7 @@ app.post('/v1/preflight',validateBase,async(req,res)=>{
   } else checks.push({name:'provider_execution_preflight',status:'BLOCKED',code:identityPassed?'ARTIFACT_INTEGRITY_REQUIRED':'IDENTITY_CHECK_REQUIRED'});
   const passed=checks.length>0 && checks.every(c=>c.status==='PASS');
   const evidence=await Evidence.create({runId:crypto.randomUUID(),provider,environment,status:passed?'PASS':checks.some(c=>c.status==='FAIL')?'FAIL':'BLOCKED',checks:safeChecks(checks)});
-  return res.status(passed?200:424).json({success:passed,evidence});
+  return res.status(200).json({success:passed,evidence});
 });
 
 app.post('/v1/deployments/execute',validateBase,async(req,res)=>{
