@@ -1,6 +1,6 @@
 # Private DevOps Provider Adapter
 
-This service is the private execution boundary for the Admin DevOps control plane. It stores durable job metadata in MongoDB and dispatches typed operations to separately configured provider drivers. It never exposes a shell, terminal, arbitrary URL proxy, or cloud credential endpoint.
+This service is the private execution boundary for the Admin DevOps control plane. It stores durable job metadata in MongoDB, performs built-in provider identity checks, and dispatches typed deployment operations to separately configured execution drivers. It never exposes a shell, terminal, arbitrary URL proxy, or cloud credential endpoint.
 
 ## Runtime configuration
 
@@ -9,23 +9,35 @@ This service is the private execution boundary for the Admin DevOps control plan
 - Per-provider `DEVOPS_DRIVER_<PROVIDER>_URL` and `DEVOPS_DRIVER_<PROVIDER>_TOKEN` for AWS, AZURE, GCP, KUBERNETES and LAUNCHDARKLY
 - `ALLOW_PRODUCTION_OPERATIONS=false` until release governance explicitly enables it
 
-Driver endpoints must implement:
+## Built-in identity preflight
+
+The adapter now performs native read-only identity checks before it reports a provider preflight result:
+
+| Provider | Required credential fields | Read-only verification |
+|---|---|---|
+| AWS | `accessKeyId`, `secretAccessKey`, optional `sessionToken`, optional `region` | Signed STS GetCallerIdentity |
+| Azure | `tenantId`, `clientId`, `clientSecret`, optional `subscriptionId` | OAuth client credentials and ARM subscription visibility |
+| GCP | `clientEmail`, `privateKey`, `projectId` | Service-account JWT exchange and Cloud Resource Manager project lookup |
+| Kubernetes | `token`, `namespace`; API server URL in the integration endpoint or `server` | API server version and namespace read |
+| LaunchDarkly | `apiKey`, `projectKey`, `environmentKey` | Project/environment read using LaunchDarkly API |
+
+Credential field names are the adapter's input contract. Existing vault entries must be mapped to this shape by the trusted Admin service before staging checks. Credentials are used in memory only and must never be written to logs or job/evidence records.
+
+## Deployment execution drivers
+
+Identity verification is not deployment execution. The separately configured provider execution drivers must implement:
 - `POST /v1/preflight`
 - `POST /v1/deployments/execute`
 - `POST /v1/deployments/status`
 - `POST /v1/deployments/rollback`
 - LaunchDarkly additionally implements `POST /v1/feature-flags/rollout`
 
-Each driver is responsible for provider-native identity verification, least-privilege scope enforcement, IaC plan review, apply, health checks, rollback and provider-specific evidence. The adapter treats provider acceptance as SUBMITTED, never as successful completion.
+The five execution drivers must enforce provider-native target allowlists, least-privilege deployment scopes, reviewed IaC plans, idempotent apply, health checks, rollback and provider-side evidence. A preflight remains BLOCKED unless both native identity verification and the configured execution driver checks pass. Provider acceptance is SUBMITTED, never proof of successful completion.
 
 ## Staging
 
-Configure only staging-scoped driver identities first. Call `POST /v1/preflight` for each provider and require every check to PASS. Run a non-production deployment and rollback rehearsal, then verify the provider operation reaches a terminal state through status reconciliation. LaunchDarkly drivers must preserve unspecified targeting rules and support a kill-switch recovery path.
+Configure staging-scoped identities and execution drivers first. Call `POST /v1/preflight` for each provider and require every check to PASS. Run a non-production deployment and rollback rehearsal, then verify the provider operation reaches a terminal state through status reconciliation. LaunchDarkly drivers must preserve unspecified targeting rules and support a kill-switch recovery path.
 
 ## Production safety
 
-Production requests are rejected unless `ALLOW_PRODUCTION_OPERATIONS=true`. Keep this unset/false during staging. Enabling it is an infrastructure release action, not an Admin UI setting. The Admin control plane must continue enforcing its independent two-person approval and typed confirmation gates.
-
-## Driver protocol
-
-All requests are authenticated with a per-driver bearer token over HTTPS in production. Driver responses use JSON and status values SUBMITTED, RUNNING, SUCCEEDED or FAILED (ROLLED_BACK for reconciliation). Do not return credentials, raw plans containing secrets, or unredacted provider output.
+Production requests are rejected unless `ALLOW_PRODUCTION_OPERATIONS=true`. Keep this unset/false during staging. The Admin control plane must continue enforcing its independent two-person approval and typed confirmation gates. Production enablement is an infrastructure release action, not an Admin UI setting.
