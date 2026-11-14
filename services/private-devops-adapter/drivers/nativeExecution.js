@@ -5,6 +5,20 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 
 const required=(v,n)=>{if(typeof v!=='string'||!v.trim())throw Object.assign(new Error('Missing '+n),{code:'TARGET_CONFIG_REQUIRED'});return v.trim();};
+export function allocateLaunchDarklyRolloutWeights(rollout,targetIndex,percent){
+  if(!Array.isArray(rollout)||rollout.length<2||!Number.isInteger(targetIndex)||targetIndex<0||targetIndex>=rollout.length)throw new Error('A valid target variation and at least two rollout variations are required.');
+  if(!Number.isInteger(percent)||percent<0||percent>100)throw new Error('Rollout percentage must be between 0 and 100.');
+  const targetWeight=percent*1000,otherIndices=rollout.map((item,index)=>index).filter(index=>index!==targetIndex);
+  const oldOtherTotal=otherIndices.reduce((sum,index)=>sum+Math.max(0,Number(rollout[index].weight)||0),0);
+  let remaining=100000-targetWeight;
+  const otherWeights=new Map();
+  otherIndices.forEach((index,position)=>{
+    const weight=position===otherIndices.length-1?remaining:(oldOtherTotal>0?Math.floor(remaining*Math.max(0,Number(rollout[index].weight)||0)/oldOtherTotal):Math.floor(remaining/otherIndices.length));
+    otherWeights.set(index,weight);remaining-=weight;
+  });
+  return rollout.map((item,index)=>({...item,weight:index===targetIndex?targetWeight:otherWeights.get(index)}));
+}
+
 function run(bin,args,options={}){return new Promise((resolve,reject)=>{const safeEnv={PATH:process.env.PATH||'/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',HOME:options.cwd||os.tmpdir(),TMPDIR:options.cwd||os.tmpdir(),TEMP:options.cwd||os.tmpdir(),LANG:'C.UTF-8',...options.env};const p=spawn(bin,args,{cwd:options.cwd,env:safeEnv,shell:false,windowsHide:true,stdio:['ignore','pipe','pipe']});let out='',err='';const timer=setTimeout(()=>p.kill('SIGTERM'),options.timeout||900000);p.stdout.on('data',x=>out=(out+x).slice(-100000));p.stderr.on('data',x=>err=(err+x).slice(-100000));p.on('error',e=>{clearTimeout(timer);reject(Object.assign(new Error('Execution binary unavailable.'),{code:'EXECUTION_BINARY_UNAVAILABLE',cause:e}));});p.on('close',code=>{clearTimeout(timer);if(code===0)resolve({stdout:out,stderr:err});else reject(Object.assign(new Error('Provider operation failed.'),{code:'PROVIDER_OPERATION_FAILED',detail:err.slice(-1500)}));});});}
 function filesOf(files,provider=null){
   if(Array.isArray(files)){
@@ -72,16 +86,7 @@ async function launchDarkly(payload){
     const targetIndex=rollout.findIndex(item=>item.variation===variationIndex);
     if(targetIndex<0)throw Object.assign(new Error('Target variation is not present in the existing fallthrough rollout.'),{code:'FLAG_VARIATION_NOT_IN_ROLLOUT'});
     if(strategy==='blue_green'&&((current.variations||[]).length!==2||rollout.length!==2||![0,100].includes(percent)))throw Object.assign(new Error('Blue/green requires exactly two variations and a 0 or 100 percent traffic switch.'),{code:'BLUE_GREEN_CONFIGURATION_INVALID'});
-    const targetWeight=percent*1000;
-    const otherIndices=rollout.map((item,index)=>index).filter(index=>index!==targetIndex);
-    const oldOtherTotal=otherIndices.reduce((sum,index)=>sum+Number(rollout[index].weight||0),0);
-    let remaining=100000-targetWeight;
-    const otherWeights=new Map();
-    otherIndices.forEach((index,position)=>{
-      const weight=position===otherIndices.length-1?remaining:(oldOtherTotal>0?Math.floor(remaining*Number(rollout[index].weight||0)/oldOtherTotal):Math.floor(remaining/otherIndices.length));
-      otherWeights.set(index,weight);remaining-=weight;
-    });
-    const weights=rollout.map((item,index)=>({...item,weight:index===targetIndex?targetWeight:otherWeights.get(index)}));
+    const weights=allocateLaunchDarklyRolloutWeights(rollout,targetIndex,percent);
     ops=[{op:'replace',path:'/environments/'+environment+'/fallthrough/rollout/variations',value:weights},{op:'replace',path:'/environments/'+environment+'/on',value:true}];
   }
   const update=await fetch(url,{method:'PATCH',headers:{...headers,'Content-Type':'application/json-patch+json'},body:JSON.stringify(ops),redirect:'error',signal:AbortSignal.timeout(15000)});
