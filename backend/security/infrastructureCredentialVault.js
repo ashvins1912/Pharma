@@ -121,11 +121,18 @@ export function validateProviderTargetConfig(provider, input = {}) {
   if (Object.keys(value).length && required.some(key => value[key] === undefined || value[key] === null || value[key] === '')) throw new Error(provider+' target configuration is missing required fields: '+required.filter(key => value[key] === undefined || value[key] === null || value[key] === '').join(', '));
   if (provider === 'aws' && Object.keys(value).length) {
     if (!/^[a-z]{2}(?:-gov)?-[a-z]+-\d$/.test(value.region)) throw new Error('AWS target region is invalid.');
-    if (!Array.isArray(value.subnetIds) || !value.subnetIds.length || !Array.isArray(value.securityGroupIds) || !value.securityGroupIds.length) throw new Error('AWS subnet and security-group allowlists are required.');
+    if (!/^arn:aws(?:-us-gov)?:ecs:[a-z0-9-]+:\\d{12}:cluster\\/[A-Za-z0-9_-]+$/.test(value.clusterArn)) throw new Error('AWS ECS cluster ARN is invalid.');
+    if (!Array.isArray(value.subnetIds) || !value.subnetIds.length || value.subnetIds.length > 20 || value.subnetIds.some(id => typeof id !== 'string' || !/^subnet-[a-f0-9]{8,17}$/.test(id)) || !Array.isArray(value.securityGroupIds) || !value.securityGroupIds.length || value.securityGroupIds.length > 20 || value.securityGroupIds.some(id => typeof id !== 'string' || !/^sg-[a-f0-9]{8,17}$/.test(id))) throw new Error('AWS subnet and security-group allowlists are invalid.');
+    if (value.desiredCount !== undefined && (!Number.isInteger(value.desiredCount) || value.desiredCount < 1 || value.desiredCount > 20)) throw new Error('AWS desiredCount must be an integer from 1 to 20.');
+    if (value.assignPublicIp !== undefined && typeof value.assignPublicIp !== 'boolean') throw new Error('AWS assignPublicIp must be boolean.');
     if (!/^arn:aws(?:-us-gov)?:iam::\d{12}:role\/[A-Za-z0-9+=,.@_/-]+$/.test(value.executionRoleArn)) throw new Error('AWS execution role ARN is invalid.');
   }
-  if (provider === 'azure' && Object.keys(value).length && (!/^[0-9a-f-]{36}$/i.test(value.tenantId) || !/^[0-9a-f-]{36}$/i.test(value.subscriptionId))) throw new Error('Azure tenant and subscription IDs must be UUIDs.');
-  if (provider === 'gcp' && Object.keys(value).length && !/^[a-z][a-z0-9-]{4,28}[a-z0-9]$/.test(value.projectId)) throw new Error('GCP project ID is invalid.');
+  if (provider === 'azure' && Object.keys(value).length) {
+    if (!/^[0-9a-f-]{36}$/i.test(value.tenantId) || !/^[0-9a-f-]{36}$/i.test(value.subscriptionId)) throw new Error('Azure tenant and subscription IDs must be UUIDs.');
+    if (!/^[A-Za-z0-9._() -]{1,90}$/.test(value.resourceGroupName) || !/^[a-zA-Z0-9-]{2,40}$/.test(value.location)) throw new Error('Azure resource group or location is invalid.');
+    if (!value.containerAppEnvironmentId.startsWith('/subscriptions/'+value.subscriptionId+'/resourceGroups/'+value.resourceGroupName+'/providers/Microsoft.App/managedEnvironments/')) throw new Error('Azure Container Apps environment must belong to the configured subscription and resource group.');
+  }
+  if (provider === 'gcp' && Object.keys(value).length && (!/^[a-z][a-z0-9-]{4,28}[a-z0-9]$/.test(value.projectId) || !/^[a-z]+-[a-z]+[0-9]$/.test(value.region))) throw new Error('GCP project ID or region is invalid.');
   if (provider === 'kubernetes' && Object.keys(value).length && !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(value.namespace)) throw new Error('Kubernetes namespace must be DNS-safe.');
   if (provider === 'launchdarkly' && Object.keys(value).length && (!/^[a-zA-Z0-9_-]{1,64}$/.test(value.projectKey) || !/^[a-zA-Z0-9_-]{1,64}$/.test(value.environmentKey))) throw new Error('LaunchDarkly project and environment keys are invalid.');
   if (['aws','azure','gcp'].includes(provider) && Object.keys(value).length) {
