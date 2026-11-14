@@ -120,7 +120,7 @@ function safeChecks(checks) {
   }));
 }
 function publicJob(job) {
-  return {jobId:job.jobId,provider:job.provider,operation:job.operation,environment:job.environment,status:job.status,result:job.result,errorCode:job.errorCode,createdAt:job.createdAt,updatedAt:job.updatedAt};
+  return {jobId:job.jobId,provider:job.provider,operation:job.operation,environment:job.environment,status:job.status,result:job.result,errorCode:job.errorCode,rollbackAvailable:Boolean(job.request?.previousSnapshotId),createdAt:job.createdAt,updatedAt:job.updatedAt};
 }
 app.get('/health',(_req,res)=>res.json({success:true,service:'private-devops-adapter',status:'UP'}));
 app.get('/ready',(_req,res)=>res.status(mongoose.connection.readyState===1?200:503).json({success:mongoose.connection.readyState===1,database:mongoose.connection.readyState===1?'connected':'disconnected'}));
