@@ -242,6 +242,7 @@ spec:
 function terraform(config, image) {
   const selectedImage = image || `ghcr.io/your-org/${config.serviceName}:CHANGE_ME`;
   if (config.provider === 'aws') return `terraform {
+  backend "s3" {}
   required_version = ">= 1.6.0, < 2.0.0"
   required_providers {
     aws = {
@@ -318,6 +319,7 @@ output "task_definition_arn" {
 }
 `;
   if (config.provider === 'azure') return `terraform {
+  backend "azurerm" {}
   required_version = ">= 1.6.0, < 2.0.0"
   required_providers {
     azurerm = {
@@ -376,6 +378,7 @@ output "container_app_id" {
 }
 `;
   if (config.provider === 'gcp') return `terraform {
+  backend "gcs" {}
   required_version = ">= 1.6.0, < 2.0.0"
   required_providers {
     google = {
