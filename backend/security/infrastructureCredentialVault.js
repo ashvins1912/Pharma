@@ -132,7 +132,9 @@ export function validateProviderTargetConfig(provider, input = {}) {
     const backend = value.stateBackend;
     if (!backend || typeof backend !== 'object' || Array.isArray(backend) || !['s3','azurerm','gcs'].includes(backend.type)) throw new Error('A supported remote Terraform state backend is required.');
     const backendFields = {s3:['bucket','key','region'],azurerm:['resourceGroupName','storageAccountName','containerName','key'],gcs:['bucket','prefix']}[backend.type];
-    if (backendFields.some(key => typeof backend[key] !== 'string' || !backend[key].trim())) throw new Error('Terraform remote state backend configuration is incomplete.');
+    const backendAllowed = new Set(['type', ...backendFields]);
+    if (Object.keys(backend).some(key => !backendAllowed.has(key))) throw new Error('Unsupported Terraform state backend field.');
+    if (backendFields.some(key => typeof backend[key] !== 'string' || !backend[key].trim() || backend[key].length > 200 || /[\\r\\n]/.test(backend[key]))) throw new Error('Terraform remote state backend configuration is incomplete or invalid.');
     if ((provider === 'aws' && backend.type !== 's3') || (provider === 'azure' && backend.type !== 'azurerm') || (provider === 'gcp' && backend.type !== 'gcs')) throw new Error('Terraform state backend type does not match the cloud provider.');
   }
   return value;
