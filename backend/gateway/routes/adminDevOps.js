@@ -162,6 +162,7 @@ async function getProductionReleaseReadiness() {
     const latest = await ProviderPreflight.findOne({ provider: item.provider, environment: 'staging' }).sort({ checkedAt: -1 }).lean();
     const integration = latest ? await InfrastructureIntegration.findOne({ _id: latest.integrationId, revokedAt: null }).lean() : null;
     const targetVerified = Boolean(latest && latest.status === 'PASS' && integration
+      && integration.provider === item.provider && integration.environment === 'staging'
       && integration.verification?.authenticated === true
       && integration.verification?.discoveryPassed === true
       && targetConfigDigest(integration.targetConfig) === latest.targetDigest);
