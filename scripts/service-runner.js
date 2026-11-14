@@ -14,8 +14,12 @@ const ports = {
   'inventory-service': process.env.INVENTORY_SERVICE_PORT || '5100',
   'medicine-master-service': process.env.MEDICINE_MASTER_SERVICE_PORT || '5101',
   'order-service': process.env.ORDER_SERVICE_PORT || '5200',
-  'websocket-service': process.env.WS_PORT || '4000'
+  'websocket-service': process.env.WS_PORT || '4000',
+  'private-devops-adapter': process.env.PRIVATE_DEVOPS_ADAPTER_PORT || '8092'
 };
+const privateAdapterConfigured = Boolean(process.env.PRIVATE_DEVOPS_ADAPTER_TOKEN && (process.env.ADAPTER_MONGO_URI || process.env.MONGO_URI));
+const privateAdapterExplicit = process.env.START_PRIVATE_DEVOPS_ADAPTER === 'true';
+if (privateAdapterExplicit && !privateAdapterConfigured) throw new Error('START_PRIVATE_DEVOPS_ADAPTER requires PRIVATE_DEVOPS_ADAPTER_TOKEN and ADAPTER_MONGO_URI or MONGO_URI.');
 
 const workspace = (name, script, overrides = {}, port = null, extraArgs = []) => ({
   name,
@@ -25,7 +29,13 @@ const workspace = (name, script, overrides = {}, port = null, extraArgs = []) =>
 });
 
 const definitions = [
-  workspace('backend', mode, { PORT: ports.backend }, Number(ports.backend)),
+  workspace('backend', mode, {
+    PORT: ports.backend,
+    ...(process.env.PRIVATE_DEVOPS_ADAPTER_TOKEN ? {
+      PRIVATE_DEVOPS_ADAPTER_URL: process.env.PRIVATE_DEVOPS_ADAPTER_URL || `http://localhost:${ports['private-devops-adapter']}`,
+      PRIVATE_DEVOPS_ADAPTER_TOKEN: process.env.PRIVATE_DEVOPS_ADAPTER_TOKEN
+    } : {})
+  }, Number(ports.backend)),
   workspace('api-gateway', mode, {
     PORT: ports['api-gateway'],
     ADMIN_SERVICE_URL: process.env.ADMIN_SERVICE_URL || `http://localhost:${ports['admin-control-plane']}`,
@@ -41,6 +51,15 @@ const definitions = [
   workspace('services/websocket-service', mode, { PORT: ports['websocket-service'], WS_PORT: ports['websocket-service'] }, Number(ports['websocket-service'])),
   workspace('frontend', mode === 'dev' ? 'dev' : 'preview', mode === 'start' ? { HOST: '0.0.0.0' } : {}, mode === 'dev' ? 5173 : 4173, ['--', '--host', '0.0.0.0', '--port', mode === 'dev' ? '5173' : '4173', '--strictPort'])
 ];
+if (privateAdapterExplicit || (privateAdapterConfigured && !process.env.PRIVATE_DEVOPS_ADAPTER_URL)) {
+  definitions.push(workspace('services/private-devops-adapter', mode, {
+    PORT: ports['private-devops-adapter'],
+    ADAPTER_MONGO_URI: process.env.ADAPTER_MONGO_URI || process.env.MONGO_URI,
+    PRIVATE_DEVOPS_ADAPTER_TOKEN: process.env.PRIVATE_DEVOPS_ADAPTER_TOKEN
+  }, Number(ports['private-devops-adapter'])));
+} else if (!privateAdapterConfigured) {
+  console.info('[workspace] Private DevOps adapter is optional and was not started; configure its Mongo URI and 32+ character service token to enable it.');
+}
 
 const children = [];
 function shutdown(exitCode = 0) {
