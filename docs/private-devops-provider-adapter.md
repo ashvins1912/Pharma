@@ -63,3 +63,7 @@ The Admin API persists each staging preflight with its artifact digest (where ap
 - Emergency rollback endpoints remain available while new production deployment and flag rollout operations are locked.
 
 Terraform artifact validation rejects provisioners, external data sources/providers, null resources, terraform_data execution hooks and unreviewed modules. Remote provider driver URLs and the Admin-to-adapter connection require HTTPS (loopback HTTP is permitted only outside production).
+
+## Local service startup
+
+The adapter listens on port `8092` by default, separate from the main backend on `8090`. Root scripts are available as `npm run dev:private-devops-adapter` and `npm run start:private-devops-adapter`. The all-service runner starts it automatically when both `PRIVATE_DEVOPS_ADAPTER_TOKEN` (32+ characters) and `ADAPTER_MONGO_URI` or `MONGO_URI` are configured. Set `START_PRIVATE_DEVOPS_ADAPTER=true` to require local startup; an explicitly configured remote `PRIVATE_DEVOPS_ADAPTER_URL` is used without starting a second local adapter.
