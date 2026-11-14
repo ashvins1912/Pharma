@@ -1,73 +1,75 @@
 # Private DevOps Provider Adapter
 
-This service is the private execution boundary for the Admin DevOps control plane. It stores durable job metadata in MongoDB, performs built-in provider identity checks, and includes native typed deployment drivers for Terraform (AWS/Azure/GCP), Kubernetes API rollout and LaunchDarkly API updates. Optional external drivers can still be configured for isolated enterprise runners. It never exposes a shell, terminal, arbitrary URL proxy, or cloud credential endpoint.
+The adapter is the private execution boundary for the Super Admin DevOps control plane. It persists job metadata and immutable artifact snapshots in MongoDB, performs provider identity checks, and runs native typed operations. It does not expose a shell, terminal, arbitrary HTTP proxy, or browser-held credentials.
 
-## Runtime configuration
+## Runtime
 
-- `ADAPTER_MONGO_URI` (or existing `MONGO_URI`)
-- `PRIVATE_DEVOPS_ADAPTER_TOKEN` (32+ random characters; shared only with the Admin control plane)
-- `TERRAFORM_BIN` and `KUBECTL_BIN` may override the bundled executable paths
-- `KUBERNETES_API_ALLOWED_HOSTS` (comma-separated exact API hostnames; required for Kubernetes identity preflight)
-- `ALLOW_PRODUCTION_OPERATIONS=false` until release governance explicitly enables it
+Required:
+- ADAPTER_MONGO_URI (or the existing MONGO_URI)
+- PRIVATE_DEVOPS_ADAPTER_TOKEN (at least 32 random characters, shared only with the Admin API)
 
-## Built-in identity preflight
+Bundled tools:
+- Terraform 1.9.8 for AWS/Azure/GCP
+- kubectl 1.32.2 for Kubernetes
 
-The adapter now performs native read-only identity checks before it reports a provider preflight result:
+Optional:
+- TERRAFORM_BIN, KUBECTL_BIN
+- KUBERNETES_API_ALLOWED_HOSTS: comma-separated exact Kubernetes API hostnames; required for every environment
+- LAUNCHDARKLY_API_ALLOWED_HOSTS: comma-separated exact LaunchDarkly API hostnames; defaults to app.launchdarkly.com
+- DEVOPS_DRIVER_<PROVIDER>_URL/TOKEN: optional isolated external runner override; remote runner URLs must use HTTPS
+- ALLOW_PRODUCTION_OPERATIONS=false: keep disabled until all release gates and approvals are complete
 
-| Provider | Required credential fields | Read-only verification |
+## Native provider contracts
+
+| Provider | Identity verification | Execution |
 |---|---|---|
-| AWS | `accessKeyId`, `secretAccessKey`, optional `sessionToken`, optional `region` | Signed STS GetCallerIdentity |
-| Azure | `tenantId`, `clientId`, `clientSecret`, optional `subscriptionId` | OAuth client credentials and ARM subscription visibility |
-| GCP | `clientEmail`, `privateKey`, `projectId` | Service-account JWT exchange and Cloud Resource Manager project lookup |
-| Kubernetes | `token`, `namespace`; API server URL in the integration endpoint or `server` | API server version and namespace read |
-| LaunchDarkly | `apiKey`, `projectKey`, `environmentKey` | Project/environment read using LaunchDarkly API |
+| AWS | SigV4 STS GetCallerIdentity; target ECS account must match | Terraform ECS/Fargate plan/apply using S3 remote state and DynamoDB locking |
+| Azure | OAuth client credentials; configured tenant and subscription scope | Terraform Azure Container Apps using existing Azure Blob state |
+| GCP | Service-account JWT and Cloud Resource Manager project lookup | Terraform Cloud Run using existing GCS state |
+| Kubernetes | HTTPS API /version and namespace read; exact hostname allowlist | Server-side dry-run, manifest apply, rollout health check and Deployment revision undo |
+| LaunchDarkly | Project/environment and allowlisted flag read | Approved percentage/kill-switch update preserving targeting rules; capture and restore prior flag state |
 
-Credential field names are the adapter's input contract. Existing vault entries must be mapped to this shape by the trusted Admin service before staging checks. Credentials are used in memory only and must never be written to logs or job/evidence records. Kubernetes API hosts must be listed in `KUBERNETES_API_ALLOWED_HOSTS` in production; LaunchDarkly defaults to `app.launchdarkly.com` and any additional host must be explicitly listed in `LAUNCHDARKLY_API_ALLOWED_HOSTS`.
+Credentials are decrypted only by the trusted Admin API and sent to the adapter over the private authenticated channel. The adapter uses them in memory and never stores them in job or evidence documents.
 
-## Deployment execution drivers
+## Target configuration
 
-Identity verification is not deployment execution. The separately configured provider execution drivers must implement:
-- `POST /v1/preflight`
-- `POST /v1/deployments/execute`
-- `POST /v1/deployments/status`
-- `POST /v1/deployments/rollback`
-- LaunchDarkly additionally implements `POST /v1/feature-flags/rollout`
+Super Admins store non-secret target identifiers and allowlists on the existing InfrastructureIntegration record through:
 
-The five execution drivers must enforce provider-native target allowlists, least-privilege deployment scopes, reviewed IaC plans, idempotent apply, health checks, rollback and provider-side evidence. A preflight remains BLOCKED unless both native identity verification and the configured execution driver checks pass. Provider acceptance is SUBMITTED, never proof of successful completion.
+PUT /api/v1/admin/infrastructure/security/integrations/:id/target-config
 
+Target changes invalidate verification and operational scopes. Re-verify credentials and rerun staging preflight after every target change.
 
-## Provider target configuration
+- AWS: region, ECS cluster ARN, task execution role ARN, subnet/security-group allowlists, allowed service names, and an existing S3 backend plus DynamoDB lock table.
+- Azure: tenant, subscription, resource group, location, Container Apps environment ID, allowed service names, and an existing Azure Blob backend.
+- GCP: project, region, allowed service names, and an existing GCS backend.
+- Kubernetes: namespace, allowed Deployment names, and an API hostname in KUBERNETES_API_ALLOWED_HOSTS.
+- LaunchDarkly: project key, environment key, and allowed flag keys.
 
-Target identifiers are non-secret configuration stored on the encrypted-vault integration record (separate from credentials). Super Admins configure them through `PUT /api/v1/admin/infrastructure/security/integrations/:id/target-config`. A change invalidates prior verification and requires re-verification.
+The adapter never creates or guesses accounts, subscriptions, projects, clusters, namespaces, services, feature flags, or Terraform state resources.
 
-AWS example:
-```json
-{
-  "region": "ap-south-1",
-  "clusterArn": "arn:aws:ecs:ap-south-1:123456789012:cluster/pharma-staging",
-  "executionRoleArn": "arn:aws:iam::123456789012:role/pharma-ecs-execution",
-  "subnetIds": ["subnet-0123456789abcdef0"],
-  "securityGroupIds": ["sg-0123456789abcdef0"],
-  "allowedServiceNames": ["inventory-service"],
-  "stateBackend": {"type":"s3","bucket":"existing-tf-state","key":"pharma/staging.tfstate","region":"ap-south-1","dynamodbTable":"existing-tf-locks"}
-}
-```
+## Artifact and execution safety
 
-Azure requires `tenantId`, `subscriptionId`, `resourceGroupName`, `location`, `containerAppEnvironmentId`, `allowedServiceNames` and an existing `azurerm` state backend (`resourceGroupName`, `storageAccountName`, `containerName`, `key`). GCP requires `projectId`, `region`, `allowedServiceNames` and an existing GCS backend (`bucket`, `prefix`). Kubernetes requires `namespace`, `allowedDeploymentNames` and the exact API hostname in `KUBERNETES_API_ALLOWED_HOSTS`. LaunchDarkly requires `projectKey`, `environmentKey` and `allowedFlagKeys`.
+- Artifacts must pass Admin validation and their SHA-256 digest is verified again by the adapter before preflight and execution.
+- Container images require an explicit non-floating tag; latest and generated CHANGE_ME placeholders are rejected.
+- Terraform artifacts containing provisioners, external data sources/providers, null resources, terraform_data execution hooks, or unreviewed modules are rejected.
+- Terraform uses fixed argument arrays with shell:false, isolated temporary workspaces, remote state and a plan before apply.
+- Kubernetes uses a temporary mode-0600 kubeconfig. Temporary credentials and workspace files are removed after execution.
+- Cloud rollback reapplies the previous successful immutable artifact. Kubernetes rollback uses Deployment revision history. LaunchDarkly rollback restores the captured prior state.
+- The first deployment without a prior known-good snapshot is not rollback-eligible.
 
-## Native deployment execution
+## Staging and production release gate
 
-- AWS, Azure and GCP use the generated provider-specific Terraform module, an existing remote state backend, a saved target allowlist, a pinned image and a Terraform plan before apply. The runtime never creates a state bucket or guesses resource identifiers.
-- Kubernetes uses a generated manifest, a temporary mode-0600 kubeconfig, server-side dry-run, API apply and rollout health verification. Rollback uses the Kubernetes Deployment revision history.
-- LaunchDarkly reads the current flag/environment, modifies only the approved fallthrough rollout or kill-switch field, captures the previous `on` and `fallthrough` state, and supports restoring that snapshot. Each approved request applies one percentage step; promotion to the next stage remains a separate reviewed change, not an unattended timer.
-- Cloud rollback reapplies the previous successful immutable artifact against the same remote state. A first deployment without a previous successful artifact cannot be rolled back automatically.
-- Deployment execution requires an explicit image tag; generated `CHANGE_ME` placeholders are rejected.
-- Provider acceptance is not success. Native synchronous execution reports success only after Terraform apply or Kubernetes rollout completes; external runner mode still requires status reconciliation.
+Run Super Admin POST /providers/preflight for each provider in staging. AWS/Azure/GCP preflight runs Terraform init/validate/plan; Kubernetes performs server-side dry-run; LaunchDarkly verifies the configured environment and allowlisted flag. The Admin API stores evidence bound to the artifact digest and exact verified target configuration.
 
-## Staging
+Complete a staging deployment and rollback rehearsal for AWS, Azure, GCP and Kubernetes. For LaunchDarkly, complete an approved staging flag rollout and restore the captured prior state.
 
-Configure staging-scoped identities and execution drivers first. Call `POST /v1/preflight` for each provider and require every check to PASS. Run a non-production deployment and rollback rehearsal, then verify the provider operation reaches a terminal state through status reconciliation. LaunchDarkly drivers must preserve unspecified targeting rules and support a kill-switch recovery path.
+The adapter POST /v1/release-readiness and Admin GET /api/v1/admin/devops/release-readiness report the five-provider gate. Production planning, approval and execution remain blocked until every provider has passing staging preflight, deployment and rollback evidence. Evidence must be newer than the latest preflight; target changes invalidate the evidence. Emergency rollback remains available while new production deployments are locked.
 
-## Production safety
+After the five-provider gate passes, production still requires:
+1. Explicit infrastructure release approval to set ALLOW_PRODUCTION_OPERATIONS=true.
+2. The existing separate Super Admin approval and separation-of-duties controls.
+3. Typed confirmation at execution time.
 
-Production requests are rejected unless `ALLOW_PRODUCTION_OPERATIONS=true`. Keep this unset/false during staging. The Admin control plane must continue enforcing its independent two-person approval and typed confirmation gates. Production enablement is an infrastructure release action, not an Admin UI setting.
+## Validation boundary
+
+CI checks syntax, adapter tests, generated-artifact policies, frontend build and Docker image construction. CI does not access real provider accounts. Live staging preflight, deployment and rollback require the organization's own verified credentials and explicitly allowlisted target identifiers. No cloud resource, Kubernetes cluster or LaunchDarkly flag is changed by CI.
