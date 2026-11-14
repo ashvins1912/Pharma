@@ -36,6 +36,7 @@ const providerPreflightSchema = new mongoose.Schema({
   integrationId: { type: mongoose.Schema.Types.ObjectId, required: true, index: true },
   artifactId: { type: mongoose.Schema.Types.ObjectId, default: null },
   artifactDigest: { type: String, default: null, index: true },
+  targetDigest: { type: String, required: true },
   serviceName: { type: String, default: null },
   flagKey: { type: String, default: null },
   status: { type: String, enum: ['PASS','FAIL','BLOCKED'], required: true, index: true },
@@ -111,6 +112,7 @@ auditSchema.index({ occurredAt: -1 });
 const DevOpsAudit = mongoose.models.DevOpsAudit || mongoose.model('DevOpsAudit', auditSchema, 'devops_audit');
 
 const actorOf = req => String(req.user?.sub || req.user?.id || 'unknown-super-admin');
+const targetConfigDigest = value => crypto.createHash('sha256').update(JSON.stringify(value || {})).digest('hex');
 const requestIdOf = req => req.context?.requestId || req.gatewayRequestId || req.get('x-request-id') || null;
 const validId = value => mongoose.Types.ObjectId.isValid(String(value || ''));
 const safeName = /^[a-z0-9](?:[a-z0-9-]{0,50}[a-z0-9])?$/;
@@ -201,7 +203,7 @@ router.post('/providers/preflight', async (req, res) => {
     const preflightStatus = result.success && result.evidence?.status === 'PASS' ? 'PASS' : result.evidence?.status === 'FAIL' ? 'FAIL' : 'BLOCKED';
     await ProviderPreflight.create({
       provider, environment, integrationId: integration._id, artifactId: artifact?._id || null,
-      artifactDigest: artifact?.digest || null, serviceName: artifact?.serviceName || null,
+      artifactDigest: artifact?.digest || null, targetDigest: targetConfigDigest(integration.targetConfig), serviceName: artifact?.serviceName || null,
       flagKey: provider === 'launchdarkly' ? String(req.body?.flagKey || '') : null,
       status: preflightStatus, evidenceRunId: result.evidence?.runId || null, checkedBy: actorOf(req)
     });
@@ -319,11 +321,13 @@ router.post('/deployments/plan', async (req, res) => {
     if (['aws','azure','gcp','kubernetes'].includes(provider)) {
       const stagedPreflight = await ProviderPreflight.findOne({ provider, environment: 'staging', artifactDigest: artifact.digest, serviceName: artifact.serviceName, status: 'PASS' }).sort({ checkedAt: -1 }).lean();
       if (!stagedPreflight) throw Object.assign(new Error('A passing staging provider preflight for this exact artifact is required before creating a deployment plan.'), { code: 'STAGING_PREFLIGHT_REQUIRED', statusCode: 409 });
+      const stagedIntegration = await InfrastructureIntegration.findOne({ _id: stagedPreflight.integrationId, revokedAt: null }).lean();
+      if (!stagedIntegration || stagedIntegration.verification?.authenticated !== true || stagedIntegration.verification?.discoveryPassed !== true || targetConfigDigest(stagedIntegration.targetConfig) !== stagedPreflight.targetDigest) throw Object.assign(new Error('Staging provider target changed or its verification expired; run staging preflight again.'), { code: 'STAGING_PREFLIGHT_STALE', statusCode: 409 });
       if (environment === 'staging' && String(stagedPreflight.integrationId) !== String(integration._id)) throw Object.assign(new Error('Run staging preflight again using the selected staging integration.'), { code: 'STAGING_PREFLIGHT_INTEGRATION_MISMATCH', statusCode: 409 });
       if (environment === 'production') {
-        const stagedDeployment = await Deployment.findOne({ provider, environment: 'staging', serviceName: artifact.serviceName, status: 'SUCCEEDED' }).sort({ updatedAt: -1 }).lean();
+        const stagedDeployment = await Deployment.findOne({ provider, environment: 'staging', serviceName: artifact.serviceName, integrationId: stagedPreflight.integrationId, status: 'SUCCEEDED' }).sort({ updatedAt: -1 }).lean();
         const stagedArtifact = stagedDeployment ? await Artifact.findById(stagedDeployment.artifactId).lean() : null;
-        if (!stagedArtifact || stagedArtifact.digest !== artifact.digest) throw Object.assign(new Error('The exact artifact must complete successfully in staging before production planning is enabled.'), { code: 'STAGING_DEPLOYMENT_REQUIRED', statusCode: 409 });
+        if (!stagedArtifact || stagedArtifact.digest !== artifact.digest) throw Object.assign(new Error('The exact artifact must complete successfully in staging against the preflighted target before production planning is enabled.'), { code: 'STAGING_DEPLOYMENT_REQUIRED', statusCode: 409 });
       }
     }
     const reference = String(changeReference || '').trim().slice(0, 120);
@@ -469,6 +473,8 @@ router.post('/feature-flags/rollout', async (req, res) => {
     const { integration } = await loadDeployIntegration(integrationId, 'launchdarkly', environment, 'manage');
     const stagedPreflight = await ProviderPreflight.findOne({ provider: 'launchdarkly', environment: 'staging', flagKey: key, status: 'PASS' }).sort({ checkedAt: -1 }).lean();
     if (!stagedPreflight) throw Object.assign(new Error('A passing LaunchDarkly staging preflight for this flag is required before rollout planning.'), { code: 'LAUNCHDARKLY_STAGING_PREFLIGHT_REQUIRED', statusCode: 409 });
+    const stagedIntegration = await InfrastructureIntegration.findOne({ _id: stagedPreflight.integrationId, revokedAt: null }).lean();
+    if (!stagedIntegration || stagedIntegration.verification?.authenticated !== true || stagedIntegration.verification?.discoveryPassed !== true || targetConfigDigest(stagedIntegration.targetConfig) !== stagedPreflight.targetDigest) throw Object.assign(new Error('LaunchDarkly staging target changed or its verification expired; run preflight again.'), { code: 'LAUNCHDARKLY_PREFLIGHT_STALE', statusCode: 409 });
     if (environment === 'staging' && String(stagedPreflight.integrationId) !== String(integration._id)) throw Object.assign(new Error('Run LaunchDarkly staging preflight again using the selected integration.'), { code: 'LAUNCHDARKLY_PREFLIGHT_INTEGRATION_MISMATCH', statusCode: 409 });
     if (environment === 'production') {
       const stagedChange = await FlagChange.findOne({ flagKey: key, environment: 'staging', strategy, rolloutPercent: strategy === 'kill_switch' ? 0 : percent, status: 'SUCCEEDED' }).sort({ updatedAt: -1 }).lean();
