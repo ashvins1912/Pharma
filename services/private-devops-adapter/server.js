@@ -185,8 +185,8 @@ app.post('/v1/deployments/rollback',validateBase,async(req,res)=>{
   let job=await Job.findOne({idempotencyKey:key});
   if(!job) job=await Job.create({jobId:crypto.randomUUID(),idempotencyKey:key,provider,operation:'rollback',environment,status:'QUEUED',request:{sourceJobId:jobId,changeReference}});
   try {
-    const result=await providerCall(provider,'rollback',{jobId:job.jobId,sourceJobId:jobId,environment,changeReference,credentials,integration:{id:integration.id,endpoint:integration.endpoint,targetConfig:integration.targetConfig||{}},deployment});
-    job.status=['SUBMITTED','RUNNING','SUCCEEDED','FAILED'].includes(result.status)?result.status:'SUBMITTED';
+    const result=await providerCall(provider,'rollback',{jobId:job.jobId,sourceJobId:jobId,environment,changeReference,credentials,integration:{id:integration.id,endpoint:integration.endpoint,targetConfig:integration.targetConfig||{}},deployment:{...deployment,previousFiles:source.request?.previousFiles,previousImage:source.request?.previousImage}});
+    job.status=['SUBMITTED','RUNNING','SUCCEEDED','FAILED','ROLLED_BACK'].includes(result.status)?result.status:'SUBMITTED';
     job.result={providerOperationId:result.operationId||null}; await job.save();
     return res.status(202).json({success:true,accepted:true,status:job.status,job:publicJob(job)});
   } catch(error) { job.status='FAILED'; job.errorCode=error.code||'ROLLBACK_FAILED'; await job.save(); return res.status(error.statusCode||502).json({success:false,job:publicJob(job)}); }
