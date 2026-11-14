@@ -578,6 +578,16 @@ router.post('/feature-flags/changes/:id/rollback', async (req, res) => {
   }
 });
 
+router.get('/release-readiness', async (_req, res) => {
+  try {
+    const readiness = await adapterRequest('/v1/release-readiness', {});
+    res.set('Cache-Control', 'private, no-store');
+    return res.json(readiness);
+  } catch (error) {
+    return res.status(error.statusCode || 503).json({ success: false, ready: false, code: error.code || 'RELEASE_READINESS_UNAVAILABLE', message: error.message });
+  }
+});
+
 router.get('/audit', async (_req, res) => {
   const entries = await DevOpsAudit.find({}).sort({ occurredAt: -1 }).limit(200).lean();
   res.set('Cache-Control', 'private, no-store');
