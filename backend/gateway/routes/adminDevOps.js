@@ -350,7 +350,7 @@ router.post('/deployments/:id/execute', async (req, res) => {
     deployment.status = result.status === 'SUCCEEDED' ? 'SUCCEEDED' : 'SUBMITTED';
     deployment.remoteDeploymentId = String(result.deploymentId).slice(0, 180);
     deployment.remoteStatus = String(result.status || 'ACCEPTED').slice(0, 80);
-    deployment.rollbackAvailable = result.rollbackAvailable === true;
+    deployment.rollbackAvailable = result.rollbackAvailable === true || result.job?.rollbackAvailable === true;
     await deployment.save();
     await audit(req, 'DEPLOYMENT_SUBMITTED', 'ACCEPTED', 'deployment', deployment._id, { provider: deployment.provider, remoteDeploymentId: deployment.remoteDeploymentId, changeReference: deployment.changeReference });
     return res.json({ success: true, accepted: true, deployment, message: deployment.status === 'SUCCEEDED' ? 'Provider deployment completed and the driver confirmed success.' : 'Provider accepted the deployment request. Poll provider status to verify completion; acceptance is not success.' });
