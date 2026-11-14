@@ -148,11 +148,12 @@ const pythonServices = [
 async function main() {
   configureLocalSecrets();
 
-  let redisAvailable = await portIsOpen(Number(process.env.REDIS_PORT || 6379));
+  const redisPort = Number(process.env.REDIS_PORT || 6379);
+  if (!process.env.REDIS_URL) process.env.REDIS_URL = 'redis://127.0.0.1:' + redisPort + '/0';
+  let redisAvailable = await portIsOpen(redisPort);
   if (!redisAvailable && process.env.START_LOCAL_REDIS !== 'false') {
     const redisCheck = spawnSync('redis-server', ['--version'], { stdio: 'ignore' });
     if (redisCheck.status === 0) {
-      const redisPort = Number(process.env.REDIS_PORT || 6379);
       launch('local-redis', 'redis-server', [
         '--bind', '127.0.0.1', '--port', String(redisPort),
         '--save', '', '--appendonly', 'no'
