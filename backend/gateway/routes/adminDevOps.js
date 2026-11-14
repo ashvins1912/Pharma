@@ -175,7 +175,7 @@ async function getProductionReleaseReadiness() {
 }
 
 async function assertDeploymentStagingEvidence(deployment, artifact) {
-  if (!['aws','azure','gcp','kubernetes'].includes(deployment.provider)) return;
+  if (deployment.environment === 'development' || !['aws','azure','gcp','kubernetes'].includes(deployment.provider)) return;
   const preflight = await ProviderPreflight.findOne({
     provider: deployment.provider, environment: 'staging',
     artifactDigest: artifact.digest, serviceName: artifact.serviceName
@@ -197,6 +197,7 @@ async function assertDeploymentStagingEvidence(deployment, artifact) {
 }
 
 async function assertFlagStagingEvidence(change) {
+  if (change.environment === 'development') return;
   const preflight = await ProviderPreflight.findOne({ provider: 'launchdarkly', environment: 'staging', flagKey: change.flagKey }).sort({ checkedAt: -1 }).lean();
   if (!preflight || preflight.status !== 'PASS') throw Object.assign(new Error('The latest LaunchDarkly staging preflight for this flag must pass before approval or execution.'), { code: 'LAUNCHDARKLY_STAGING_PREFLIGHT_REQUIRED', statusCode: 409 });
   const stagedIntegration = await InfrastructureIntegration.findOne({ _id: preflight.integrationId, revokedAt: null }).lean();
@@ -385,7 +386,7 @@ router.post('/deployments/plan', async (req, res) => {
     if (!Object.hasOwn(DEPLOYMENT_STRATEGIES, strategy)) throw new Error('Unsupported deployment strategy.');
     const { integration } = await loadDeployIntegration(integrationId, provider, environment, 'deploy');
     if (environment === 'production') await assertProductionReleaseReady();
-    if (['aws','azure','gcp','kubernetes'].includes(provider)) {
+    if (environment !== 'development' && ['aws','azure','gcp','kubernetes'].includes(provider)) {
       const stagedPreflight = await ProviderPreflight.findOne({ provider, environment: 'staging', artifactDigest: artifact.digest, serviceName: artifact.serviceName }).sort({ checkedAt: -1 }).lean();
       if (!stagedPreflight || stagedPreflight.status !== 'PASS') throw Object.assign(new Error('A passing latest staging provider preflight for this exact artifact is required before creating a deployment plan.'), { code: 'STAGING_PREFLIGHT_REQUIRED', statusCode: 409 });
       const stagedIntegration = await InfrastructureIntegration.findOne({ _id: stagedPreflight.integrationId, revokedAt: null }).lean();
@@ -551,6 +552,7 @@ router.post('/feature-flags/rollout', async (req, res) => {
     if (!reference) throw new Error('A change/ticket reference is required for feature flag changes.');
     const { integration } = await loadDeployIntegration(integrationId, 'launchdarkly', environment, 'manage');
     if (environment === 'production') await assertProductionReleaseReady();
+    if (environment !== 'development') {
     const stagedPreflight = await ProviderPreflight.findOne({ provider: 'launchdarkly', environment: 'staging', flagKey: key }).sort({ checkedAt: -1 }).lean();
     if (!stagedPreflight || stagedPreflight.status !== 'PASS') throw Object.assign(new Error('A passing latest LaunchDarkly staging preflight for this flag is required before rollout planning.'), { code: 'LAUNCHDARKLY_STAGING_PREFLIGHT_REQUIRED', statusCode: 409 });
     const stagedIntegration = await InfrastructureIntegration.findOne({ _id: stagedPreflight.integrationId, revokedAt: null }).lean();
@@ -559,6 +561,7 @@ router.post('/feature-flags/rollout', async (req, res) => {
     if (environment === 'production') {
       const stagedChange = await FlagChange.findOne({ flagKey: key, environment: 'staging', integrationId: stagedPreflight.integrationId, strategy, rolloutPercent: strategy === 'kill_switch' ? 0 : percent, status: { $in: ['SUCCEEDED','ROLLED_BACK'] } }).sort({ updatedAt: -1 }).lean();
       if (!stagedChange) throw Object.assign(new Error('The same LaunchDarkly flag strategy and percentage must complete in staging before production rollout planning.'), { code: 'LAUNCHDARKLY_STAGING_ROLLOUT_REQUIRED', statusCode: 409 });
+    }
     }
     const change = await FlagChange.create({
       flagKey: key, environment, strategy,
