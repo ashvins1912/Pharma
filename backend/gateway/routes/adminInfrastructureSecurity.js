@@ -2,7 +2,7 @@ import express from 'express';
 import { authenticateUser, requireSuperAdmin } from '../../middleware/auth.js';
 import {
   InfrastructureIntegration, encryptCredentialPayload, decryptCredentialPayload,
-  publicIntegration, writeInfrastructureAudit
+  publicIntegration, writeInfrastructureAudit, validateProviderTargetConfig
 } from '../../security/infrastructureCredentialVault.js';
 
 const router = express.Router();
@@ -71,7 +71,7 @@ router.get('/integrations', async (_req, res) => {
 
 router.post('/integrations', async (req, res) => {
   try {
-    const { name, provider, environment, authMethod, endpoint, credentials, requestedScopes = ['read', 'monitor'], requestedCapabilities = ['read', 'monitor'] } = req.body || {};
+    const { name, provider, environment, authMethod, endpoint, credentials, targetConfig = {}, requestedScopes = ['read', 'monitor'], requestedCapabilities = ['read', 'monitor'] } = req.body || {};
     const normalizedProvider = String(provider || '').toLowerCase();
     if (!/^[a-z][a-z0-9_-]{0,63}$/.test(normalizedProvider) || normalizedProvider === 'render') return res.status(400).json({ success: false, message: 'Enter a valid non-reserved provider identifier.' });
     if (!String(name || '').trim() || !['development', 'staging', 'production'].includes(environment) || !allowedAuth.has(authMethod)) return res.status(400).json({ success: false, message: 'Service name, environment and supported authentication method are required.' });
@@ -81,7 +81,7 @@ router.post('/integrations', async (req, res) => {
     const actor = actorOf(req);
     const integration = await InfrastructureIntegration.create({
       name: String(name).trim().slice(0, 120), provider: normalizedProvider, environment, authMethod,
-      endpoint: validateEndpoint(endpoint), secretEnvelope: encryptCredentialPayload(credentials),
+      endpoint: validateEndpoint(endpoint), targetConfig: validateProviderTargetConfig(normalizedProvider, targetConfig), secretEnvelope: encryptCredentialPayload(credentials),
       requestedScopes: [...new Set(requestedScopes)], requestedCapabilities: [...new Set(requestedCapabilities)],
       state: 'PENDING_VERIFICATION', complianceState: 'NOT_ASSESSED', createdBy: actor, updatedBy: actor
     });
@@ -90,6 +90,32 @@ router.post('/integrations', async (req, res) => {
     return res.status(201).json({ success: true, integration: publicIntegration(integration), message: 'Credentials encrypted and saved. Run verification before activation.' });
   } catch (error) {
     return res.status(400).json({ success: false, message: error.message || 'Could not save integration.' });
+  }
+});
+
+router.put('/integrations/:id/target-config', async (req, res) => {
+  const integration = await InfrastructureIntegration.findOne({ _id: req.params.id, revokedAt: null });
+  if (!integration) return res.status(404).json({ success: false, code: 'INTEGRATION_NOT_FOUND' });
+  try {
+    const targetConfig = validateProviderTargetConfig(integration.provider, req.body?.targetConfig || {});
+    integration.targetConfig = targetConfig;
+    integration.verification = null;
+    integration.grantedScopes = [];
+    integration.state = 'PENDING_VERIFICATION';
+    integration.complianceState = 'NOT_ASSESSED';
+    integration.lastVerifiedAt = null;
+    integration.updatedBy = actorOf(req);
+    await integration.save();
+    await writeInfrastructureAudit({
+      integrationId: integration._id, actor: actorOf(req),
+      event: 'PROVIDER_TARGET_CONFIGURATION_UPDATED', outcome: 'SUCCESS',
+      details: { provider: integration.provider, environment: integration.environment, targetKeys: Object.keys(targetConfig) },
+      requestId: requestIdOf(req)
+    });
+    res.set('Cache-Control', 'no-store');
+    return res.json({ success: true, integration: publicIntegration(integration) });
+  } catch (error) {
+    return res.status(400).json({ success: false, code: 'INVALID_PROVIDER_TARGET_CONFIG', message: error.message });
   }
 });
 
