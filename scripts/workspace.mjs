@@ -2,6 +2,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import net from 'node:net';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import crypto from 'node:crypto';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const mode = process.argv[2] || 'start';
@@ -11,6 +12,53 @@ if (!['start', 'dev'].includes(mode)) {
 }
 
 const children = [];
+const isLocalProduction = process.env.NODE_ENV === 'production';
+
+function configureLocalSecrets() {
+  if (isLocalProduction) {
+    const privateKey = String(process.env.PHARMA_JWT_PRIVATE_KEY || '').trim();
+    const publicKey = String(process.env.PHARMA_JWT_PUBLIC_KEY || '').trim();
+    if (privateKey.length < 100 || publicKey.length < 100) {
+      throw new Error('NODE_ENV=production requires real PHARMA_JWT_PRIVATE_KEY and PHARMA_JWT_PUBLIC_KEY values. Refusing to generate production signing keys.');
+    }
+    return;
+  }
+
+  const privateKey = String(process.env.PHARMA_JWT_PRIVATE_KEY || '').trim();
+  const publicKey = String(process.env.PHARMA_JWT_PUBLIC_KEY || '').trim();
+  if (privateKey.length < 100 || publicKey.length < 100
+      || !privateKey.includes('BEGIN PRIVATE KEY')
+      || !publicKey.includes('BEGIN PUBLIC KEY')) {
+    const pair = crypto.generateKeyPairSync('rsa', {
+      modulusLength: 3072,
+      privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+      publicKeyEncoding: { type: 'spki', format: 'pem' }
+    });
+    process.env.PHARMA_JWT_PRIVATE_KEY = pair.privateKey;
+    process.env.PHARMA_JWT_PUBLIC_KEY = pair.publicKey;
+    console.info('[workspace] Generated an ephemeral RSA-3072 JWT key pair for this local run. It is not written to disk and will change on restart.');
+  }
+
+  if (!process.env.CACHE_SERVICE_TOKEN || process.env.CACHE_SERVICE_TOKEN.length < 32) {
+    process.env.CACHE_SERVICE_TOKEN = crypto.randomBytes(32).toString('hex');
+    console.info('[workspace] Generated an ephemeral local cache-service token for this run.');
+  }
+
+  if (process.env.USE_REMOTE_CACHE_SERVICE !== 'true') {
+    process.env.CACHE_SERVICE_URL = 'http://127.0.0.1:8081';
+  }
+}
+
+function portIsOpen(port) {
+  return new Promise(resolve => {
+    const socket = net.createConnection({ host: '127.0.0.1', port });
+    const finish = value => { socket.destroy(); resolve(value); };
+    socket.setTimeout(500);
+    socket.once('connect', () => finish(true));
+    socket.once('error', () => finish(false));
+    socket.once('timeout', () => finish(false));
+  });
+}
 let stopping = false;
 
 function stop(code = 0) {
@@ -98,6 +146,30 @@ const pythonServices = [
 ];
 
 async function main() {
+  configureLocalSecrets();
+
+  let redisAvailable = await portIsOpen(Number(process.env.REDIS_PORT || 6379));
+  if (!redisAvailable && process.env.START_LOCAL_REDIS !== 'false') {
+    const redisCheck = spawnSync('redis-server', ['--version'], { stdio: 'ignore' });
+    if (redisCheck.status === 0) {
+      const redisPort = Number(process.env.REDIS_PORT || 6379);
+      launch('local-redis', 'redis-server', [
+        '--bind', '127.0.0.1', '--port', String(redisPort),
+        '--save', '', '--appendonly', 'no'
+      ]);
+      try {
+        await waitForPort('local-redis', redisPort, 10000);
+        redisAvailable = true;
+      } catch {
+        console.warn('[workspace] Local Redis did not become ready; shared cache will be disabled.');
+      }
+    }
+  }
+  if (!redisAvailable) {
+    process.env.CACHE_SERVICE_URL = '';
+    console.warn('[workspace] Redis is unavailable. Shared cache/event consumption is disabled for this run; install Redis or start it on localhost:6379.');
+  }
+
   const nodeRunner = launch('node-workspaces', process.execPath, [
     path.join(root, 'scripts/service-runner.js'), mode
   ]);
@@ -112,6 +184,7 @@ async function main() {
 
   if (canImportPythonModule(python, 'uvicorn')) {
     for (const service of pythonServices) {
+      if (service.name === 'caching-service' && !redisAvailable) continue;
       const missing = service.dependencies.filter(moduleName => !canImportPythonModule(python, moduleName));
       if (missing.length) {
         console.warn(`[workspace] ${service.name} skipped; missing Python modules: ${missing.join(', ')}. Install ${path.relative(root, path.join(service.cwd, 'requirements.txt'))}.`);
