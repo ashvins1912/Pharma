@@ -278,17 +278,12 @@ app.post('/v1/release-readiness',async(_req,res)=>{
     const preflight=await Evidence.findOne({provider,environment:'staging'}).sort({checkedAt:-1}).lean();
     const operation=provider==='launchdarkly'?'flag_rollout':'deploy';
     const rollbackOperation=provider==='launchdarkly'?'flag_rollback':'rollback';
-    const candidates=await Job.find({provider,environment:'staging',operation,status:provider==='launchdarkly'?'SUCCEEDED':{$in:['SUCCEEDED','ROLLED_BACK']}}).sort({createdAt:-1}).limit(20).lean();
-    let completed=null,rollback=null;
-    for(const candidate of candidates){
-      if(!preflight||new Date(candidate.createdAt)<new Date(preflight.checkedAt))continue;
-      const sourceField=provider==='launchdarkly'?'request.sourceRequestId':'request.sourceJobId';
-      const rollbackCandidate=await Job.findOne({provider,environment:'staging',operation:rollbackOperation,status:'ROLLED_BACK',[sourceField]:candidate.jobId}).lean();
-      if(rollbackCandidate&&new Date(rollbackCandidate.createdAt)>=new Date(candidate.createdAt)){completed=candidate;rollback=rollbackCandidate;break;}
-    }
+    const latestJob=await Job.findOne({provider,environment:'staging',operation}).sort({createdAt:-1}).lean();
+    const sourceField=provider==='launchdarkly'?'request.sourceRequestId':'request.sourceJobId';
+    const rollbackCandidate=latestJob?await Job.findOne({provider,environment:'staging',operation:rollbackOperation,status:'ROLLED_BACK',[sourceField]:latestJob.jobId}).lean():null;
+    const latestJobPassed=Boolean(latestJob&&new Date(latestJob.createdAt)>=new Date(preflight?.checkedAt||0)&&(provider==='launchdarkly'?latestJob.status==='SUCCEEDED':['SUCCEEDED','ROLLED_BACK'].includes(latestJob.status)));
     const preflightPassed=preflight?.status==='PASS';
-    const deploymentPassed=Boolean(completed);
-    const rollbackPassed=Boolean(rollback);
+    const deploymentPassed=latestJobPassed;
     results.push({provider,preflight:preflightPassed,deployment:deploymentPassed,rollback:rollbackPassed,ready:preflightPassed&&deploymentPassed&&rollbackPassed,evidenceRunId:preflight?.runId||null});
   }
   const ready=results.every(item=>item.ready);
