@@ -13,7 +13,7 @@ on:
       - 'frontend/src/components/admin/InfrastructureSecurityPanel.jsx'
       - 'frontend/src/components/admin/DevOpsDeploymentCenter.jsx'
   push:
-    branches: [feat/private-devops-provider-adapter, feat/private-devops-provider-adapter-main]
+    branches: [main]
     paths:
       - 'services/private-devops-adapter/**'
       - 'backend/gateway/routes/adminDevOps.js'
