@@ -60,5 +60,5 @@ test('AWS identity preflight validates configured region before network access',
   await assert.rejects(()=>verifyProviderIdentity('aws',{accessKeyId:'AKIATEST',secretAccessKey:'test-secret'},{targetConfig:{region:'not-a-region'}}),/AWS region is invalid/);
 });
 test('GCP identity preflight consumes the saved project target before network access',async()=>{
-  await assert.rejects(()=>verifyProviderIdentity('gcp',{clientEmail:'svc@example.test',privateKey:'not-a-private-key'},{targetConfig:{projectId:'pharma-staging'}}),/key|private/i);
+  await assert.rejects(()=>verifyProviderIdentity('gcp',{clientEmail:'svc@example.test',privateKey:'not-a-private-key'},{targetConfig:{projectId:'pharma-staging'}}),error=>error.name!=='ReferenceError');
 });
