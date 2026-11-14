@@ -48,3 +48,18 @@ Persisted evidence is available at adapter `GET /v1/evidence?environment=staging
 ## Validation boundary
 
 Repository CI covers adapter syntax/tests and builds the provider execution container; control-plane CI covers generated artifacts and frontend build. These checks do not substitute for provider credentials or live staging infrastructure. No AWS/Azure/GCP account, Kubernetes cluster or LaunchDarkly environment was accessed during this repository change. Live staging preflight, deployment and rollback evidence remains outstanding; production stays locked.
+
+
+## Enforced five-provider release gate
+
+The Admin API persists each staging preflight with its artifact digest (where applicable), provider integration ID, and SHA-256 digest of the verified non-secret target configuration. A target change or revoked/unverified staging integration makes the saved preflight stale.
+
+- Staging deployment planning requires a passing preflight for the exact artifact and selected staging integration.
+- Production deployment planning, approval and execution require the same artifact to have completed successfully in staging against the preflighted integration.
+- LaunchDarkly staging rollout planning requires a passing preflight for the allowlisted flag. Production rollout planning, approval and execution require the same flag strategy and percentage to have completed in staging.
+- A separate adapter readiness check requires fresh staging preflight, successful deployment/rollout and a completed rollback rehearsal for each of AWS, Azure, GCP, Kubernetes and LaunchDarkly.
+- Super Admin can inspect the five-provider readiness matrix at `GET /api/v1/admin/devops/release-readiness`. The UI displays preflight, deployment and rollback status per provider.
+- Production execution remains independently disabled unless `ALLOW_PRODUCTION_OPERATIONS=true`. Even after that release switch is explicitly enabled, existing separate Super Admin approval and typed confirmation are still required.
+- Emergency rollback endpoints remain available while new production deployment and flag rollout operations are locked.
+
+Terraform artifact validation rejects provisioners, external data sources/providers, null resources, terraform_data execution hooks and unreviewed modules. Remote provider driver URLs and the Admin-to-adapter connection require HTTPS (loopback HTTP is permitted only outside production).
