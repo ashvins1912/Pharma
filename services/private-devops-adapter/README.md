@@ -29,7 +29,7 @@ Optional:
 | Azure | OAuth client credentials; configured tenant and subscription scope | Terraform Azure Container Apps using existing Azure Blob state |
 | GCP | Service-account JWT and Cloud Resource Manager project lookup | Terraform Cloud Run using existing GCS state |
 | Kubernetes | HTTPS API /version and namespace read; exact hostname allowlist | Server-side dry-run, manifest apply, rollout health check and Deployment revision undo |
-| LaunchDarkly | Project/environment and allowlisted flag read | Approved percentage/kill-switch update preserving targeting rules; capture and restore prior flag state |
+| LaunchDarkly | Project/environment and allowlisted flag read | Canary/progressive percentage steps against an explicitly selected variation, blue/green 0/100 traffic switch or kill switch; targeting rules and non-target variation ratios are preserved |
 
 Credentials are decrypted only by the trusted Admin API and sent to the adapter over the private authenticated channel. The adapter uses them in memory and never stores them in job or evidence documents.
 
@@ -45,7 +45,7 @@ Target changes invalidate verification and operational scopes. Re-verify credent
 - Azure: tenant, subscription, resource group, location, Container Apps environment ID, allowed service names, and an existing Azure Blob backend.
 - GCP: project, region, allowed service names, and an existing GCS backend.
 - Kubernetes: namespace, allowed Deployment names, and an API hostname in KUBERNETES_API_ALLOWED_HOSTS.
-- LaunchDarkly: project key, environment key, and allowed flag keys.
+- LaunchDarkly: project key, environment key, allowed flag keys, and the exact variation ID selected for each non-kill-switch rollout.
 
 The adapter never creates or guesses accounts, subscriptions, projects, clusters, namespaces, services, feature flags, or Terraform state resources.
 
@@ -63,7 +63,7 @@ The adapter never creates or guesses accounts, subscriptions, projects, clusters
 
 Run Super Admin POST /providers/preflight for each provider in staging. AWS/Azure/GCP preflight runs Terraform init/validate/plan; Kubernetes performs server-side dry-run; LaunchDarkly verifies the configured environment and allowlisted flag. The Admin API stores evidence bound to the artifact digest and exact verified target configuration.
 
-Complete a staging deployment and rollback rehearsal for AWS, Azure, GCP and Kubernetes. For LaunchDarkly, complete an approved staging flag rollout and restore the captured prior state.
+Complete a staging deployment and rollback rehearsal for AWS, Azure, GCP and Kubernetes. For LaunchDarkly, complete an approved staging flag rollout against an explicitly selected variation (or kill switch) and restore the captured prior state. Blue/green is restricted to two-variation flags with a 0% or 100% switch.
 
 The adapter POST /v1/release-readiness and Admin GET /api/v1/admin/devops/release-readiness report the five-provider gate. Production planning, approval and execution remain blocked until every provider has passing staging preflight, deployment and rollback evidence. Evidence must be newer than the latest preflight; target changes invalidate the evidence. Emergency rollback remains available while new production deployments are locked.
 
