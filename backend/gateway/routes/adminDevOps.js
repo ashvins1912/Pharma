@@ -353,7 +353,7 @@ router.post('/deployments/plan', async (req, res) => {
       if (!stagedIntegration || stagedIntegration.verification?.authenticated !== true || stagedIntegration.verification?.discoveryPassed !== true || targetConfigDigest(stagedIntegration.targetConfig) !== stagedPreflight.targetDigest) throw Object.assign(new Error('Staging provider target changed or its verification expired; run staging preflight again.'), { code: 'STAGING_PREFLIGHT_STALE', statusCode: 409 });
       if (environment === 'staging' && String(stagedPreflight.integrationId) !== String(integration._id)) throw Object.assign(new Error('Run staging preflight again using the selected staging integration.'), { code: 'STAGING_PREFLIGHT_INTEGRATION_MISMATCH', statusCode: 409 });
       if (environment === 'production') {
-        const stagedDeployment = await Deployment.findOne({ provider, environment: 'staging', serviceName: artifact.serviceName, integrationId: stagedPreflight.integrationId, status: 'SUCCEEDED' }).sort({ updatedAt: -1 }).lean();
+        const stagedDeployment = await Deployment.findOne({ provider, environment: 'staging', serviceName: artifact.serviceName, integrationId: stagedPreflight.integrationId, status: { $in: ['SUCCEEDED','ROLLED_BACK'] } }).sort({ updatedAt: -1 }).lean();
         const stagedArtifact = stagedDeployment ? await Artifact.findById(stagedDeployment.artifactId).lean() : null;
         if (!stagedArtifact || stagedArtifact.digest !== artifact.digest) throw Object.assign(new Error('The exact artifact must complete successfully in staging against the preflighted target before production planning is enabled.'), { code: 'STAGING_DEPLOYMENT_REQUIRED', statusCode: 409 });
       }
@@ -508,7 +508,7 @@ router.post('/feature-flags/rollout', async (req, res) => {
     if (!stagedIntegration || stagedIntegration.verification?.authenticated !== true || stagedIntegration.verification?.discoveryPassed !== true || targetConfigDigest(stagedIntegration.targetConfig) !== stagedPreflight.targetDigest) throw Object.assign(new Error('LaunchDarkly staging target changed or its verification expired; run preflight again.'), { code: 'LAUNCHDARKLY_PREFLIGHT_STALE', statusCode: 409 });
     if (environment === 'staging' && String(stagedPreflight.integrationId) !== String(integration._id)) throw Object.assign(new Error('Run LaunchDarkly staging preflight again using the selected integration.'), { code: 'LAUNCHDARKLY_PREFLIGHT_INTEGRATION_MISMATCH', statusCode: 409 });
     if (environment === 'production') {
-      const stagedChange = await FlagChange.findOne({ flagKey: key, environment: 'staging', integrationId: stagedPreflight.integrationId, strategy, rolloutPercent: strategy === 'kill_switch' ? 0 : percent, status: 'SUCCEEDED' }).sort({ updatedAt: -1 }).lean();
+      const stagedChange = await FlagChange.findOne({ flagKey: key, environment: 'staging', integrationId: stagedPreflight.integrationId, strategy, rolloutPercent: strategy === 'kill_switch' ? 0 : percent, status: { $in: ['SUCCEEDED','ROLLED_BACK'] } }).sort({ updatedAt: -1 }).lean();
       if (!stagedChange) throw Object.assign(new Error('The same LaunchDarkly flag strategy and percentage must complete in staging before production rollout planning.'), { code: 'LAUNCHDARKLY_STAGING_ROLLOUT_REQUIRED', statusCode: 409 });
     }
     const change = await FlagChange.create({
