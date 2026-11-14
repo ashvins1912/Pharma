@@ -125,7 +125,7 @@ export function validateProviderTargetConfig(provider, input = {}) {
     if (!Array.isArray(value.subnetIds) || !value.subnetIds.length || value.subnetIds.length > 20 || value.subnetIds.some(id => typeof id !== 'string' || !/^subnet-[a-f0-9]{8,17}$/.test(id)) || !Array.isArray(value.securityGroupIds) || !value.securityGroupIds.length || value.securityGroupIds.length > 20 || value.securityGroupIds.some(id => typeof id !== 'string' || !/^sg-[a-f0-9]{8,17}$/.test(id))) throw new Error('AWS subnet and security-group allowlists are invalid.');
     if (value.desiredCount !== undefined && (!Number.isInteger(value.desiredCount) || value.desiredCount < 1 || value.desiredCount > 20)) throw new Error('AWS desiredCount must be an integer from 1 to 20.');
     if (value.assignPublicIp !== undefined && typeof value.assignPublicIp !== 'boolean') throw new Error('AWS assignPublicIp must be boolean.');
-    if (!/^arn:aws(?:-us-gov)?:iam::\d{12}:role\/[A-Za-z0-9+=,.@_/-]+$/.test(value.executionRoleArn)) throw new Error('AWS execution role ARN is invalid.');
+    if (!/^arn:aws(?:-us-gov)?:iam::\d{12}:role\/[A-Za-z0-9+=,.@_/-]+$/.test(value.executionRoleArn) || value.executionRoleArn.split(':')[4] !== value.clusterArn.split(':')[4]) throw new Error('AWS execution role ARN must belong to the configured ECS cluster account.');
   }
   if (provider === 'azure' && Object.keys(value).length) {
     if (!/^[0-9a-f-]{36}$/i.test(value.tenantId) || !/^[0-9a-f-]{36}$/i.test(value.subscriptionId)) throw new Error('Azure tenant and subscription IDs must be UUIDs.');
