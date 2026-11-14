@@ -171,6 +171,7 @@ app.post('/v1/deployments/status',async(req,res)=>{
       if(['RUNNING','SUCCEEDED','FAILED','ROLLED_BACK'].includes(result.status)) job.status=result.status;
       job.result={...(job.result||{}),providerStatus:['SUBMITTED','RUNNING','SUCCEEDED','FAILED','ROLLED_BACK'].includes(result.status)?result.status:'UNKNOWN',health:typeof result.health==='string'?result.health.slice(0,240):null};
       job.errorCode=SAFE_CODE.test(String(result.errorCode||''))?String(result.errorCode):null; job.updatedAt=new Date(); await job.save();
+      if(job.operation==='rollback'&&job.status==='ROLLED_BACK'){const source=await Job.findOne({jobId:job.request?.sourceJobId});if(source){source.status='ROLLED_BACK';source.updatedAt=new Date();await source.save();}}
     } catch(error) { return res.status(502).json({success:false,code:error.code||'STATUS_RECONCILIATION_FAILED',job:publicJob(job)}); }
   }
   return res.json({success:true,status:job.status,errorCode:job.errorCode,job:publicJob(job)});
@@ -189,6 +190,7 @@ app.post('/v1/deployments/rollback',validateBase,async(req,res)=>{
     const result=await providerCall(provider,'rollback',{jobId:job.jobId,sourceJobId:jobId,environment,changeReference,credentials,integration:{id:integration.id,endpoint:integration.endpoint,targetConfig:integration.targetConfig||{}},deployment:{...deployment,previousFiles:source.request?.previousFiles,previousImage:source.request?.previousImage}});
     job.status=['SUBMITTED','RUNNING','SUCCEEDED','FAILED','ROLLED_BACK'].includes(result.status)?result.status:'SUBMITTED';
     job.result={providerOperationId:result.operationId||null}; await job.save();
+    if(job.status==='ROLLED_BACK'){source.status='ROLLED_BACK';source.updatedAt=new Date();await source.save();}
     return res.status(202).json({success:true,accepted:true,status:job.status,job:publicJob(job)});
   } catch(error) { job.status='FAILED'; job.errorCode=error.code||'ROLLBACK_FAILED'; await job.save(); return res.status(error.statusCode||502).json({success:false,job:publicJob(job)}); }
 });
