@@ -486,6 +486,30 @@ router.post('/feature-flags/changes/:id/execute', async (req, res) => {
 });
 
 
+router.post('/feature-flags/changes/:id/rollback', async (req, res) => {
+  if (!validId(req.params.id)) return res.status(400).json({ success: false, message: 'Invalid feature-flag change ID.' });
+  const change = await FlagChange.findById(req.params.id);
+  if (!change) return res.status(404).json({ success: false, message: 'Feature-flag change not found.' });
+  if (change.status !== 'SUBMITTED' || !change.remoteRequestId) return res.status(409).json({ success: false, code: 'FLAG_ROLLBACK_NOT_AVAILABLE', message: 'Only a submitted rollout with a recorded prior-state snapshot can be rolled back.' });
+  if (req.body?.confirmation !== 'ROLLBACK FEATURE FLAG CHANGE') return res.status(400).json({ success: false, code: 'CONFIRMATION_REQUIRED', message: 'Type ROLLBACK FEATURE FLAG CHANGE to continue.' });
+  try {
+    const { integration, credentials } = await loadDeployIntegration(change.integrationId, 'launchdarkly', change.environment, 'manage');
+    const result = await adapterRequest('/v1/feature-flags/rollback', {
+      integration: { id: String(integration._id), provider: 'launchdarkly', environment: change.environment, endpoint: integration.endpoint, targetConfig: integration.targetConfig || {} },
+      credentials, sourceRequestId: change.remoteRequestId, flag: { key: change.flagKey }
+    });
+    if (!result.success || result.status !== 'ROLLED_BACK') throw new Error('LaunchDarkly did not confirm prior-state restoration.');
+    change.status = 'ROLLED_BACK';
+    change.remoteStatus = 'ROLLED_BACK';
+    await change.save();
+    await audit(req, 'LAUNCHDARKLY_FLAG_ROLLED_BACK', 'SUCCESS', 'feature_flag', change._id, { flagKey: change.flagKey, environment: change.environment, sourceRequestId: change.remoteRequestId });
+    return res.json({ success: true, change, message: 'The captured LaunchDarkly flag state was restored.' });
+  } catch (error) {
+    await audit(req, 'LAUNCHDARKLY_FLAG_ROLLBACK_FAILED', 'FAILED', 'feature_flag', change._id, { errorCode: error.code || 'FLAG_ROLLBACK_FAILED' });
+    return res.status(error.statusCode || 502).json({ success: false, code: error.code || 'FLAG_ROLLBACK_FAILED', message: error.message });
+  }
+});
+
 router.get('/audit', async (_req, res) => {
   const entries = await DevOpsAudit.find({}).sort({ occurredAt: -1 }).limit(200).lean();
   res.set('Cache-Control', 'private, no-store');
