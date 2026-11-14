@@ -158,6 +158,25 @@ router.get('/catalog', (_req, res) => res.json({
   safety: { arbitraryShell: false, remoteTerminal: false, secretsInArtifacts: false, productionApprovalRequired: true }
 }));
 
+router.post('/providers/preflight', async (req, res) => {
+  try {
+    const provider = String(req.body?.provider || '').toLowerCase();
+    const environment = String(req.body?.environment || '').toLowerCase();
+    if (!['aws', 'azure', 'gcp', 'kubernetes', 'launchdarkly'].includes(provider)) return res.status(400).json({ success: false, code: 'UNSUPPORTED_PROVIDER' });
+    if (environment !== 'staging') return res.status(403).json({ success: false, code: 'STAGING_ONLY_PREFLIGHT' });
+    const capability = provider === 'launchdarkly' ? 'manage' : 'deploy';
+    const { integration, credentials } = await loadDeployIntegration(req.body?.integrationId, provider, environment, capability);
+    const result = await adapterRequest('/v1/preflight', {
+      provider, environment, capabilities: integration.grantedScopes,
+      integration: { id: String(integration._id), provider, environment, endpoint: integration.endpoint }, credentials
+    });
+    await audit(req, 'PROVIDER_STAGING_PREFLIGHT', result.success ? 'PASS' : 'BLOCKED', 'integration', integration._id, { provider, environment, evidenceRunId: result.evidence?.runId || null, evidenceStatus: result.evidence?.status || 'UNKNOWN' });
+    return res.status(result.success ? 200 : 424).json(result);
+  } catch (error) {
+    return res.status(error.statusCode || 400).json({ success: false, code: error.code || 'PROVIDER_PREFLIGHT_FAILED', message: error.message });
+  }
+});
+
 router.post('/artifacts/generate', async (req, res) => {
   try {
     const generated = generateDeploymentFiles(req.body || {});
