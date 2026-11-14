@@ -1,0 +1,17 @@
+apiVersion: platform.devops-kit.io/v1alpha1
+kind: ServiceStackClaim
+metadata:
+  name: ${SERVICE_NAME}-${ENVIRONMENT}
+  namespace: ${NAMESPACE}
+spec:
+  provider: ${PROVIDER}
+  region: ${REGION}
+  parameters:
+    computeInstanceFamily: ${COMPUTE_INSTANCE_FAMILY}
+    nodeCount: ${NODE_COUNT}
+    databaseEnabled: ${DB_ENABLED}
+    databaseTier: ${DB_TIER}
+    cacheTier: ${CACHE_TIER}
+    complianceTier: ${COMPLIANCE_TIER}
+  writeConnectionSecretToRef:
+    name: ${SERVICE_NAME}-infra-conn

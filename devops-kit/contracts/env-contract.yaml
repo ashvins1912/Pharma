@@ -1,0 +1,71 @@
+apiVersion: devops-kit.io/v1alpha1
+kind: ServiceEnvironmentContract
+metadata:
+  name: orders-api
+  owner: platform-checkout-team
+  cost_center: cc-4092-commerce
+  environment: prod
+  version: "2.4.0"
+
+target:
+  layer: hybrid # iaas | paas | saas | hybrid
+  provider: aws # aws | gcp | azure | local | custom
+  region: us-east-1
+  control_plane: opentofu # opentofu | crossplane | pulumi | compose
+  runtime: kubernetes # kubernetes | ecs | cloud-run | docker-compose
+
+requirements:
+  workload_profile: api-realtime # api-realtime | batch-worker | event-stream | ml-inference
+  expected_rps: 3500
+  p99_latency_ms: 120
+  availability_sla: "99.95" # "99.9" | "99.95" | "99.99"
+  compliance_tier: pci # standard | pci | hipaa | gdpr
+  stateful_needs:
+    - relational-db
+    - in-memory-cache
+    - object-storage
+    - message-queue
+
+services:
+  iaas:
+    vpc_cidr: "10.42.0.0/16"
+    multi_az: true
+    private_subnets_only: true
+    kms_cmk_rotation: true
+  paas:
+    kubernetes_namespace: commerce-prod
+    service_mesh: istio
+    ingress_class: gateway-api
+    enable_hpa: true
+  saas:
+    edge_cdn_provider: cloudflare
+    identity_provider: auth0
+    observability_sink: datadog
+    managed_domains:
+      - api.orders.acme-commerce.io
+
+routing_and_injection:
+  public_domain: api.orders.acme-commerce.io
+  path_prefix: /v2/orders
+  traffic_strategy: canary-10-90 # rolling | canary-10-90 | blue-green
+  canary_weight_percent: 10
+  rate_limit_rpm: 180000
+  dependencies:
+    - auth-service
+    - payment-ledger
+  dynamic_env_rules:
+    AUTH_SERVICE_URL: "${discover.auth-service.internal_url}"
+    LEDGER_GRPC_ADDR: "${discover.payment-ledger.internal_url}"
+    DB_POOL_MAX: "${calc.optimal_db_pool}"
+    EDGE_WAF_MODE: "${saas.cloudflare.waf_mode}"
+    OIDC_ISSUER_URI: "${saas.auth0.issuer_url}"
+  feature_flags:
+    enable_instant_settlement: true
+    shadow_audit_stream: false
+
+day2:
+  auto_sleep_schedule: "never" # cron or "never" for prod; e.g. "0 20 * * 1-5" for dev/staging
+  max_monthly_budget_usd: 2500.0
+  secret_rotation_days: 30
+  auto_reload: true
+  drift_check_interval_minutes: 60

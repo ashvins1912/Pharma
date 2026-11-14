@@ -4,14 +4,21 @@
  */
 import express from 'express';
 import { authenticateUser, requireSuperAdmin } from '../../middleware/auth.js';
+import { requireDisplayPermission, requireModifyPermission } from '../../middleware/authorization.js';
 import { tenantService } from '../../services/tenant-service/TenantService.js';
 import { emailService } from '../../services/notification-service/EmailService.js';
 import { supabase } from '../../config/supabase.js';
 
 const router = express.Router();
 
-// Enforce authentication & Platform Super Admin role across all endpoints in this router
-router.use(authenticateUser, requireSuperAdmin);
+// Enforce authentication, Platform Super Admin role, and display/modify audit checks across all endpoints
+router.use(authenticateUser, requireSuperAdmin, (req, res, next) => {
+    const isRead = req.method === 'GET' || req.method === 'HEAD';
+    const validator = isRead
+        ? requireDisplayPermission('tenants.read', { resourceType: 'tenant' })
+        : requireModifyPermission('tenants.manage', { resourceType: 'tenant', auditOnAllow: true });
+    return validator(req, res, next);
+});
 
 /**
  * GET /api/v1/admin/tenants/smtp/config

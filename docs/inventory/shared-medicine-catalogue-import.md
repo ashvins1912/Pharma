@@ -113,18 +113,3 @@ Permanent deletion removes the batch document, staged record chunks, associated 
 
 Approved, published, partially published, failed, actively processing, merged and superseded batches cannot be deleted through this action. Published MedicineMaster records are never deleted by this endpoint.
 
-
-
-### Processing protection guard
-
-The Medicine Master worker applies a configurable resource and queue guard before accepting or claiming additional catalogue work:
-
-- MongoDB-leased worker slots enforce a global maximum number of active catalogue jobs across service instances sharing the same database (default 2).
-- New uploads are rejected with HTTP 429 when the queued-job limit is reached (default 10), or HTTP 503 while resource protection is active.
-- Worker claims pause when the operator sets `MEDICINE_CATALOGUE_PROCESSING_ENABLED=false`, or when configured Node heap, process RSS budget, or normalized one-minute host load thresholds are reached.
-- Worker slots use renewable MongoDB leases and are released on completion; expired leases are recoverable after process failure.
-- `GET /api/v1/inventory/catalogue/imports/processing-guard` exposes current queue depth, active jobs, limits, resource readings and protection reasons to platform Super Admins.
-
-Defaults are configurable through `MEDICINE_CATALOGUE_MAX_CONCURRENT_JOBS`, `MEDICINE_CATALOGUE_MAX_QUEUED_JOBS`, `MEDICINE_CATALOGUE_MAX_HEAP_PERCENT`, `MEDICINE_CATALOGUE_MAX_RSS_MB`, `MEDICINE_CATALOGUE_MAX_RSS_PERCENT`, `MEDICINE_CATALOGUE_MAX_CPU_LOAD_PERCENT`, `MEDICINE_CATALOGUE_WORKER_LEASE_MS` and `MEDICINE_CATALOGUE_WORKER_POLL_MS`. The queue cap is an admission check rather than a transactional reservation; concurrent requests near the cap can briefly race. CPU load is a normalized host one-minute load average, not a per-process CPU utilization measurement.
-
-Protection pauses new uploads/worker claims; it does not kill active processing, delete queued jobs, interrupt publish writes, or bypass the report-fingerprint approval and live-reconciliation gates. Existing upload-size and record-count limits remain unchanged.

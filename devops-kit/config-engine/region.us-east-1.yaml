@@ -1,0 +1,13 @@
+# Layer 2: Region-specific compliance and networking rules
+region: us-east-1
+compliance:
+  data_residency: US
+  kms_key_alias: alias/devops-kit-us-east-1
+  egress_nat_gateways: 3
+
+networking:
+  dns_zone: us-east-1.internal.acme.io
+  private_link_endpoints:
+    - s3
+    - secretsmanager
+    - sts

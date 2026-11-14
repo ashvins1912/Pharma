@@ -67,4 +67,24 @@ describe('API capability registry', () => {
       'tenants.read'
     );
   });
+
+  it('maps catalogue reconciliation and conflict resolution endpoints to inventory.catalogue.import', () => {
+    assert.equal(
+      resolveApiCapability('POST', '/api/v1/inventory/catalogue/imports/batch-1/reconcile')?.permission,
+      'inventory.catalogue.import'
+    );
+    assert.equal(
+      resolveApiCapability('POST', '/api/v1/inventory/catalogue/imports/batch-1/conflicts/resolve')?.permission,
+      'inventory.catalogue.import'
+    );
+    assert.equal(
+      resolveApiCapability('POST', '/api/v1/inventory/catalogue/imports/batch-1/approve')?.permission,
+      'inventory.catalogue.import'
+    );
+    assert.equal(
+      resolveApiCapability('POST', '/api/v1/inventory/catalogue/imports/batch-1/publish')?.permission,
+      'inventory.catalogue.import'
+    );
+  });
 });
+

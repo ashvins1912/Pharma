@@ -48,13 +48,13 @@ export default function AdminAlertBell({
             className="fixed inset-0 z-40 bg-slate-900/30 backdrop-blur-xs sm:bg-transparent"
           />
           <div className="fixed inset-x-3 top-16 sm:absolute sm:inset-auto sm:right-0 sm:top-full sm:mt-2 w-auto sm:w-96 max-w-md bg-white border border-slate-200 rounded-3xl shadow-2xl z-50 p-4 sm:p-5 space-y-4 animate-fade-in">
-            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3 gap-2">
               <div>
                 <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">
                   {t('dispensaryAlerts')} ({displayTotal})
                 </h4>
-                <p className="text-[10px] text-slate-400">{t('safetyThresholdMonitor')}</p>
-                <p className={`text-[10px] mt-1 ${alertError ? 'text-rose-600' : 'text-slate-400'}`} role="status" aria-live="polite">
+                <p className="text-[10px] text-slate-600">{t('safetyThresholdMonitor')}</p>
+                <p className={`text-[10px] mt-1 ${alertError ? 'text-rose-700 font-semibold' : 'text-slate-600'}`} role="status" aria-live="polite">
                   {alertLoading ? 'Checking live inventory…' : alertError ? `Inventory alerts unavailable: ${alertError}` : 'Live safety checks · refreshes every minute'}
                 </p>
               </div>
@@ -63,14 +63,16 @@ export default function AdminAlertBell({
                   type="button"
                   onClick={() => { if (loadInventoryAlerts) void loadInventoryAlerts(); }}
                   disabled={alertLoading}
-                  className="text-[10px] font-bold rounded-lg border border-slate-200 px-2.5 py-1.5 text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                  className="min-h-11 text-xs font-bold rounded-lg border border-slate-200 px-3 py-1.5 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
                 >
                   {alertLoading ? 'Checking…' : 'Refresh'}
                 </button>
               )}
               <button
+                type="button"
+                aria-label="Close alerts"
                 onClick={() => setIsOpen(false)}
-                className="text-slate-400 hover:text-slate-700 text-xs font-bold p-1 rounded-full hover:bg-slate-100"
+                className="min-h-11 min-w-11 inline-flex items-center justify-center text-slate-600 hover:text-slate-900 text-sm font-bold rounded-xl hover:bg-slate-100"
               >
                 ✕
               </button>
@@ -198,7 +200,7 @@ export default function AdminAlertBell({
             </div>
 
             <div className="pt-2 border-t border-slate-100 text-center">
-              <span className="text-[10px] text-slate-400">
+              <span className="text-[10px] text-slate-600">
                 {t('dispensarySafetyActive')}
               </span>
             </div>

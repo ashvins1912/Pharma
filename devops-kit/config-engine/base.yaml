@@ -1,0 +1,18 @@
+# Layer 1: Global defaults (lowest precedence)
+runtime:
+  log_level: INFO
+  telemetry_sample_rate: 0.1
+  graceful_shutdown_seconds: 30
+  http_keepalive_timeout_ms: 65000
+
+security:
+  tls_min_version: "1.3"
+  enforce_mtls: true
+  allow_public_buckets: false
+  require_resource_limits: true
+
+injection:
+  mount_path: /var/run/devops-kit/secrets
+  hot_reload_signal: SIGHUP
+  circuit_breaker_threshold: 5
+  circuit_breaker_reset_sec: 30

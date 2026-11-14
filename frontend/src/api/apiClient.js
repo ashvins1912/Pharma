@@ -1,6 +1,6 @@
 import axios from 'axios';
-import { normalizeApiError } from './apiErrors';
-import { resolveApiCapability } from './apiCapabilities';
+import { normalizeApiError } from './apiErrors.js';
+import { resolveApiCapability } from './apiCapabilities.js';
 
 let runtimeAccessToken = null;
 let sessionRefreshPromise = null;
@@ -125,14 +125,14 @@ async function revalidateAuthorization() {
 }
 
 
-const configuredApiBaseUrl = String(import.meta.env.VITE_API_URL || '/api').trim();
+const configuredApiBaseUrl = String(import.meta.env?.VITE_API_URL || '/api').trim();
 const rawApiBaseUrl = configuredApiBaseUrl.replace(/\/+$/, '');
 
 // Keep browser traffic same-origin in production. Render's static-site
 // /api/* rewrites forward requests to the API Gateway while preserving the
 // first-party HttpOnly session cookie. Local development can use Vite's proxy
 // or an explicitly configured API base URL.
-const apiBaseUrl = import.meta.env.PROD
+const apiBaseUrl = import.meta.env?.PROD
     ? ''
     : rawApiBaseUrl === '/api'
         ? ''
@@ -140,11 +140,53 @@ const apiBaseUrl = import.meta.env.PROD
             ? rawApiBaseUrl.slice(0, -4)
             : rawApiBaseUrl;
 
+export function parseRetryAfterMs(headerValue) {
+    if (headerValue === undefined || headerValue === null || headerValue === '') return 0;
+    const raw = String(headerValue).trim();
+    const seconds = Number(raw);
+    if (Number.isFinite(seconds)) return Math.max(0, Math.round(seconds * 1000));
+    const dateMs = Date.parse(raw);
+    return Number.isFinite(dateMs) ? Math.max(0, dateMs - Date.now()) : 0;
+}
+
+export function computeRetryDelayMs({
+    attempt = 0,
+    baseDelayMs = 400,
+    maxDelayMs = 8000,
+    retryAfterHeader = null,
+    random = Math.random
+} = {}) {
+    const safeAttempt = Math.max(0, Math.min(8, Number(attempt) || 0));
+    const retryAfterMs = parseRetryAfterMs(retryAfterHeader);
+    const exponentialCap = Math.min(maxDelayMs, baseDelayMs * (2 ** safeAttempt));
+    const jittered = Math.round(Math.max(0.25, Math.min(1, random())) * exponentialCap);
+    return Math.min(Math.max(maxDelayMs, retryAfterMs), Math.max(retryAfterMs, jittered));
+}
+
 const apiClient = axios.create({
     baseURL: apiBaseUrl,
     timeout: 10000,
     withCredentials: true
 });
+
+const inFlightGetRequests = new Map();
+const rawApiGet = apiClient.get.bind(apiClient);
+apiClient.get = (url, config = {}) => {
+    if (config?.__skipCoalescing || config?.signal) {
+        return rawApiGet(url, config);
+    }
+    const cacheKey = `${String(url || '')}?${JSON.stringify(config?.params || {})}`;
+    if (inFlightGetRequests.has(cacheKey)) {
+        return inFlightGetRequests.get(cacheKey);
+    }
+    const promise = rawApiGet(url, config).finally(() => {
+        if (inFlightGetRequests.get(cacheKey) === promise) {
+            inFlightGetRequests.delete(cacheKey);
+        }
+    });
+    inFlightGetRequests.set(cacheKey, promise);
+    return promise;
+};
 
 function getCsrfCookie() {
     if (typeof document === 'undefined') return null;
@@ -386,6 +428,32 @@ apiClient.interceptors.response.use(
             } catch {
                 // If retry fails, continue to normal rejection
             }
+        }
+
+        // Graceful 429 / 503 exponential backoff with full jitter and Retry-After
+        // support for idempotent GETs and keyed/explicitly retryable mutations.
+        const method = String(error.config?.method || 'get').toLowerCase();
+        const hasIdempotencyKey = Boolean(error.config?.headers?.['Idempotency-Key'] || error.config?.headers?.['idempotency-key']);
+        const isReconcileServiceCall = /\/imports\/[^/]+\/reconcile(?:\?|$)/.test(url);
+        const retryEligible = (status === 429 || status === 503)
+            && !isRefreshRequest
+            && !isCredentialSubmission
+            && !isSessionProbe
+            && (method === 'get' || hasIdempotencyKey || isReconcileServiceCall || error.config?.__retryOnRateLimit === true);
+        const currentBackoffAttempt = Number(error.config?.__pharmaRateLimitRetryCount || 0);
+        const maxBackoffRetries = Number.isInteger(error.config?.__maxRateLimitRetries) ? error.config.__maxRateLimitRetries : 3;
+        if (retryEligible && currentBackoffAttempt < maxBackoffRetries) {
+            const delayMs = computeRetryDelayMs({
+                attempt: currentBackoffAttempt,
+                retryAfterHeader: error.response?.headers?.['retry-after']
+            });
+            await new Promise(resolve => setTimeout(resolve, delayMs));
+            const retryConfig = {
+                ...error.config,
+                __pharmaRateLimitRetryCount: currentBackoffAttempt + 1,
+                headers: { ...(error.config?.headers || {}) }
+            };
+            return apiClient(retryConfig);
         }
 
         const normalized = normalizeApiError(error);

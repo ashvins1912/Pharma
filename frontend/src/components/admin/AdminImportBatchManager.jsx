@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { getReadableErrorMessage } from '../../utils/errorMessage';
 import apiClient from '../../api/apiClient';
 
 const editableFields = ['sku', 'name', 'price', 'stockQuantity', 'batchNumber', 'expiryDate', 'category', 'manufacturer', 'baseCostPrice', 'marginTier', 'discountPercentage', 'genericName', 'strength', 'form', 'description', 'imageUrl', 'requiresPrescription'];
@@ -36,7 +35,7 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
       setBatchItems(response.data.items || []);
       setServerPublishingEnabled(response.data.publishEnabled === true);
       setError('');
-    } catch (e) { setError(getReadableErrorMessage(e, 'Could not load previous import batches.')); }
+    } catch (e) { setError(e.response?.data?.message || 'Could not load previous import batches.'); }
   }, [stableHeaders]);
 
   const load = useCallback(async () => {
@@ -55,7 +54,7 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
       setSelected([]);
       setError('');
     } catch (e) {
-      setError(getReadableErrorMessage(e, 'Could not load staged import rows.'));
+      setError(e.response?.data?.message || 'Could not load staged import rows.');
     } finally {
       setLoading(false);
     }
@@ -78,7 +77,7 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
       setEditing(null);
       await load();
     } catch (e) {
-      setError(getReadableErrorMessage(e, 'Could not save row changes.'));
+      setError(e.response?.data?.message || 'Could not save row changes.');
     } finally { setBusy(false); }
   };
   const bulkAction = async action => {
@@ -97,7 +96,7 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
       await load();
       onInventoryChanged?.();
     } catch (e) {
-      setError(getReadableErrorMessage(e, 'Bulk operation failed. Refresh and review the selected rows.'));
+      setError(e.response?.data?.message || 'Bulk operation failed. Refresh and review the selected rows.');
     } finally { setBusy(false); }
   };
   const applyBulkEdit = async () => {
@@ -114,7 +113,7 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
       await load();
       setError(`Updated ${response.data.updated} staged row(s).`);
     } catch (e) {
-      setError(getReadableErrorMessage(e, 'Bulk row edit failed.'));
+      setError(e.response?.data?.message || 'Bulk row edit failed.');
     } finally { setBusy(false); }
   };
   const rowAction = async (row, action) => {
@@ -129,7 +128,7 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
       if (action === 'publish') onInventoryChanged?.();
       else onInventoryChanged?.();
     } catch (e) {
-      setError(getReadableErrorMessage(e, 'The row operation could not be completed.'));
+      setError(e.response?.data?.message || 'The row operation could not be completed.');
     } finally { setBusy(false); }
   };
   const revertBatch = async () => {
@@ -141,7 +140,7 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
       await load();
       onInventoryChanged?.();
     } catch (e) {
-      setError(getReadableErrorMessage(e, 'Batch revert failed.'));
+      setError(e.response?.data?.message || 'Batch revert failed.');
     } finally { setBusy(false); }
   };
 

@@ -21,8 +21,9 @@
 .app-footer__section { min-width: 0; }
 .app-footer__section h4 { margin-bottom: .9rem; font-size: .7rem; letter-spacing: .09em; }
 .app-footer__section ul { display: grid; gap: .65rem; }
-.app-footer__section button { min-height: 1.5rem; text-align: left; color: var(--footer-muted); font-size: .75rem; line-height: 1.4; }
+.app-footer__section button { min-height: 2rem; text-align: left; color: var(--footer-muted); font-size: .75rem; line-height: 1.4; border-radius: .375rem; transition: color 140ms ease; }
 .app-footer__section button:hover { color: #2563eb; }
+.app-footer__section button:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
 .app-footer__bottom { align-items: center; gap: 1rem 2rem; padding-top: 1.25rem; margin-top: 2.5rem; }
 .app-footer__bottom > p { max-width: 100%; }
 .app-footer__legal { justify-content: flex-end; gap: .65rem 1.25rem; }
@@ -236,18 +237,18 @@ html.dark .app-footer :where(.bg-slate-50) { background: #162236; border-color: 
   }
   .app-header__actions > button,
   .app-header__actions > button.app-header__menu-toggle {
-    width: 2.125rem;
-    min-width: 2.125rem;
-    height: 2.125rem;
-    flex: 0 0 2.125rem;
+    width: 2.5rem;
+    min-width: 2.5rem;
+    height: 2.5rem;
+    flex: 0 0 2.5rem;
     padding: 0;
-    border-radius: .7rem;
+    border-radius: .75rem;
   }
   .app-header__actions > button.app-header__sign-in {
     width: auto;
     min-width: max-content;
     flex: 0 0 auto;
-    padding-inline: .55rem;
+    padding-inline: .6rem;
   }
 }
 @media (max-width: 359px) {
@@ -258,10 +259,10 @@ html.dark .app-footer :where(.bg-slate-50) { background: #162236; border-color: 
   .app-header__actions { gap: .12rem; }
   .app-header__actions > button,
   .app-header__actions > button.app-header__menu-toggle {
-    width: 1.95rem;
-    min-width: 1.95rem;
-    height: 1.95rem;
-    flex-basis: 1.95rem;
+    width: 2.125rem;
+    min-width: 2.125rem;
+    height: 2.125rem;
+    flex-basis: 2.125rem;
   }
 }
 

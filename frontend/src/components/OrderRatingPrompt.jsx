@@ -1,5 +1,4 @@
 import React, { useRef, useState } from 'react';
-import { getReadableErrorMessage } from '../utils/errorMessage';
 import apiClient from '../api/apiClient';
 import { useLanguage } from '../context/LanguageContext';
 
@@ -26,7 +25,7 @@ export default function OrderRatingPrompt({ order, onClose, onSubmitted, onAlrea
       });
       await onSubmitted?.(String(order._id));
     } catch (requestError) {
-      const serverMessage = getReadableErrorMessage(requestError, '');
+      const serverMessage = String(requestError.response?.data?.message || '');
       if (requestError.status === 409 && /already (been )?submitted|already rated/i.test(serverMessage)) {
         await onAlreadySubmitted?.(String(order._id));
         return;

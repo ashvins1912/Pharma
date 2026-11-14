@@ -8,23 +8,11 @@ const positiveInteger = (value, fallback, max) => {
 export const config = {
   port: positiveInteger(process.env.PORT, 5101, 65535),
   mongoUri: process.env.MEDICINE_MASTER_MONGO_URI || process.env.INVENTORY_MONGO_URI,
-  mongoMaxPoolSize: positiveInteger(process.env.MONGO_MAX_POOL_SIZE, 10, 50),
   dbName: process.env.MEDICINE_MASTER_DB_NAME || process.env.INVENTORY_DB_NAME || 'pharma_inventory',
   serviceAuthSecret: process.env.SERVICE_AUTH_SECRET || '',
   serviceJwtIssuer: process.env.SERVICE_JWT_ISSUER || 'ashvin-pharmacy',
   serviceJwtAudience: process.env.MEDICINE_MASTER_SERVICE_JWT_AUDIENCE || 'medicine-master-service',
   maxUploadBytes: positiveInteger(process.env.MEDICINE_MASTER_IMPORT_MAX_FILE_BYTES, 110 * 1024 * 1024, 110 * 1024 * 1024),
-  vectorSearchEnabled: process.env.MEDICINE_VECTOR_SEARCH_ENABLED === 'true',
-  // Query embeddings are delegated to a separately deployed local-ONNX service.
-  vectorInferenceUrl: process.env.MEDICINE_VECTOR_INFERENCE_URL || '',
-  vectorInferenceToken: process.env.MEDICINE_VECTOR_INFERENCE_TOKEN || '',
-  vectorInferenceTimeoutMs: positiveInteger(process.env.MEDICINE_VECTOR_INFERENCE_TIMEOUT_MS, 1800, 10000),
-  vectorModel: process.env.MEDICINE_VECTOR_MODEL || 'onnx-community/all-MiniLM-L6-v2-ONNX',
-  vectorModelRevision: process.env.MEDICINE_VECTOR_MODEL_REVISION || 'main',
-  vectorDimensions: positiveInteger(process.env.MEDICINE_VECTOR_DIMENSIONS, 384, 4096),
-  vectorCollection: process.env.MEDICINE_VECTOR_COLLECTION || 'medicine_master_vector_index',
-  vectorStateCollection: process.env.MEDICINE_VECTOR_STATE_COLLECTION || 'medicine_master_vector_sync_state',
-  vectorIndex: process.env.MEDICINE_VECTOR_INDEX || 'medicine_master_vector_idx',
   loggingEnabled: process.env.LOGGING_ENABLED !== 'false'
 };
 

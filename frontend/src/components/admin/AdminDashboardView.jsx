@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { getReadableErrorMessage } from '../../utils/errorMessage';
 import apiClient from '../../api/apiClient';
 import AdminFulfillmentKanban from './AdminFulfillmentKanban';
 import AdminInventoryTable from './AdminInventoryTable';
@@ -21,12 +20,11 @@ import AdminOfferZoneManager from './AdminOfferZoneManager';
 import PlatformTenantsView from './PlatformTenantsView';
 import ContextualHelpBanner from '../common/ContextualHelpBanner';
 import PlatformAccessControl from './PlatformAccessControl';
+import RbacAccessGovernanceTab from './RbacAccessGovernanceTab';
 import LiveTelemetryTab from './LiveTelemetryTab';
 import RoleFeatureMatrixTab from './RoleFeatureMatrixTab';
 import AutomationTestCenterTab from './AutomationTestCenterTab';
 import FeatureHealthDashboard from './FeatureHealthDashboard';
-import DatabaseCleanupTask from './DatabaseCleanupTask';
-import InfrastructureOperations from './InfrastructureOperations';
 import TenantProfileDashboard from './TenantProfileDashboard';
 import { useLanguage } from '../../context/LanguageContext';
 import { getAdminMedicineRequests, getAdminPendingMedicineRequestCount } from '../../api/medicineRequestService';
@@ -116,6 +114,7 @@ export default function AdminDashboardView() {
     else if (canViewInventory) setAdminTab('inventory');
   }, [adminTab, canViewTenants, canViewFulfillment, canViewAdminRequests, canViewInventory]);
   const canManagePlatformAccess = isSuperAdmin && hasPermission('users.manage');
+  const canViewRbacGovernance = isSuperAdmin || hasAnyPermission(['users.read', 'users.manage']);
   const canReadWhatsApp = hasPermission('whatsapp.read');
   const canManageWhatsApp = hasPermission('whatsapp.manage');
   const [orders, setOrders] = useState([]);
@@ -175,7 +174,7 @@ export default function AdminDashboardView() {
       setSnapshotPagination(snapshot.pagination || { page: 1, limit: 10, total: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false });
       setDeliveredCount(Number(snapshot.deliveredCount) || 0);
     } catch (err) {
-      setOrdersError(getReadableErrorMessage(err, 'Could not load the order queue.'));
+      setOrdersError(err.message || 'Could not load the order queue.');
     } finally {
       setLoadingOrders(false);
     }
@@ -235,19 +234,18 @@ export default function AdminDashboardView() {
       canManageMembers && 'members',
       canViewTenants && 'tenants',
       canManagePlatformAccess && 'access',
+      canViewRbacGovernance && 'rbacGovernance',
       isSuperAdmin && 'serviceLogs',
       isSuperAdmin && 'telemetry',
       isSuperAdmin && 'matrix',
       isSuperAdmin && 'automation',
-      isSuperAdmin && 'featureHealth',
-      isSuperAdmin && 'databaseCleanup',
-      isSuperAdmin && 'infrastructureOperations'
+      isSuperAdmin && 'featureHealth'
     ].filter(Boolean);
     if (!allowedTabs.includes(adminTab)) setAdminTab(allowedTabs[0] || '');
   }, [
     adminTab, canViewFulfillment, canViewCSquare, canViewAdminRequests,
     canManageRiders, canViewPromotions, canViewSurplusSavings, canViewPayments, canViewInventory,
-    canImportMedicineMaster, canManageRoutes, canViewAudits, canManageMembers, canViewTenants, canManagePlatformAccess, isSuperAdmin
+    canImportMedicineMaster, canManageRoutes, canViewAudits, canManageMembers, canViewTenants, canManagePlatformAccess, canViewRbacGovernance, isSuperAdmin
   ]);
 
   // Derived Metrics
@@ -321,30 +319,29 @@ export default function AdminDashboardView() {
     tenantProfile: { category: t('peopleAndPharmacy'), title: t('tenantProfileBranches'), icon: '🏢' },
     tenants: { category: t('platformSettings'), title: t('platformTenants'), icon: '🌐' },
     access: { category: t('platformSettings'), title: t('securityAccess'), icon: '🛡️' },
+    rbacGovernance: { category: t('platformSettings'), title: 'Roles, Users & Audit Logs', icon: '🔐' },
     serviceLogs: { category: t('platformSettings'), title: t('systemActivity'), icon: '🧾' },
     telemetry: { category: t('platformSettings'), title: t('liveTelemetry'), icon: '📡' },
     matrix: { category: t('platformSettings'), title: t('roleFeatureMatrix'), icon: '📐' },
     automation: { category: t('platformSettings'), title: t('systemChecks'), icon: '🧪' },
-    featureHealth: { category: t('platformSettings'), title: t('systemHealth'), icon: '🩺' },
-    databaseCleanup: { category: 'Task Operations', title: 'Database Cleanup', icon: '🧹' },
-    infrastructureOperations: { category: 'Task Operations', title: 'Infrastructure & Resource Operations', icon: '☁️' }
+    featureHealth: { category: t('platformSettings'), title: t('systemHealth'), icon: '🩺' }
   }[adminTab] || { category: 'Operations', title: 'Workspace', icon: '⚡' };
 
   return (
     <div className="dashboard-shell dashboard-shell--command-center min-w-0 space-y-4 animate-fade-in">
       
       {/* Executive Command Header & Metric Highlights */}
-      <div className="dashboard-hero bg-slate-950 text-white rounded-3xl p-5 sm:p-6 shadow-xl space-y-5 border border-slate-800">
-        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 border-b border-slate-800/80 pb-4">
-          <div className="space-y-1 min-w-0">
-            <div className="flex items-center gap-2 text-xs font-semibold text-slate-400">
-              <span className="text-emerald-400 font-bold uppercase tracking-wider text-[11px]">{t('operationsDashboard')}</span>
+      <div className="dashboard-hero bg-white text-slate-900 rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-xs space-y-5 border border-slate-200">
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 border-b border-slate-200 pb-4">
+          <div className="space-y-1.5 min-w-0">
+            <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-600">
+              <span className="text-blue-700 font-bold uppercase tracking-wider text-[11px]">{t('operationsDashboard')}</span>
               <span aria-hidden="true">·</span>
               <span>Real-Time Dispensary Telemetry</span>
               <span aria-hidden="true">·</span>
-              <span className="text-slate-400 font-mono text-[11px]">{commandClock.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+              <span className="text-slate-600 font-mono text-[11px] tabular-nums">{commandClock.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
             </div>
-            <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-white flex items-center gap-2.5">
+            <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 flex items-center gap-2.5">
               <span>Dispensary Command Hub</span>
             </h2>
           </div>
@@ -355,7 +352,7 @@ export default function AdminDashboardView() {
               <button
                 type="button"
                 onClick={() => setAdminNewStockModalOpen(true)}
-                className="bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs px-4 py-2.5 rounded-xl shadow-sm transition cursor-pointer flex items-center gap-2 active:scale-95 shrink-0"
+                className="min-h-11 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-xs transition cursor-pointer flex items-center gap-2 active:scale-95 shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
               >
                 <span className="text-sm font-bold">+</span>
                 <span>{t('addMedicine')}</span>
@@ -366,9 +363,9 @@ export default function AdminDashboardView() {
               <button
                 type="button"
                 onClick={() => setAdminBulkImportModalOpen(true)}
-                className="bg-blue-600 hover:bg-blue-500 text-white font-black text-xs px-4 py-2.5 rounded-xl shadow-sm transition cursor-pointer flex items-center gap-2 active:scale-95 shrink-0"
+                className="min-h-11 bg-white hover:bg-slate-100 text-slate-900 border border-slate-200 font-bold text-xs px-4 py-2.5 rounded-xl shadow-xs transition cursor-pointer flex items-center gap-2 active:scale-95 shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
               >
-                <span>📥</span>
+                <span aria-hidden="true">📥</span>
                 <span>{t('bulkExcelIngestion')}</span>
               </button>
             )}
@@ -377,9 +374,9 @@ export default function AdminDashboardView() {
               <button
                 type="button"
                 onClick={() => { setAdminTab('medicineCatalogue'); document.getElementById('admin-workspace-content')?.scrollIntoView({ behavior: 'smooth' }); }}
-                className="rounded-xl border border-slate-700 bg-slate-900 hover:bg-slate-800 px-3.5 py-2.5 text-xs font-bold text-slate-200 transition cursor-pointer flex items-center gap-2 shrink-0"
+                className="min-h-11 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 px-3.5 py-2.5 text-xs font-bold text-slate-900 transition cursor-pointer flex items-center gap-2 shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
               >
-                <span>🧬</span>
+                <span aria-hidden="true">🧬</span>
                 <span>{t('importMedicineList')}</span>
               </button>
             )}
@@ -388,18 +385,18 @@ export default function AdminDashboardView() {
               <button
                 type="button"
                 onClick={() => setWhatsappModalOpen(true)}
-                className={`font-bold text-xs px-3.5 py-2.5 rounded-xl transition cursor-pointer flex items-center gap-2 shadow-xs shrink-0 ${
+                className={`min-h-11 font-bold text-xs px-3.5 py-2.5 rounded-xl transition cursor-pointer flex items-center gap-2 shadow-xs shrink-0 border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 ${
                   whatsappStatus.isConnected
-                    ? 'bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-emerald-500/30'
-                    : 'bg-amber-500 hover:bg-amber-400 text-slate-950 font-black animate-pulse'
+                    ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200'
+                    : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-200'
                 }`}
                 title={t('whatsappStatus')}
               >
-                <span>📲</span>
+                <span aria-hidden="true">📲</span>
                 <span>{whatsappStatus.isConnected ? t('whatsappConnected') : t('whatsappOfflineStatus')}</span>
               </button>
             ) : (
-              <span className="rounded-xl bg-slate-800 px-3.5 py-2.5 text-xs font-bold text-slate-300 border border-slate-700">
+              <span className="min-h-11 inline-flex items-center rounded-xl bg-slate-100 px-3.5 py-2.5 text-xs font-bold text-slate-700 border border-slate-200">
                 {whatsappStatus.isConnected ? t('whatsappConnected') : t('whatsappOfflineStatus')}
               </span>
             ))}
@@ -411,9 +408,9 @@ export default function AdminDashboardView() {
                   setAdminTab('automation');
                   document.getElementById('admin-workspace-content')?.scrollIntoView({ behavior: 'smooth' });
                 }}
-                className="bg-purple-900/80 hover:bg-purple-800 text-purple-200 border border-purple-700/50 font-bold text-xs px-3.5 py-2.5 rounded-xl transition cursor-pointer flex items-center gap-1.5 shrink-0"
+                className="min-h-11 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 font-bold text-xs px-3.5 py-2.5 rounded-xl transition cursor-pointer flex items-center gap-1.5 shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
               >
-                <span>🧪</span>
+                <span aria-hidden="true">🧪</span>
                 <span>Test Suite</span>
               </button>
             )}
@@ -421,94 +418,94 @@ export default function AdminDashboardView() {
         </div>
 
         {/* 4 Executive KPI Metric Cards */}
-        <div className="dashboard-metrics grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+        <div className="dashboard-metrics grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
           {canViewFulfillment && (
-            <div className="bg-slate-900/90 dark:bg-slate-900/90 border border-slate-800 rounded-2xl p-4 shadow-sm hover:border-slate-700 transition space-y-1.5">
-              <div className="flex items-center justify-between text-slate-400 text-[11px] font-bold uppercase tracking-wider">
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 shadow-xs space-y-2">
+              <div className="flex items-center justify-between text-slate-600 text-[11px] font-bold uppercase tracking-wider">
                 <span>Orders Queue</span>
-                <span className="text-indigo-400">📦 Total</span>
+                <span className="text-blue-700">Total</span>
               </div>
               <div className="flex items-baseline justify-between gap-2">
-                <span className="text-3xl font-black text-white font-mono tabular-nums">{totalOrders}</span>
-                <span className="text-xs font-extrabold text-amber-400 bg-amber-950/60 border border-amber-800/50 px-2 py-0.5 rounded-md">
+                <span className="text-3xl font-black text-slate-900 font-mono tabular-nums">{totalOrders}</span>
+                <span className="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md tabular-nums">
                   {activeCount} active
                 </span>
               </div>
-              <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden flex">
-                <div style={{ width: `${totalOrders ? Math.min(100, Math.round((deliveredCount / totalOrders) * 100)) : 0}%` }} className="bg-emerald-500 h-full transition-all" />
+              <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden flex">
+                <div style={{ width: `${totalOrders ? Math.min(100, Math.round((deliveredCount / totalOrders) * 100)) : 0}%` }} className="bg-emerald-600 h-full transition-all" />
                 <div style={{ width: `${totalOrders ? Math.min(100, Math.round((activeCount / totalOrders) * 100)) : 0}%` }} className="bg-amber-500 h-full transition-all" />
               </div>
-              <p className="text-[11px] text-slate-400 font-medium pt-0.5 flex justify-between">
+              <p className="text-xs text-slate-600 font-medium pt-0.5 flex justify-between">
                 <span>{deliveredCount} delivered</span>
-                <span className="text-slate-500 font-mono">{totalOrders ? Math.round((deliveredCount / totalOrders) * 100) : 0}% success</span>
+                <span className="text-slate-600 font-mono tabular-nums">{totalOrders ? Math.round((deliveredCount / totalOrders) * 100) : 0}% success</span>
               </p>
             </div>
           )}
 
           {hasPermission('inventory.read') && (
-            <div className="bg-slate-900/90 dark:bg-slate-900/90 border border-slate-800 rounded-2xl p-4 shadow-sm hover:border-slate-700 transition space-y-1.5">
-              <div className="flex items-center justify-between text-slate-400 text-[11px] font-bold uppercase tracking-wider">
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 shadow-xs space-y-2">
+              <div className="flex items-center justify-between text-slate-600 text-[11px] font-bold uppercase tracking-wider">
                 <span>Low Stock Alerts</span>
-                <span className="text-yellow-400">⚠️ Threshold</span>
+                <span className="text-amber-800">Threshold</span>
               </div>
               <div className="flex items-baseline justify-between gap-2">
-                <span className="text-3xl font-black text-yellow-400 font-mono tabular-nums">{inventoryAlerts.lowStockCount || 0}</span>
-                <span className="text-xs font-extrabold text-yellow-300 bg-yellow-950/60 border border-yellow-800/50 px-2 py-0.5 rounded-md">
+                <span className="text-3xl font-black text-amber-800 font-mono tabular-nums">{inventoryAlerts.lowStockCount || 0}</span>
+                <span className="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md">
                   ≤ 3 units
                 </span>
               </div>
-              <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
-                <div style={{ width: `${Math.min(100, (inventoryAlerts.lowStockCount || 0) * 15)}%` }} className="bg-yellow-500 h-full transition-all" />
+              <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
+                <div style={{ width: `${Math.min(100, (inventoryAlerts.lowStockCount || 0) * 15)}%` }} className="bg-amber-500 h-full transition-all" />
               </div>
-              <p className="text-[11px] text-slate-400 font-medium pt-0.5 flex justify-between">
+              <p className="text-xs text-slate-600 font-medium pt-0.5 flex justify-between items-center">
                 <span>Reorder threshold alert</span>
-                <button type="button" onClick={() => openWorkspaceTab('inventory')} className="text-yellow-400 hover:underline">View catalog →</button>
+                <button type="button" onClick={() => openWorkspaceTab('inventory')} className="text-blue-700 font-bold hover:underline cursor-pointer">View catalog →</button>
               </p>
             </div>
           )}
 
           {hasPermission('inventory.read') && (
-            <div className="bg-slate-900/90 dark:bg-slate-900/90 border border-slate-800 rounded-2xl p-4 shadow-sm hover:border-slate-700 transition space-y-1.5">
-              <div className="flex items-center justify-between text-slate-400 text-[11px] font-bold uppercase tracking-wider">
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 shadow-xs space-y-2">
+              <div className="flex items-center justify-between text-slate-600 text-[11px] font-bold uppercase tracking-wider">
                 <span>Expiring Stock</span>
-                <span className="text-rose-400">⏳ ≤30 Days</span>
+                <span className="text-rose-700">≤30 Days</span>
               </div>
               <div className="flex items-baseline justify-between gap-2">
-                <span className="text-3xl font-black text-amber-400 font-mono tabular-nums">{inventoryAlerts.expiringSoonCount || 0}</span>
+                <span className="text-3xl font-black text-slate-900 font-mono tabular-nums">{inventoryAlerts.expiringSoonCount || 0}</span>
                 {Boolean(inventoryAlerts.expiredCount) && (
-                  <span className="text-xs font-extrabold text-rose-400 bg-rose-950/60 border border-rose-800/50 px-2 py-0.5 rounded-md">
+                  <span className="text-xs font-bold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md tabular-nums">
                     {inventoryAlerts.expiredCount} expired
                   </span>
                 )}
               </div>
-              <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+              <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
                 <div style={{ width: `${Math.min(100, (inventoryAlerts.expiringSoonCount || 0) * 10)}%` }} className="bg-amber-500 h-full transition-all" />
               </div>
-              <p className="text-[11px] text-slate-400 font-medium pt-0.5 flex justify-between">
-                <span>Audit & surplus clearance</span>
-                <button type="button" onClick={() => openWorkspaceTab('surplusSavings')} className="text-amber-400 hover:underline">Surplus deal →</button>
+              <p className="text-xs text-slate-600 font-medium pt-0.5 flex justify-between items-center">
+                <span>Audit &amp; surplus clearance</span>
+                <button type="button" onClick={() => openWorkspaceTab('surplusSavings')} className="text-blue-700 font-bold hover:underline cursor-pointer">Surplus deal →</button>
               </p>
             </div>
           )}
 
           {canViewFulfillment && (
-            <div className="bg-slate-900/90 dark:bg-slate-900/90 border border-slate-800 rounded-2xl p-4 shadow-sm hover:border-slate-700 transition space-y-1.5">
-              <div className="flex items-center justify-between text-slate-400 text-[11px] font-bold uppercase tracking-wider">
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 shadow-xs space-y-2">
+              <div className="flex items-center justify-between text-slate-600 text-[11px] font-bold uppercase tracking-wider">
                 <span>Gross Queue Value</span>
-                <span className="text-emerald-400">₹ Revenue</span>
+                <span className="text-emerald-700">Revenue</span>
               </div>
               <div className="flex items-baseline justify-between gap-2">
-                <span className="text-3xl font-black text-emerald-400 font-mono tabular-nums">₹{totalRevenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
-                <span className="text-xs font-extrabold text-emerald-300 bg-emerald-950/60 border border-emerald-800/50 px-2 py-0.5 rounded-md">
+                <span className="text-3xl font-black text-emerald-700 font-mono tabular-nums">₹{totalRevenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+                <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
                   {dashboardPeriod}
                 </span>
               </div>
-              <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
-                <div className="bg-emerald-500 h-full w-3/4 transition-all" />
+              <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
+                <div className="bg-emerald-600 h-full w-3/4 transition-all" />
               </div>
-              <p className="text-[11px] text-slate-400 font-medium pt-0.5 flex justify-between">
+              <p className="text-xs text-slate-600 font-medium pt-0.5 flex justify-between">
                 <span>Avg: ₹{(totalOrders ? Math.round(totalRevenue / totalOrders) : 0).toLocaleString('en-IN')} / order</span>
-                <span className="text-slate-400 font-mono">Live</span>
+                <span className="text-slate-600 font-mono">Live</span>
               </p>
             </div>
           )}
@@ -520,16 +517,16 @@ export default function AdminDashboardView() {
 
       {/* WhatsApp Disconnection Warning Banner */}
       {!whatsappStatus.isConnected && (
-        <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800/70 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-amber-950 dark:text-amber-200 shadow-xs animate-fade-in">
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-amber-900 shadow-xs animate-fade-in">
           <div className="flex items-start sm:items-center gap-3 min-w-0">
-            <div className="w-9 h-9 rounded-xl bg-amber-200 dark:bg-amber-900/80 text-amber-950 dark:text-amber-200 flex items-center justify-center text-lg flex-shrink-0 font-bold">
+            <div className="w-10 h-10 rounded-xl bg-amber-100 border border-amber-200 text-amber-900 flex items-center justify-center text-lg flex-shrink-0 font-bold" aria-hidden="true">
               📲
             </div>
             <div className="min-w-0 flex-1">
-              <h4 className="font-extrabold text-xs sm:text-sm text-amber-950 dark:text-amber-100 tracking-tight">
+              <h4 className="font-extrabold text-xs sm:text-sm text-amber-900 tracking-tight">
                 {t('missDeliveryUpdatesTitle')}
               </h4>
-              <p className="text-xs text-amber-900 dark:text-amber-300 mt-0.5 leading-snug">
+              <p className="text-xs text-amber-800 mt-0.5 leading-snug">
                 {t('whatsappDisconnectedDesc')}
               </p>
             </div>
@@ -538,7 +535,7 @@ export default function AdminDashboardView() {
             <button
               type="button"
               onClick={() => setWhatsappModalOpen(true)}
-              className="bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl transition cursor-pointer flex items-center gap-2 flex-shrink-0 shadow-xs"
+              className="min-h-11 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition cursor-pointer flex items-center gap-2 flex-shrink-0 shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
             >
               <span>{t('linkWhatsAppQr')}</span>
             </button>
@@ -548,21 +545,21 @@ export default function AdminDashboardView() {
 
       {/* Command Center Workspace Toolbar */}
       <section className="dashboard-workspace dashboard-workspace--command-center space-y-4" aria-labelledby="operations-workspace-title">
-        <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-xs">
+        <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
           <div>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">{t('operationsDashboard')}</span>
-            <h3 id="operations-workspace-title" className="text-lg font-black text-slate-900 dark:text-white">{t('dispensaryCommandCenter')}</h3>
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600 block">{t('operationsDashboard')}</span>
+            <h3 id="operations-workspace-title" className="text-lg font-black text-slate-900">{t('dispensaryCommandCenter')}</h3>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
             {(canViewFulfillment || canViewAdminRequests) && (
               <div className="flex items-center gap-2">
-                <label htmlFor="operations-date-range" className="text-xs font-bold text-slate-600 dark:text-slate-400 shrink-0">Period:</label>
+                <label htmlFor="operations-date-range" className="text-xs font-bold text-slate-700 shrink-0">Period:</label>
                 <select
                   id="operations-date-range"
                   value={dashboardPeriod}
                   onChange={event => { setDashboardPeriod(event.target.value); setActiveOrdersPage(1); }}
-                  className="rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-1.5 text-xs font-extrabold text-slate-900 dark:text-slate-100 cursor-pointer"
+                  className="min-h-11 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-900 cursor-pointer focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600"
                 >
                   {DASHBOARD_PERIODS.map(period => <option key={period.value} value={period.value}>{period.label}</option>)}
                 </select>
@@ -572,9 +569,9 @@ export default function AdminDashboardView() {
         </header>
 
         {/* Toolbar Search & Signal Badges */}
-        <div className="dashboard-command-toolbar flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-slate-100 dark:bg-slate-900/60 p-2.5 rounded-2xl border border-slate-200 dark:border-slate-800">
+        <div className="dashboard-command-toolbar flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-slate-100 p-2.5 rounded-2xl border border-slate-200">
           <label className="dashboard-command-search relative flex-1 flex items-center" htmlFor="command-workspace-search">
-            <span className="absolute left-3 text-slate-400 text-sm" aria-hidden="true">🔍</span>
+            <span className="absolute left-3 text-slate-500 text-sm" aria-hidden="true">🔍</span>
             <input
               id="command-workspace-search"
               type="search"
@@ -582,13 +579,13 @@ export default function AdminDashboardView() {
               onChange={event => setWorkspaceSearch(event.target.value)}
               placeholder={`${t('searchSections')} (e.g. Orders, Inventory, Riders)...`}
               autoComplete="off"
-              className="w-full pl-9 pr-8 py-2 text-xs font-medium rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              className="min-h-11 w-full pl-9 pr-9 py-2 text-xs font-medium rounded-xl border border-slate-200 bg-white text-slate-900 placeholder:text-slate-500 focus:ring-2 focus:ring-blue-600 focus:outline-none"
             />
             {workspaceSearch && (
               <button
                 type="button"
                 onClick={() => setWorkspaceSearch('')}
-                className="absolute right-2.5 text-slate-400 hover:text-slate-600 text-xs p-1"
+                className="min-h-9 min-w-9 flex items-center justify-center absolute right-1.5 text-slate-600 hover:text-slate-900 text-xs p-1 cursor-pointer"
                 aria-label="Clear search"
               >
                 ✕
@@ -596,20 +593,20 @@ export default function AdminDashboardView() {
             )}
           </label>
 
-          <div className="dashboard-command-signals flex flex-wrap items-center gap-1.5" aria-label={t('needsAttention')}>
+          <div className="dashboard-command-signals flex flex-wrap items-center gap-2" aria-label={t('needsAttention')}>
             {canViewAdminRequests && (
               <button
                 type="button"
                 onClick={() => openWorkspaceTab('requests')}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                className={`min-h-11 px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 ${
                   pendingMedicineRequestCount > 0
-                    ? 'bg-rose-100 dark:bg-rose-950/80 text-rose-800 dark:text-rose-200 border border-rose-300 dark:border-rose-800'
-                    : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
+                    ? 'bg-rose-50 text-rose-700 border-rose-200'
+                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
                 }`}
               >
-                <span>📋</span>
+                <span aria-hidden="true">📋</span>
                 <span>{t('requests')}</span>
-                <strong className="font-mono tabular-nums bg-slate-200/80 dark:bg-slate-700 px-1.5 py-0.5 rounded text-[11px]">{pendingMedicineRequestCount}</strong>
+                <strong className="font-mono tabular-nums bg-white/80 border border-slate-200 px-1.5 py-0.5 rounded text-xs">{pendingMedicineRequestCount}</strong>
               </button>
             )}
 
@@ -617,15 +614,15 @@ export default function AdminDashboardView() {
               <button
                 type="button"
                 onClick={() => openWorkspaceTab('inventory')}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                className={`min-h-11 px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 ${
                   (inventoryAlerts.lowStockCount || 0) > 0
-                    ? 'bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-800'
-                    : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
+                    ? 'bg-amber-50 text-amber-800 border-amber-200'
+                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
                 }`}
               >
-                <span>⚠️</span>
+                <span aria-hidden="true">⚠️</span>
                 <span>{t('lowStockLabel')}</span>
-                <strong className="font-mono tabular-nums bg-slate-200/80 dark:bg-slate-700 px-1.5 py-0.5 rounded text-[11px]">{inventoryAlerts.lowStockCount || 0}</strong>
+                <strong className="font-mono tabular-nums bg-white/80 border border-slate-200 px-1.5 py-0.5 rounded text-xs">{inventoryAlerts.lowStockCount || 0}</strong>
               </button>
             )}
 
@@ -633,11 +630,11 @@ export default function AdminDashboardView() {
               <button
                 type="button"
                 onClick={() => openWorkspaceTab('fulfillment')}
-                className="px-3 py-1.5 rounded-xl text-xs font-bold bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 transition flex items-center gap-1.5 cursor-pointer"
+                className="min-h-11 px-3.5 py-2 rounded-xl text-xs font-bold bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 transition flex items-center gap-2 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
               >
-                <span>📦</span>
+                <span aria-hidden="true">📦</span>
                 <span>{t('activeOrders')}</span>
-                <strong className="font-mono tabular-nums bg-slate-200/80 dark:bg-slate-700 px-1.5 py-0.5 rounded text-[11px]">{activeCount}</strong>
+                <strong className="font-mono tabular-nums bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded text-xs">{activeCount}</strong>
               </button>
             )}
           </div>
@@ -650,6 +647,7 @@ export default function AdminDashboardView() {
               id: 'orders',
               title: `${t('orders')} & ${t('requests')}`,
               items: [
+                { tab: 'operationsConsole', label: 'Operations Screen', icon: '🧭', externalUrl: '/admin/operations', sameTab: true },
                 canViewFulfillment && { tab: 'fulfillment', label: t('fulfillmentQueue'), icon: '📦', count: orders.length },
                 canViewAdminRequests && { tab: 'requests', label: t('medicineRequests'), icon: '📋', count: pendingMedicineRequestCount, tone: 'attention' },
                 canViewCSquare && { tab: 'csquare', label: 'C-Square', icon: '🔗' }
@@ -696,19 +694,12 @@ export default function AdminDashboardView() {
               items: [
                 canViewTenants && { tab: 'tenants', label: t('platformTenants'), icon: '🌐', tone: 'governance' },
                 canManagePlatformAccess && { tab: 'access', label: t('securityAccess'), icon: '🛡️', tone: 'governance' },
+                canViewRbacGovernance && { tab: 'rbacGovernance', label: 'Roles & Access Audit', icon: '🔐', tone: 'governance' },
                 isSuperAdmin && { tab: 'serviceLogs', label: t('systemActivity'), icon: '🧾', tone: 'governance' },
                 isSuperAdmin && { tab: 'telemetry', label: t('liveTelemetry'), icon: '📡', tone: 'governance' },
                 isSuperAdmin && { tab: 'matrix', label: t('roleFeatureMatrix'), icon: '📐', tone: 'governance' },
                 isSuperAdmin && { tab: 'automation', label: t('systemChecks'), icon: '🧪', tone: 'governance' },
                 isSuperAdmin && { tab: 'featureHealth', label: t('systemHealth'), icon: '🩺', tone: 'governance' }
-              ]
-            },
-            {
-              id: 'taskOperations',
-              title: 'Task Operations',
-              items: [
-                isSuperAdmin && { tab: 'databaseCleanup', label: 'Database Cleanup', icon: '🧹', tone: 'governance' },
-                isSuperAdmin && { tab: 'infrastructureOperations', label: 'Infrastructure & Resources', icon: '☁️', tone: 'governance' }
               ]
             }
           ].map(group => {
@@ -725,14 +716,14 @@ export default function AdminDashboardView() {
                     <a
                       key={item.tab}
                       href={item.externalUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                      target={item.sameTab ? undefined : '_blank'}
+                      rel={item.sameTab ? undefined : 'noopener noreferrer'}
                       className="dashboard-nav-item dashboard-nav-item--external"
-                      aria-label={`Open ${item.label} in a new tab`}
+                      aria-label={item.sameTab ? `Open ${item.label}` : `Open ${item.label} in a new tab`}
                     >
                       <span className="dashboard-nav-item-icon" aria-hidden="true">{item.icon}</span>
                       <span className="dashboard-nav-item-label">{item.label}</span>
-                      <span className="dashboard-nav-item-chevron" aria-hidden="true">↗</span>
+                      <span className="dashboard-nav-item-chevron" aria-hidden="true">{item.sameTab ? '›' : '↗'}</span>
                     </a>
                   ) : renderWorkspaceItem(item.tab, item.label, item.icon, item.count === 0 && item.tone === 'attention' ? null : item.count, item.tone || 'default'))}
                 </div>
@@ -745,13 +736,13 @@ export default function AdminDashboardView() {
       {/* Main Workspace Display Header & Canvas */}
       <main className="dashboard-content" id="admin-workspace-content" tabIndex="-1">
         {/* Workspace Breadcrumb Header */}
-        <header className="flex items-center justify-between gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl px-5 py-3.5 shadow-xs">
-          <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+        <header className="flex flex-wrap items-center justify-between gap-3 bg-white border border-slate-200 rounded-2xl px-5 py-3.5 shadow-xs">
+          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
             <span>Operations</span>
             <span aria-hidden="true">/</span>
-            <span className="font-semibold text-slate-700 dark:text-slate-300">{activeTabMeta.category}</span>
+            <span className="font-semibold text-slate-700">{activeTabMeta.category}</span>
             <span aria-hidden="true">/</span>
-            <span className="font-extrabold text-slate-900 dark:text-white flex items-center gap-1.5">
+            <span className="font-extrabold text-slate-900 flex items-center gap-1.5">
               <span>{activeTabMeta.icon}</span>
               <span>{activeTabMeta.title}</span>
             </span>
@@ -760,7 +751,7 @@ export default function AdminDashboardView() {
           <button
             type="button"
             onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-            className="text-[11px] font-bold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 flex items-center gap-1"
+            className="min-h-11 px-3 text-xs font-bold text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-xl flex items-center gap-1 transition"
           >
             <span>↑ Top</span>
           </button>
@@ -773,6 +764,9 @@ export default function AdminDashboardView() {
 
         <div className="admin-screen admin-screen--access"><PlatformAccessControl /></div>
       )}
+      {adminTab === 'rbacGovernance' && canViewRbacGovernance && (
+        <div className="admin-screen admin-screen--rbac-governance"><RbacAccessGovernanceTab /></div>
+      )}
       {adminTab === 'telemetry' && isSuperAdmin && (
         <div className="admin-screen admin-screen--telemetry"><LiveTelemetryTab /></div>
       )}
@@ -784,12 +778,6 @@ export default function AdminDashboardView() {
       )}
       {adminTab === 'featureHealth' && isSuperAdmin && (
         <div className="admin-screen admin-screen--feature-health"><FeatureHealthDashboard /></div>
-      )}
-      {adminTab === 'databaseCleanup' && isSuperAdmin && (
-        <div className="admin-screen admin-screen--database-cleanup"><DatabaseCleanupTask /></div>
-      )}
-      {adminTab === 'infrastructureOperations' && isSuperAdmin && (
-        <div className="admin-screen admin-screen--infrastructure-operations"><InfrastructureOperations onOpenDatabaseCleanup={() => setAdminTab('databaseCleanup')} /></div>
       )}
       {adminTab === 'members' && canManageMembers && <div className="admin-screen admin-screen--members"><TenantStaffManager tenantId={activeTenantId} /></div>}
       {adminTab === 'serviceLogs' && isSuperAdmin && <div className="admin-screen admin-screen--service-logs"><ServiceLogsTab /></div>}
@@ -909,7 +897,7 @@ export default function AdminDashboardView() {
           </div>
 
           {auditLogs.length === 0 ? (
-            <div className="py-12 text-center text-slate-400 text-xs">
+            <div className="py-12 text-center text-slate-600 text-xs">
               {t('noInventoryChangesRecorded')}
             </div>
           ) : (
@@ -917,7 +905,7 @@ export default function AdminDashboardView() {
             <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
-                  <tr className="border-b border-slate-200 text-slate-400 text-[10px] font-extrabold uppercase tracking-wider">
+                  <tr className="border-b border-slate-200 text-slate-600 text-[10px] font-extrabold uppercase tracking-wider">
                     <th className="py-2.5 px-3">{t('timestamp')}</th>
                     <th className="py-2.5 px-3">{t('eventReference')}</th>
                     <th className="py-2.5 px-3">{t('skuMedicine')}</th>
@@ -929,38 +917,38 @@ export default function AdminDashboardView() {
                 <tbody className="divide-y divide-slate-100">
                   {auditLogs.map((log, idx) => (
                     <tr key={idx} className="hover:bg-slate-50">
-                      <td className="py-2.5 px-3 text-slate-500 text-[11px]">
+                      <td className="py-2.5 px-3 text-slate-600 text-[11px]">
                         {new Date(log.timestamp).toLocaleString()}
                       </td>
-                      <td className="py-2.5 px-3 font-mono text-[11px] text-slate-500">
+                      <td className="py-2.5 px-3 font-mono text-[11px] text-slate-600">
                         <span className="block">{log.eventType === 'DELIVERY' ? 'Delivered order' : 'Bulk import'}</span>
                         {log.importId}
                       </td>
                       <td className="py-2.5 px-3">
                         <span className="font-bold text-slate-900 block">{log.name}</span>
-                        <span className="text-[10px] text-slate-400 font-mono">{log.sku}</span>
+                        <span className="text-[10px] text-slate-600 font-mono">{log.sku}</span>
                       </td>
                       <td className="py-2.5 px-3">
                         {log.eventType === 'DELIVERY' ? (
                           <strong className="font-bold text-rose-700">−{log.quantity} delivered</strong>
                         ) : (
                           <>
-                            <span className="text-slate-400">{log.previousStock}</span> →{' '}
+                            <span className="text-slate-600">{log.previousStock}</span> →{' '}
                             <strong className="text-emerald-700 font-bold">{log.newStock}</strong>
                           </>
                         )}
                       </td>
                       <td className="py-2.5 px-3">
                         {log.eventType === 'DELIVERY' ? (
-                          <span className="text-slate-500">₹{log.newPrice} per unit</span>
+                          <span className="text-slate-600">₹{log.newPrice} per unit</span>
                         ) : (
                           <>
-                            <span className="text-slate-400">₹{log.previousPrice}</span> →{' '}
+                            <span className="text-slate-600">₹{log.previousPrice}</span> →{' '}
                             <strong className="text-slate-900 font-bold">₹{log.newPrice}</strong>
                           </>
                         )}
                       </td>
-                      <td className="py-2.5 px-3 text-slate-600 font-medium">{log.adminId}</td>
+                      <td className="py-2.5 px-3 text-slate-700 font-medium">{log.adminId}</td>
                     </tr>
                   ))}
                 </tbody>

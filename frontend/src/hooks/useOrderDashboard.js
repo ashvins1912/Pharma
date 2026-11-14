@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { getReadableErrorMessage } from '../utils/errorMessage';
 import apiClient from '../api/apiClient';
 import { useAuth } from '../context/AuthContext';
 import { useTenant } from '../context/TenantContext';
@@ -35,7 +34,7 @@ export function useOrderDashboard() {
                 : [];
             setOrders(orderArray);
         } catch (err) {
-            setError(getReadableErrorMessage(err, 'Could not load order dashboard.'));
+            setError(err.response?.data?.message || err.message || 'Could not load order dashboard.');
         } finally {
             setLoading(false);
         }
@@ -104,7 +103,7 @@ export function useOrderDashboard() {
             await loadOrders();
             return res.data;
         } catch (err) {
-            throw new Error(getReadableErrorMessage(err, 'Order approval failed.'));
+            throw new Error(err.response?.data?.message || err.message || 'Order approval failed.');
         } finally {
             setAssignmentExecuting(false);
         }

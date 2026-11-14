@@ -1,4 +1,5 @@
-import 'dotenv/config';
+import { pathToFileURL } from 'node:url';
+await import('dotenv/config').catch(() => {});
 
 // The standalone admin process may use its own deployment secret name.
 // Existing admin route models currently share the platform database contract;
@@ -10,7 +11,7 @@ const [
   expressModule, cookieParserModule, mongooseModule,
   envModule, dbModule, contextModule, corsModule, headersModule,
   tenantsModule, featureHealthModule, serviceLogsModule, cleanupModule,
-  infrastructureModule, infrastructureSecurityModule, devOpsModule,
+  infrastructureModule, infrastructureSecurityModule, devOpsModule, adminRbacModule,
   whatsappModule, riderAdminModule, assignmentAdminModule, paymentReminderModule, medicineRequestModule
 ] = await Promise.all([
   import('express'), import('cookie-parser'), import('mongoose'),
@@ -24,6 +25,7 @@ const [
   import('../../backend/gateway/routes/adminInfrastructure.js'),
   import('../../backend/gateway/routes/adminInfrastructureSecurity.js'),
   import('../../backend/gateway/routes/adminDevOps.js'),
+  import('../../backend/gateway/routes/adminRbac.js'),
   import('../../backend/routes/whatsappRoutes.js'),
   import('../../backend/modules/delivery/routes/riderRoutes.js'),
   import('../../backend/modules/delivery/routes/assignmentRoutes.js'),
@@ -40,67 +42,73 @@ const { contextMiddleware } = contextModule;
 const { createCorsMiddleware, corsErrorHandler } = corsModule;
 const { applySecurityHeaders } = headersModule;
 
-if (env.NODE_ENV === 'production' && !env.MONGO_URI) {
-  throw new Error('ADMIN_MONGO_URI (or MONGO_URI) is required for the standalone admin service.');
-}
-if (env.NODE_ENV === 'production' && process.env.REQUIRE_GATEWAY_TRUST !== 'true') {
-  throw new Error('Standalone production admin service requires REQUIRE_GATEWAY_TRUST=true.');
-}
+export function createAdminControlPlaneApp({ rbacRouter = adminRbacModule.default } = {}) {
+  const app = express();
+  const allowedOrigins = String(process.env.CORS_ALLOWED_ORIGINS || '')
+    .split(',').map(value => value.trim()).filter(Boolean);
 
-const app = express();
-const allowedOrigins = String(process.env.CORS_ALLOWED_ORIGINS || '')
-  .split(',').map(value => value.trim()).filter(Boolean);
+  app.disable('x-powered-by');
+  app.use((req, res, next) => applySecurityHeaders(req, res, next, { production: env.NODE_ENV === 'production' }));
+  app.use(createCorsMiddleware(allowedOrigins.length ? allowedOrigins : ['http://localhost:3000', 'http://localhost:5173']));
+  app.use(corsErrorHandler);
+  app.use(express.json({ limit: '1mb' }));
+  app.use(cookieParser());
+  app.use(contextMiddleware);
 
-app.disable('x-powered-by');
-app.use((req, res, next) => applySecurityHeaders(req, res, next, { production: env.NODE_ENV === 'production' }));
-app.use(createCorsMiddleware(allowedOrigins.length ? allowedOrigins : ['http://localhost:3000', 'http://localhost:5173']));
-app.use(corsErrorHandler);
-app.use(express.json({ limit: '1mb' }));
-app.use(cookieParser());
-app.use(contextMiddleware);
-
-app.get('/health', (_req, res) => res.json({
-  success: true, service: 'admin-control-plane', status: 'UP',
-  database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
-  timestamp: new Date().toISOString()
-}));
-app.get('/ready', (_req, res) => {
-  const ready = mongoose.connection.readyState === 1;
-  return res.status(ready ? 200 : 503).json({
-    success: ready, service: 'admin-control-plane',
-    status: ready ? 'READY' : 'WAITING_FOR_DATABASE',
-    database: ready ? 'connected' : 'disconnected'
+  app.get('/health', (_req, res) => res.json({
+    success: true, service: 'admin-control-plane', status: 'UP',
+    database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+    timestamp: new Date().toISOString()
+  }));
+  app.get('/ready', (_req, res) => {
+    const ready = mongoose.connection.readyState === 1;
+    return res.status(ready ? 200 : 503).json({
+      success: ready, service: 'admin-control-plane',
+      status: ready ? 'READY' : 'WAITING_FOR_DATABASE',
+      database: ready ? 'connected' : 'disconnected'
+    });
   });
-});
 
-// These routers retain their existing Super Admin authentication and policy
-// middleware. Security routes must be mounted before the broader infrastructure
-// router so they are never shadowed by provider resource routes.
-app.use('/api/v1/admin/infrastructure/security', infrastructureSecurityModule.default);
-app.use('/api/v1/admin/devops', devOpsModule.default);
-app.use('/api/v1/admin/infrastructure', infrastructureModule.default);
-app.use('/api/v1/admin/tenants', tenantsModule.default);
-app.use('/api/v1/admin/feature-health', featureHealthModule.default);
-app.use('/api/v1/admin/service-logs', serviceLogsModule.default);
-app.use('/api/v1/admin/database-cleanup/notifications', cleanupModule.default);
-app.use('/api/v1/admin/payments', paymentReminderModule.default);
-// Existing browser clients still call these legacy paths; preserve them during migration.
-app.use('/api/admin/whatsapp', whatsappModule.default);
-app.use('/api/admin/riders', riderAdminModule.default);
-app.use('/api/admin/assignment', assignmentAdminModule.default);
-app.use('/api/admin/payments', paymentReminderModule.default);
-app.use('/api/admin/medicine-requests', medicineRequestModule.default);
+  // These routers retain their existing Super Admin authentication and policy
+  // middleware. Security and RBAC routes must be mounted before broader
+  // resource routes so they are never shadowed.
+  app.use('/api/v1/admin/infrastructure/security', infrastructureSecurityModule.default);
+  app.use('/api/v1/admin/devops', devOpsModule.default);
+  app.use('/api/v1/admin/rbac', rbacRouter);
+  app.use('/api/v1/admin/infrastructure', infrastructureModule.default);
+  app.use('/api/v1/admin/tenants', tenantsModule.default);
+  app.use('/api/v1/admin/feature-health', featureHealthModule.default);
+  app.use('/api/v1/admin/service-logs', serviceLogsModule.default);
+  app.use('/api/v1/admin/database-cleanup/notifications', cleanupModule.default);
+  app.use('/api/v1/admin/payments', paymentReminderModule.default);
+  // Existing browser clients still call these legacy paths; preserve them during migration.
+  app.use('/api/admin/whatsapp', whatsappModule.default);
+  app.use('/api/admin/riders', riderAdminModule.default);
+  app.use('/api/admin/assignment', assignmentAdminModule.default);
+  app.use('/api/admin/payments', paymentReminderModule.default);
+  app.use('/api/admin/medicine-requests', medicineRequestModule.default);
 
-app.use((error, _req, res, _next) => {
-  const status = Number(error.status || error.statusCode || 500);
-  if (status >= 500) console.error('[admin-control-plane] Request failed:', error.message);
-  return res.status(status).json({
-    success: false,
-    error: { code: error.code || 'ADMIN_SERVICE_ERROR', message: status >= 500 ? 'Admin service request failed.' : error.message }
+  app.use((error, _req, res, _next) => {
+    const status = Number(error.status || error.statusCode || 500);
+    if (status >= 500) console.error('[admin-control-plane] Request failed:', error.message);
+    return res.status(status).json({
+      success: false,
+      error: { code: error.code || 'ADMIN_SERVICE_ERROR', message: status >= 500 ? 'Admin service request failed.' : error.message }
+    });
   });
-});
+
+  return app;
+}
 
 const start = async () => {
+  if (env.NODE_ENV === 'production' && !env.MONGO_URI) {
+    throw new Error('ADMIN_MONGO_URI (or MONGO_URI) is required for the standalone admin service.');
+  }
+  if (env.NODE_ENV === 'production' && process.env.REQUIRE_GATEWAY_TRUST !== 'true') {
+    throw new Error('Standalone production admin service requires REQUIRE_GATEWAY_TRUST=true.');
+  }
+
+  const app = createAdminControlPlaneApp();
   const connected = await connectDB();
   if (!connected && env.NODE_ENV === 'production') {
     throw new Error('Admin service cannot start without its configured MongoDB database.');
@@ -120,7 +128,10 @@ const start = async () => {
   process.once('SIGINT', () => shutdown('SIGINT'));
 };
 
-start().catch(error => {
-  console.error('[admin-control-plane] Startup failed:', error.message);
-  process.exit(1);
-});
+const isDirectExecution = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (isDirectExecution) {
+  start().catch(error => {
+    console.error('[admin-control-plane] Startup failed:', error.message);
+    process.exit(1);
+  });
+}

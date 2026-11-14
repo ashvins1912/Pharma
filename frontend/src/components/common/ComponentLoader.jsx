@@ -247,10 +247,10 @@ export function ErrorState({
         </span>
         <div className="space-y-0.5 min-w-0">
           <h4 className="text-xs sm:text-sm font-black text-rose-950 dark:text-rose-100">
-            {title}
+            {typeof title === 'string' ? title : String(title?.message || title?.error || title || '')}
           </h4>
           <p className="text-xs text-rose-800 dark:text-rose-300 break-words leading-relaxed">
-            {message}
+            {typeof message === 'string' ? message : String(message?.message || message?.error || message || '')}
           </p>
         </div>
       </div>

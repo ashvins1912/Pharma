@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { getReadableErrorMessage } from '../../utils/errorMessage';
 import apiClient from '../../api/apiClient';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
@@ -44,7 +43,7 @@ export default function VendorOnboardingView({ token, onClose, onSuccess }) {
           city: v.address?.city || '', state: v.address?.state || '', pincode: v.address?.pincode || ''
         }));
       } catch (e) {
-        setError(getReadableErrorMessage(e, 'This onboarding link is invalid or expired.'));
+        setError(e.response?.data?.error?.message || e.response?.data?.message || 'This onboarding link is invalid or expired.');
       } finally { if (mounted) setLoading(false); }
     })();
     return () => { mounted = false; };
@@ -124,7 +123,7 @@ export default function VendorOnboardingView({ token, onClose, onSuccess }) {
       onSuccess?.(result);
     } catch (e) {
       const detail = e.response?.data?.error || {};
-      setError(getReadableErrorMessage(e, t('onboardingFailed')));
+      setError(detail.message || e.response?.data?.message || t('onboardingFailed'));
       const mapped = {};
       (detail.details || []).forEach(x => { if (x.field) mapped[x.field] = x.message; });
       setFieldErrors(mapped);

@@ -1,25 +1,13 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
-import { getReadableErrorMessage } from '../utils/errorMessage';
 
 const ToastContext = createContext(null);
-
-// Toasts are a shared React text-rendering boundary. Always store a primitive string,
-// including when callers pass Axios errors, nested objects, arrays, or cyclic values.
-export function normalizeToastMessage(value) {
-  if (typeof value === 'string') return value;
-  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
-  if (value == null) return '';
-  // Do not dump arbitrary server payloads into user-visible notifications;
-  // they may contain internal metadata or sensitive diagnostic details.
-  return getReadableErrorMessage(value, 'Something went wrong.');
-}
 
 export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([]);
 
   const addToast = useCallback((message, type = 'success', duration = 5000) => {
     const id = `toast-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
-    setToasts((prev) => [...prev, { id, message: normalizeToastMessage(message), type }]);
+    setToasts((prev) => [...prev, { id, message, type }]);
 
     if (duration > 0) {
       setTimeout(() => {
@@ -61,7 +49,7 @@ export function ToastProvider({ children }) {
                 {toast.type === 'warning' && '⚠'}
                 {toast.type === 'info' && 'ℹ'}
               </span>
-              <p className="leading-snug">{normalizeToastMessage(toast.message)}</p>
+              <p className="leading-snug">{toast.message}</p>
             </div>
             <button
               onClick={() => removeToast(toast.id)}

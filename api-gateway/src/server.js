@@ -82,7 +82,7 @@ export function createGatewayApp(gatewayConfig = config, healthMonitor = createH
       'X-Gateway-Authorization',
       'X-Gateway-Trusted-Authorization'
     ],
-    exposedHeaders: ['X-Request-Id', 'X-Correlation-Id'],
+    exposedHeaders: ['X-Request-Id', 'X-Correlation-Id', 'Retry-After'],
     maxAge: 600,
     optionsSuccessStatus: 204
   }));
@@ -238,7 +238,7 @@ export function createGatewayApp(gatewayConfig = config, healthMonitor = createH
         const adminRoutePrefixes = [
           '/api/v1/admin/tenants', '/api/v1/admin/feature-health',
           '/api/v1/admin/service-logs', '/api/v1/admin/database-cleanup/notifications',
-          '/api/v1/admin/infrastructure', '/api/v1/admin/devops', '/api/v1/admin/payments',
+          '/api/v1/admin/infrastructure', '/api/v1/admin/devops', '/api/v1/admin/rbac', '/api/v1/admin/payments',
           '/api/admin/whatsapp', '/api/admin/riders', '/api/admin/assignment',
           '/api/admin/medicine-requests'
         ];

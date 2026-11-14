@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { getReadableErrorMessage } from '../../utils/errorMessage';
 import apiClient from '../../api/apiClient';
 
 const title = s => s.split('.').map(x => x.charAt(0).toUpperCase()+x.slice(1)).join(' ');
@@ -35,7 +34,7 @@ export default function PlatformAccessControl(){
       const list = Array.isArray(raw) ? raw : (raw?.users || raw?.items || []);
       setUsers(Array.isArray(list) ? list : []);
     } catch (e) {
-      setMessage(getReadableErrorMessage(e, 'Unable to load platform users.'));
+      setMessage(e.message || 'Unable to load platform users.');
       setUsers([]);
     } finally {
       setLoading(false);
@@ -78,7 +77,7 @@ export default function PlatformAccessControl(){
       setUsers(xs => xs.map(x => x.id === selected.id ? { ...x, ...u } : x));
       setMessage('Security assignment saved. Access changes apply on the next authenticated token refresh.');
     } catch (e) {
-      setMessage(getReadableErrorMessage(e, 'Could not save security assignment.'));
+      setMessage(e.message || 'Could not save security assignment.');
     } finally {
       setSaving(false);
     }
@@ -96,20 +95,20 @@ export default function PlatformAccessControl(){
 
   return (
     <section className="rounded-3xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-      <header className="bg-slate-950 text-white p-5 sm:p-6">
+      <header className="bg-slate-50 border-b border-slate-200 text-slate-900 p-5 sm:p-6">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-[.18em] text-blue-300">Database RBAC Center</p>
-            <h2 className="text-xl sm:text-2xl font-black">Platform Feature &amp; Access Control</h2>
-            <p className="mt-1 text-xs text-slate-300">Super Admin only. Manage application features and user access permissions fetched directly from the database.</p>
+            <p className="text-[10px] font-black uppercase tracking-[.18em] text-blue-700">Database RBAC Center</p>
+            <h2 className="text-xl sm:text-2xl font-black text-slate-900">Platform Feature &amp; Access Control</h2>
+            <p className="mt-1 text-xs text-slate-600">Super Admin only. Manage application features and user access permissions fetched directly from the database.</p>
           </div>
-          <span className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 text-[10px] font-black text-emerald-300">🔐 DB-DRIVEN RBAC</span>
+          <span className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] font-black text-emerald-700 self-start lg:self-auto">🔐 DB-DRIVEN RBAC</span>
         </div>
-        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search name, email, role or user ID…" className="mt-4 w-full rounded-xl px-3 py-2.5 text-xs text-slate-900 outline-none focus:ring-2 focus:ring-blue-400"/>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search name, email, role or user ID…" className="mt-4 w-full min-h-11 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-900 outline-none focus:ring-2 focus:ring-blue-600"/>
       </header>
       <div className="grid lg:grid-cols-[300px_1fr] min-h-[440px]">
         <aside className="border-b lg:border-b-0 lg:border-r border-slate-200 bg-slate-50 p-3">
-          <div className="px-2 py-2 text-[10px] font-black uppercase tracking-wider text-slate-400">{loading ? 'Loading…' : users.length + ' platform users'}</div>
+          <div className="px-2 py-2 text-[10px] font-black uppercase tracking-wider text-slate-600">{loading ? 'Loading…' : users.length + ' platform users'}</div>
            <div className="space-y-1.5 max-h-[560px] overflow-auto">
             {(Array.isArray(users) ? users : []).map(u => (
               <button key={u.id} onClick={() => select(u)} className={'w-full text-left rounded-xl p-3 border transition ' + (selected?.id === u.id ? 'bg-blue-50 border-blue-200' : 'bg-white border-transparent hover:border-slate-200')}>

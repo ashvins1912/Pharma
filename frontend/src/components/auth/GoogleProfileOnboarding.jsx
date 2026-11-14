@@ -1,5 +1,4 @@
 import React, { useMemo, useState } from 'react';
-import { getReadableErrorMessage } from '../../utils/errorMessage';
 import { useLanguage } from '../../context/LanguageContext';
 
 const MOBILE_PATTERN = /^(?:\+?91|0)?[6-9]\d{9}$/;
@@ -61,7 +60,7 @@ export default function GoogleProfileOnboarding({ user, onComplete, onLogout }) 
         confirmPassword: confirmPassword || ''
       });
     } catch (err) {
-      setError(getReadableErrorMessage(err, 'Could not complete your profile. Please try again.'));
+      setError(err?.message || 'Could not complete your profile. Please try again.');
     } finally {
       setSaving(false);
     }
