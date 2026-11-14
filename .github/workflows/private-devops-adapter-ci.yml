@@ -4,6 +4,8 @@ on:
     paths:
       - '.github/workflows/private-devops-adapter-ci.yml'
       - 'services/private-devops-adapter/**'
+      - 'scripts/service-runner.js'
+      - 'package.json'
       - 'backend/gateway/routes/adminDevOps.js'
       - 'backend/gateway/routes/adminInfrastructureSecurity.js'
       - 'backend/security/infrastructureCredentialVault.js'
@@ -31,6 +33,7 @@ jobs:
         run: npm install --ignore-scripts
       - name: Syntax check
         run: |
+          node --check scripts/service-runner.js
           node --check services/private-devops-adapter/server.js
           node --check services/private-devops-adapter/drivers/providerIdentity.js
           node --check services/private-devops-adapter/drivers/nativeExecution.js
