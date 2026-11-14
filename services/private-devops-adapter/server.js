@@ -2,7 +2,7 @@ import express from 'express';
 import mongoose from 'mongoose';
 import crypto from 'node:crypto';
 import { verifyProviderIdentity } from './drivers/providerIdentity.js';
-import { nativeProviderPreflight, nativeProviderExecute, nativeProviderRollback } from './drivers/nativeExecution.js';
+import { nativeProviderPreflight, nativeProviderExecute, nativeProviderRollback, validateNativeArtifactFiles } from './drivers/nativeExecution.js';
 
 const app = express();
 app.disable('x-powered-by');
@@ -174,7 +174,7 @@ app.post('/v1/deployments/execute',validateBase,async(req,res)=>{
   if(idempotencyKey.length<16||idempotencyKey.length>160) return res.status(400).json({success:false,code:'IDEMPOTENCY_KEY_REQUIRED'});
   if(!Array.isArray(deployment.files) || !deployment.files.length || !deployment.changeReference) return res.status(400).json({success:false,code:'DEPLOYMENT_INPUT_REQUIRED'});
   if(!deployment.artifactDigest || artifactDigest(deployment.files)!==deployment.artifactDigest) return res.status(409).json({success:false,code:'ARTIFACT_DIGEST_MISMATCH'});
-  try { filesOf(deployment.files); } catch(error) { return res.status(422).json({success:false,code:safeErrorCode(error.code,'UNSAFE_DEPLOYMENT_ARTIFACT')}); }
+  try { validateNativeArtifactFiles(deployment.files,provider); } catch(error) { return res.status(422).json({success:false,code:safeErrorCode(error.code,'UNSAFE_DEPLOYMENT_ARTIFACT')}); }
   if(typeof deployment.image!=='string'||!/^([a-z0-9.-]+(?::[0-9]+)?\/)?[a-z0-9._/-]+:[A-Za-z0-9_.-]{1,64}$/.test(deployment.image)||deployment.image.includes('CHANGE_ME')||deployment.image.split(':').pop().toLowerCase()==='latest') return res.status(400).json({success:false,code:'DEPLOYMENT_IMAGE_REQUIRED'});
   const existing=await Job.findOne({idempotencyKey});
   if(existing) return res.status(200).json({success:true,accepted:true,deploymentId:existing.jobId,status:existing.status,job:publicJob(existing),replayed:true});
