@@ -588,7 +588,7 @@ export function generateDeploymentFiles(input = {}) {
 }
 
 // Ignore schema-object declarations; detect only non-empty scalar secret assignments.
-const SECRET_PATTERN = /(-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|(?:password|client_secret|api[_-]?key|access[_-]?token|jwt[_-]?secret|database_url|private[_-]?key|secret[_-]?key)\s*[:=]\s*[^\s$<"'{}][^\n]*)/i;
+const SECRET_PATTERN = /(-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|(?:password|client_secret|api[_-]?key|access[_-]?token|jwt[_-]?secret|database_url|private[_-]?key|secret[_-]?key)[ \t]*[:=][ \t]*[^\s$<"'{}][^\n]*)/i;
 export function validateGeneratedArtifact(files = {}) {
   const errors = [];
   const paths = Object.keys(files);
