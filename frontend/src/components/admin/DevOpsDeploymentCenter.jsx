@@ -159,7 +159,7 @@ export default function DevOpsDeploymentCenter() {
     if (flagForm.environment === 'staging') {
       const preflight = await apiClient.post(`${API}/providers/preflight`, {
         provider: 'launchdarkly', environment: 'staging',
-        integrationId: flagForm.integrationId, flagKey: flagForm.flagKey, variationId: flagForm.variationId,
+        integrationId: flagForm.integrationId, flagKey: flagForm.flagKey, variationId: flagForm.strategy === 'kill_switch' ? null : flagForm.variationId,
         strategy: flagForm.strategy, rolloutPercent: Number(flagForm.rolloutPercent)
       }, { timeout: 60000 });
       if (!unwrap(preflight).success) throw new Error('LaunchDarkly staging preflight did not pass. Review the provider evidence before planning the flag rollout.');
