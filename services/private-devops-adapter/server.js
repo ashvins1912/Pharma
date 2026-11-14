@@ -11,6 +11,8 @@ const TOKEN = String(process.env.PRIVATE_DEVOPS_ADAPTER_TOKEN || '');
 const PROVIDERS = new Set(['aws','azure','gcp','kubernetes','launchdarkly']);
 const ENVIRONMENTS = new Set(['development','staging','production']);
 const TERMINAL = new Set(['SUCCEEDED','FAILED','CANCELLED','ROLLED_BACK']);
+const DRIVER_CHECK_STATES = new Set(['PASS','BLOCKED','FAIL','WARN']);
+const SAFE_CODE = /^[A-Z0-9_:-]{1,80}$/;
 const productionEnabled = () => process.env.ALLOW_PRODUCTION_OPERATIONS === 'true';
 
 const jobSchema = new mongoose.Schema({
@@ -69,7 +71,7 @@ async function driverCall(provider,path,payload) {
   const token = String(process.env['DEVOPS_DRIVER_'+provider.toUpperCase()+'_TOKEN'] || '');
   if (token.length < 32) throw Object.assign(new Error('Provider driver authentication is not configured.'),{code:'DRIVER_AUTH_NOT_CONFIGURED',statusCode:503});
   const response = await fetch(new URL(path,base),{
-    method:'POST',headers:{Accept:'application/json','Content-Type':'application/json',Authorization:'Bearer '+token},
+    method:'POST', redirect:'error', headers:{Accept:'application/json','Content-Type':'application/json',Authorization:'Bearer '+token},
     body:JSON.stringify(payload),signal:AbortSignal.timeout(45000)
   });
   const text = await response.text();
@@ -77,6 +79,15 @@ async function driverCall(provider,path,payload) {
   let data={}; try { data=text ? JSON.parse(text) : {}; } catch { throw Object.assign(new Error('Provider driver returned invalid JSON.'),{code:'DRIVER_INVALID_RESPONSE'}); }
   if (!response.ok) throw Object.assign(new Error('Provider driver rejected the operation.'),{code:data.code || 'DRIVER_REJECTED',statusCode:response.status});
   return data;
+}
+function safeChecks(checks) {
+  if (!Array.isArray(checks)) return [];
+  return checks.slice(0,100).map(check => ({
+    name: String(check?.name || 'provider_check').slice(0,100),
+    status: DRIVER_CHECK_STATES.has(String(check?.status || '').toUpperCase()) ? String(check.status).toUpperCase() : 'FAIL',
+    ...(SAFE_CODE.test(String(check?.code || '')) ? {code:String(check.code)} : {}),
+    ...(typeof check?.message === 'string' ? {message:check.message.replace(/[\\r\\n]+/g,' ').slice(0,240)} : {})
+  }));
 }
 function publicJob(job) {
   return {jobId:job.jobId,provider:job.provider,operation:job.operation,environment:job.environment,status:job.status,result:job.result,errorCode:job.errorCode,createdAt:job.createdAt,updatedAt:job.updatedAt};
@@ -89,6 +100,7 @@ app.get('/v1/catalog',(_req,res)=>res.json({success:true,providers:[...PROVIDERS
 
 app.post('/v1/preflight',validateBase,async(req,res)=>{
   const {provider,environment,capabilities=[],integration,credentials}=req.body;
+  if (!integration?.id || !credentials || typeof credentials !== 'object' || Array.isArray(credentials)) return res.status(400).json({success:false,code:'INTEGRATION_CONTEXT_REQUIRED'});
   const checks=[];
   let driver=null;
   try { driver=endpointFor(provider); } catch { /* reported below */ }
@@ -97,11 +109,11 @@ app.post('/v1/preflight',validateBase,async(req,res)=>{
   checks.push({name:'environment_policy',status:environment==='production'&&!productionEnabled()?'BLOCKED':'PASS'});
   let remote={};
   if(driver && checks[1].status==='PASS') {
-    try { remote=await driverCall(provider,'/v1/preflight',{provider,environment,capabilities,integration:{id:integration?.id,endpoint:integration?.endpoint},credentials}); checks.push(...(Array.isArray(remote.checks)?remote.checks:[])); }
-    catch(error){checks.push({name:'provider_preflight',status:'FAIL',code:error.code||'PREFLIGHT_FAILED'});}
+    try { remote=await driverCall(provider,'/v1/preflight',{provider,environment,capabilities,integration:{id:integration.id,endpoint:integration.endpoint},credentials}); checks.push(...safeChecks(remote.checks)); }
+    catch(error){checks.push({name:'provider_preflight',status:'FAIL',code:SAFE_CODE.test(String(error.code||''))?error.code:'PREFLIGHT_FAILED'});}
   }
   const passed=checks.length>0 && checks.every(c=>c.status==='PASS');
-  const evidence=await Evidence.create({runId:crypto.randomUUID(),provider,environment,status:passed?'PASS':'BLOCKED',checks});
+  const evidence=await Evidence.create({runId:crypto.randomUUID(),provider,environment,status:passed?'PASS':checks.some(c=>c.status==='FAIL')?'FAIL':'BLOCKED',checks:safeChecks(checks)});
   return res.status(passed?200:424).json({success:passed,evidence});
 });
 
@@ -131,13 +143,14 @@ app.post('/v1/deployments/execute',validateBase,async(req,res)=>{
 app.post('/v1/deployments/status',async(req,res)=>{
   const {integration,credentials,deployment}=req.body||{};
   const provider=integration?.provider, jobId=deployment?.remoteDeploymentId;
+  if (!PROVIDERS.has(provider) || !integration?.id || !credentials || typeof credentials!=='object' || !jobId) return res.status(400).json({success:false,code:'STATUS_CONTEXT_REQUIRED'});
   const job=await Job.findOne({jobId,provider});
   if(!job) return res.status(404).json({success:false,code:'JOB_NOT_FOUND'});
   if(!TERMINAL.has(job.status)) {
     try {
       const result=await driverCall(provider,'/v1/deployments/status',{jobId,credentials,integration:{id:integration.id,endpoint:integration.endpoint},providerOperationId:job.result?.providerOperationId});
       if(['RUNNING','SUCCEEDED','FAILED','ROLLED_BACK'].includes(result.status)) job.status=result.status;
-      job.result={...(job.result||{}),providerStatus:result.status||'UNKNOWN',health:result.health||null};
+      job.result={...(job.result||{}),providerStatus:['SUBMITTED','RUNNING','SUCCEEDED','FAILED','ROLLED_BACK'].includes(result.status)?result.status:'UNKNOWN',health:typeof result.health==='string'?result.health.slice(0,240):null};
       job.errorCode=result.errorCode||null; job.updatedAt=new Date(); await job.save();
     } catch(error) { return res.status(502).json({success:false,code:error.code||'STATUS_RECONCILIATION_FAILED',job:publicJob(job)}); }
   }
@@ -178,6 +191,8 @@ app.post('/v1/feature-flags/rollout',validateBase,async(req,res)=>{
 
 app.get('/v1/evidence',async(req,res)=>{
   const filter={}; if(req.query.environment) filter.environment=req.query.environment; if(req.query.provider) filter.provider=req.query.provider;
+  if (filter.provider && !PROVIDERS.has(filter.provider)) return res.status(400).json({success:false,code:'INVALID_PROVIDER'});
+  if (filter.environment && !ENVIRONMENTS.has(filter.environment)) return res.status(400).json({success:false,code:'INVALID_ENVIRONMENT'});
   const evidence=await Evidence.find(filter).sort({checkedAt:-1}).limit(100).lean();
   res.set('Cache-Control','private, no-store'); return res.json({success:true,evidence});
 });
