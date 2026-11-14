@@ -34,12 +34,18 @@ app.use((error, req, res, _next) => {
   const tooLarge = error.type === 'entity.too.large' || error.status === 413
     || (error instanceof multer.MulterError && error.code === 'LIMIT_FILE_SIZE');
   const status = error.statusCode || (tooLarge ? 413 : 500);
+  if (error.retryAfterSec) {
+    res.set('Retry-After', String(error.retryAfterSec));
+  }
   if (status >= 500) console.error(JSON.stringify({
     serviceName: 'medicine-master-service', requestId: req.requestId,
     error: error.message
   }));
   res.status(status).json({
-    code: tooLarge ? 'REQUEST_BODY_TOO_LARGE' : undefined,
+    code: tooLarge ? 'REQUEST_BODY_TOO_LARGE' : error.code,
+    retryAfterSec: error.retryAfterSec || undefined,
+    allowedTransitions: error.allowedTransitions || undefined,
+    currentState: error.currentState || undefined,
     message: status >= 500 ? 'Medicine Master operation failed.' : (tooLarge ? 'The catalogue upload exceeds the configured size limit.' : error.message),
     requestId: req.requestId
   });

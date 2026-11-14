@@ -330,6 +330,36 @@ export const API_CAPABILITIES = [
     permission: 'inventory.import'
   },
   {
+    method: 'GET',
+    pattern: /^\/api\/v1\/inventory\/catalogue\/(?:imports|matches\/review)(?:\/|$)/,
+    permission: 'inventory.catalogue.import'
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/v1\/inventory\/catalogue\/(?:imports|matches)(?:\/|$)/,
+    permission: 'inventory.catalogue.import'
+  },
+  {
+    method: 'PATCH',
+    pattern: /^\/api\/v1\/inventory\/catalogue\/medicines\/[^/]+$/,
+    permission: 'inventory.catalogue.import'
+  },
+  {
+    method: 'DELETE',
+    pattern: /^\/api\/v1\/inventory\/catalogue\/medicines\/[^/]+$/,
+    permission: 'inventory.catalogue.import'
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/v1\/inventory\/catalogue\/medicines\/[^/]+\/audit$/,
+    permission: 'inventory.catalogue.import'
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/v1\/inventory\/catalogue\/medicines(?:\/search|\/[^/]+)?$/,
+    permission: 'inventory.catalogue.read'
+  },
+  {
     method: 'POST',
     pattern: /^\/api\/v1\/inventory\/adjust$/,
     permission: 'inventory.write'

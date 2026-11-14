@@ -189,6 +189,8 @@ export function createServiceRouters(gatewayConfig = config) {
   medicineMasterRouter.post('/imports/jobs/:jobId/restart', catalogueImportAuth, catalogueImport);
   medicineMasterRouter.get('/imports/:batchId/records', catalogueImportAuth, catalogueImport);
   medicineMasterRouter.get('/imports/:batchId', catalogueImportAuth, catalogueImport);
+  medicineMasterRouter.post('/imports/:batchId/reconcile', catalogueImportAuth, catalogueImport);
+  medicineMasterRouter.post('/imports/:batchId/conflicts/resolve', catalogueImportAuth, catalogueImport);
   medicineMasterRouter.post('/imports/:batchId/approve', catalogueImportAuth, catalogueImport);
   medicineMasterRouter.post('/imports/:batchId/publish', catalogueImportAuth, catalogueImport);
 

@@ -1,6 +1,14 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import apiClient from '../../api/apiClient';
 import { useToast } from '../../context/ToastContext';
+import {
+  RECONCILIATION_PIPELINE_STAGES,
+  createActionIdempotencyKey,
+  getEffectiveBatchState,
+  getPipelineStageIndex,
+  getReconciliationStatusMeta,
+  pollImportJobWithBackoff
+} from './reconciliationStatus';
 
 export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
   const { addToast } = useToast();
@@ -12,20 +20,69 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
   const [statusBusy, setStatusBusy] = useState(false);
   const [reviewConfirmed, setReviewConfirmed] = useState(false);
   const [jobStatus, setJobStatus] = useState(null);
+  const [resolutionDrafts, setResolutionDrafts] = useState({});
+  const pollAbortRef = useRef(null);
+
+  useEffect(() => () => {
+    pollAbortRef.current?.abort();
+  }, []);
 
   if (!isOpen) return null;
 
+  const stopActivePolling = () => {
+    if (pollAbortRef.current) {
+      pollAbortRef.current.abort();
+      pollAbortRef.current = null;
+    }
+  };
+
   const reset = () => {
+    stopActivePolling();
     setFile(null);
     setPreview(null);
     setPublished(null);
     setBatchStatus(null);
     setReviewConfirmed(false);
     setJobStatus(null);
+    setResolutionDrafts({});
     setBusy(false);
   };
 
-  const close = () => { reset(); onClose(); };
+  const close = () => {
+    reset();
+    onClose();
+  };
+
+  const fetchBatchDetails = async (batchId) => {
+    const response = await apiClient.get(`/api/v1/inventory/catalogue/imports/${encodeURIComponent(batchId)}`);
+    setBatchStatus(response.data);
+    return response.data;
+  };
+
+  const runJobPolling = async (jobId) => {
+    stopActivePolling();
+    const controller = new AbortController();
+    pollAbortRef.current = controller;
+    try {
+      const job = await pollImportJobWithBackoff({
+        jobId,
+        signal: controller.signal,
+        fetchJob: async (id, signal) => {
+          const statusResponse = await apiClient.get(
+            `/api/v1/inventory/catalogue/imports/jobs/${encodeURIComponent(id)}`,
+            { signal, __skipCoalescing: true }
+          );
+          return statusResponse.data;
+        },
+        onUpdate: (latestJob) => setJobStatus(latestJob)
+      });
+      return job;
+    } finally {
+      if (pollAbortRef.current === controller) {
+        pollAbortRef.current = null;
+      }
+    }
+  };
 
   const createPreview = async () => {
     if (!file) return addToast('Choose a JSON dataset first.', 'warning');
@@ -34,6 +91,7 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
     setPublished(null);
     setJobStatus(null);
     setReviewConfirmed(false);
+    setResolutionDrafts({});
     try {
       const body = new FormData();
       body.append('jsonFile', file);
@@ -43,24 +101,23 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
       });
       const jobId = response.data?.jobId;
       if (!jobId) throw new Error('The server did not return an import job ID.');
-      let job;
-      while (true) {
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        const statusResponse = await apiClient.get(`/api/v1/inventory/catalogue/imports/jobs/${encodeURIComponent(jobId)}`);
-        job = statusResponse.data;
-        setJobStatus(job);
-        if (job.status === 'READY' || job.status === 'FAILED') break;
+      const job = await runJobPolling(jobId);
+      if (job.status === 'FAILED') {
+        throw new Error(job.errorMessage || 'Catalogue processing failed. The uploaded file remains available for an administrator to retry.');
       }
-      if (job.status === 'FAILED') throw new Error(job.errorMessage || 'Catalogue processing failed. The uploaded file remains available for an administrator to retry.');
+      const batch = await fetchBatchDetails(job.batchId);
       const completedPreview = {
-        batchId: job.batchId, dataset: job.dataset, status: 'READY',
-        report: job.report, reportFingerprint: job.reportFingerprint, sample: job.sample
+        batchId: job.batchId,
+        dataset: batch?.dataset || job.dataset,
+        status: getEffectiveBatchState(batch) || 'AWAITING_APPROVAL',
+        report: batch?.report || job.report,
+        reportFingerprint: batch?.reportFingerprint || job.reportFingerprint,
+        sample: job.sample
       };
       setPreview(completedPreview);
-      const statusResponse = await apiClient.get(`/api/v1/inventory/catalogue/imports/${encodeURIComponent(job.batchId)}`);
-      setBatchStatus(statusResponse.data);
-      addToast('Background catalogue processing completed. Review the reconciliation report before publishing.', 'success');
+      addToast('Background catalogue processing completed. Review the reconciliation state before approving.', 'success');
     } catch (error) {
+      if (error?.name === 'AbortError') return;
       addToast(error.response?.data?.message || error.response?.data?.error?.message || error.message || 'Could not analyze this JSON dataset.', 'error');
     } finally {
       setBusy(false);
@@ -71,57 +128,187 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
     if (!jobStatus?.jobId || jobStatus.status !== 'FAILED') return;
     setBusy(true);
     try {
-      await apiClient.post(`/api/v1/inventory/catalogue/imports/jobs/${encodeURIComponent(jobStatus.jobId)}/retry`, {});
-      let job;
-      while (true) {
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        const response = await apiClient.get(`/api/v1/inventory/catalogue/imports/jobs/${encodeURIComponent(jobStatus.jobId)}`);
-        job = response.data;
-        setJobStatus(job);
-        if (job.status === 'READY' || job.status === 'FAILED') break;
-      }
+      await apiClient.post(
+        `/api/v1/inventory/catalogue/imports/jobs/${encodeURIComponent(jobStatus.jobId)}/retry`,
+        {},
+        { headers: { 'Idempotency-Key': createActionIdempotencyKey('retry-job', jobStatus.jobId, jobStatus.attempts || 1) } }
+      );
+      const job = await runJobPolling(jobStatus.jobId);
       if (job.status === 'FAILED') throw new Error(job.errorMessage || 'The retry failed. Check the import job details.');
-      const completedPreview = { batchId: job.batchId, dataset: job.dataset, status: 'READY', report: job.report, reportFingerprint: job.reportFingerprint, sample: job.sample };
-      setPreview(completedPreview);
-      const batch = await apiClient.get(`/api/v1/inventory/catalogue/imports/${encodeURIComponent(job.batchId)}`);
-      setBatchStatus(batch.data);
+      const batch = await fetchBatchDetails(job.batchId);
+      setPreview({
+        batchId: job.batchId,
+        dataset: batch?.dataset || job.dataset,
+        status: getEffectiveBatchState(batch) || 'AWAITING_APPROVAL',
+        report: batch?.report || job.report,
+        reportFingerprint: batch?.reportFingerprint || job.reportFingerprint,
+        sample: job.sample
+      });
       addToast('Catalogue import retry completed. Review the reconciliation report.', 'success');
     } catch (error) {
+      if (error?.name === 'AbortError') return;
       addToast(error.response?.data?.message || error.message || 'Could not retry this import job.', 'error');
-    } finally { setBusy(false); }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const rerunReconciliation = async () => {
+    if (!preview?.batchId) return;
+    setBusy(true);
+    try {
+      const response = await apiClient.post(
+        `/api/v1/inventory/catalogue/imports/${encodeURIComponent(preview.batchId)}/reconcile`,
+        { reason: 'Administrator triggered reconciliation pass' },
+        {
+          headers: { 'Idempotency-Key': createActionIdempotencyKey('reconcile', preview.batchId, batchStatus?.stateVersion ?? 0) },
+          timeout: 120000
+        }
+      );
+      const updated = response.data;
+      setBatchStatus(updated);
+      setPreview(current => current ? {
+        ...current,
+        status: getEffectiveBatchState(updated),
+        report: updated.report || current.report,
+        reportFingerprint: updated.reportFingerprint || current.reportFingerprint
+      } : current);
+      setReviewConfirmed(false);
+      addToast(
+        getEffectiveBatchState(updated) === 'CONFLICTS_FOUND'
+          ? 'Reconciliation finished with conflicts requiring resolution.'
+          : 'Reconciliation completed cleanly. Ready for approval.',
+        getEffectiveBatchState(updated) === 'CONFLICTS_FOUND' ? 'warning' : 'success'
+      );
+    } catch (error) {
+      addToast(error.response?.data?.message || error.response?.data?.error?.message || error.message || 'Could not run reconciliation.', 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const applyConflictResolutions = async () => {
+    if (!preview?.batchId) return;
+    const unresolvedConflicts = (batchStatus?.conflicts || []).filter(item => !item?.resolved && item?.medicineId);
+    const resolutions = unresolvedConflicts
+      .map(conflict => {
+        const key = conflict.conflictId || conflict.medicineId;
+        const draftAction = resolutionDrafts[key];
+        if (!draftAction) return null;
+        return {
+          conflictId: conflict.conflictId || '',
+          medicineId: conflict.medicineId,
+          action: draftAction,
+          targetMedicineId: draftAction === 'ACCEPT_CANDIDATE' ? (conflict.targetMedicineId || conflict.currentTargetMedicineId || '') : ''
+        };
+      })
+      .filter(Boolean);
+
+    if (!resolutions.length) {
+      return addToast('Choose a resolution action for at least one conflict first.', 'warning');
+    }
+
+    setBusy(true);
+    try {
+      const response = await apiClient.post(
+        `/api/v1/inventory/catalogue/imports/${encodeURIComponent(preview.batchId)}/conflicts/resolve`,
+        { resolutions, autoReconcile: true },
+        {
+          headers: { 'Idempotency-Key': createActionIdempotencyKey('resolve', preview.batchId, batchStatus?.stateVersion ?? 0) },
+          timeout: 120000
+        }
+      );
+      const updated = response.data;
+      setBatchStatus(updated);
+      setPreview(current => current ? {
+        ...current,
+        status: getEffectiveBatchState(updated),
+        report: updated.report || current.report,
+        reportFingerprint: updated.reportFingerprint || current.reportFingerprint
+      } : current);
+      setResolutionDrafts({});
+      setReviewConfirmed(false);
+      addToast(
+        getEffectiveBatchState(updated) === 'CONFLICTS_FOUND'
+          ? 'Resolutions saved, but remaining conflicts still require review.'
+          : 'Conflicts resolved and reconciliation passed. Ready for approval.',
+        getEffectiveBatchState(updated) === 'CONFLICTS_FOUND' ? 'warning' : 'success'
+      );
+    } catch (error) {
+      addToast(error.response?.data?.message || error.response?.data?.error?.message || error.message || 'Could not apply conflict resolutions.', 'error');
+    } finally {
+      setBusy(false);
+    }
   };
 
   const approveReconciliation = async () => {
     if (!preview?.batchId || !reviewConfirmed || !preview?.reportFingerprint) return;
     setBusy(true);
     try {
-      await apiClient.post(`/api/v1/inventory/catalogue/imports/${encodeURIComponent(preview.batchId)}/approve`, { confirmReconciliation: true, reportFingerprint: preview.reportFingerprint });
-      const statusResponse = await apiClient.get(`/api/v1/inventory/catalogue/imports/${encodeURIComponent(preview.batchId)}`);
-      setBatchStatus(statusResponse.data);
+      const response = await apiClient.post(
+        `/api/v1/inventory/catalogue/imports/${encodeURIComponent(preview.batchId)}/approve`,
+        { confirmReconciliation: true, reportFingerprint: preview.reportFingerprint },
+        { headers: { 'Idempotency-Key': createActionIdempotencyKey('approve', preview.batchId, preview.reportFingerprint) } }
+      );
+      setBatchStatus(response.data);
       addToast('Reconciliation approved. You can now publish this batch.', 'success');
     } catch (error) {
       addToast(error.response?.data?.message || error.response?.data?.error?.message || 'Could not approve this reconciliation report.', 'error');
-    } finally { setBusy(false); }
+    } finally {
+      setBusy(false);
+    }
   };
+
   const publish = async () => {
-    if (!preview?.batchId || !batchStatus?.approvedAt) return;
+    const effective = getEffectiveBatchState(batchStatus || preview);
+    if (!preview?.batchId || (!batchStatus?.approvedAt && effective !== 'APPROVED')) return;
     if (!window.confirm('Publish these cleaned records to the shared medicine master catalogue? This will not update tenant prices, branch stock, batches or expiry data.')) return;
     setBusy(true);
     try {
-      const response = await apiClient.post(`/api/v1/inventory/catalogue/imports/${encodeURIComponent(preview.batchId)}/publish`, {});
+      const response = await apiClient.post(
+        `/api/v1/inventory/catalogue/imports/${encodeURIComponent(preview.batchId)}/publish`,
+        {},
+        {
+          headers: { 'Idempotency-Key': createActionIdempotencyKey('publish', preview.batchId, batchStatus?.stateVersion ?? preview.reportFingerprint) },
+          timeout: 300000
+        }
+      );
       setPublished(response.data);
       try {
-        const statusResponse = await apiClient.get(`/api/v1/inventory/catalogue/imports/${encodeURIComponent(preview.batchId)}`);
-        setBatchStatus(statusResponse.data);
-      } catch { /* Publish response remains authoritative if status refresh is temporarily unavailable. */ }
-      addToast(response.data.status === 'PUBLISHED' ? 'Medicine catalogue published successfully.' : 'Catalogue import completed with a partial result.', response.data.status === 'PUBLISHED' ? 'success' : 'warning');
+        await fetchBatchDetails(preview.batchId);
+      } catch {
+        setBatchStatus(response.data);
+      }
+      addToast(
+        response.data.status === 'PUBLISHED'
+          ? 'Medicine catalogue published successfully.'
+          : 'Catalogue import completed with a partial result.',
+        response.data.status === 'PUBLISHED' ? 'success' : 'warning'
+      );
     } catch (error) {
       const payload = error.response?.data;
-      if (error.response?.status === 409 && payload?.status === 'READY' && payload?.reportFingerprint) {
-        setPreview(current => current ? { ...current, report: payload.report || current.report, reportFingerprint: payload.reportFingerprint } : current);
-        setBatchStatus(current => ({ ...(current || {}), batchId: payload.batchId || preview.batchId, status: 'READY', report: payload.report, reportFingerprint: payload.reportFingerprint, approvedAt: null, approvedBy: '', errorMessage: payload.message || 'Live reconciliation requires a fresh review.' }));
+      if (error.response?.status === 409 && (payload?.status === 'CONFLICTS_FOUND' || payload?.status === 'READY')) {
+        setPreview(current => current ? {
+          ...current,
+          status: payload.canonicalStatus || payload.status,
+          report: payload.report || current.report,
+          reportFingerprint: payload.reportFingerprint || current.reportFingerprint
+        } : current);
+        setBatchStatus(current => ({
+          ...(current || {}),
+          ...payload,
+          batchId: payload.batchId || preview.batchId,
+          approvedAt: null,
+          approvedBy: ''
+        }));
         setPublished(null);
         setReviewConfirmed(false);
+      } else {
+        try {
+          await fetchBatchDetails(preview.batchId);
+        } catch {
+          // Leave existing batch status intact when refresh also fails.
+        }
       }
       addToast(payload?.message || payload?.error?.message || error.message || 'Catalogue publishing failed.', 'error');
     } finally {
@@ -133,182 +320,423 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
     if (!preview?.batchId) return;
     setStatusBusy(true);
     try {
-      const response = await apiClient.get(`/api/v1/inventory/catalogue/imports/${encodeURIComponent(preview.batchId)}`);
-      setBatchStatus(response.data);
+      const updated = await fetchBatchDetails(preview.batchId);
+      setPreview(current => current ? {
+        ...current,
+        status: getEffectiveBatchState(updated),
+        report: updated.report || current.report,
+        reportFingerprint: updated.reportFingerprint || current.reportFingerprint
+      } : current);
       addToast('Import batch status refreshed.', 'success');
     } catch (error) {
       addToast(error.response?.data?.message || error.response?.data?.error?.message || 'Could not refresh import batch status.', 'error');
-    } finally { setStatusBusy(false); }
+    } finally {
+      setStatusBusy(false);
+    }
   };
 
-  const report = published?.report || preview?.report;
+  const report = published?.report || batchStatus?.report || preview?.report;
+  const effectiveState = getEffectiveBatchState(batchStatus || published || preview);
+  const statusMeta = getReconciliationStatusMeta(effectiveState);
+  const pipelineIndex = getPipelineStageIndex(effectiveState);
+  const unresolvedConflicts = (batchStatus?.conflicts || []).filter(item => !item?.resolved);
+  const hasBlockingConflicts = Number(report?.blockingConflicts || 0) > 0 || unresolvedConflicts.length > 0;
+  const canResolveConflicts = ['CONFLICTS_FOUND', 'RESOLVING', 'FAILED'].includes(effectiveState) && unresolvedConflicts.some(item => item.medicineId);
+  const canReconcile = ['STAGED', 'CONFLICTS_FOUND', 'RECONCILED', 'AWAITING_APPROVAL', 'APPROVED', 'FAILED', 'PARTIALLY_PUBLISHED', 'READY'].includes(effectiveState);
+  const canApprove = ['RECONCILED', 'AWAITING_APPROVAL', 'READY'].includes(effectiveState) && !batchStatus?.approvedAt && !hasBlockingConflicts;
+  const canPublish = ['APPROVED', 'PARTIALLY_PUBLISHED'].includes(effectiveState) || (effectiveState === 'READY' && Boolean(batchStatus?.approvedAt));
+
   const metric = (label, value) => (
     <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 min-w-0">
-      <div className="text-[10px] uppercase tracking-wide font-bold text-slate-500">{label}</div>
-      <div className="mt-1 text-xl font-black text-slate-900 tabular-nums">{typeof value === 'number' ? value.toLocaleString() : (value ?? 0)}</div>
+      <div className="text-[10px] uppercase tracking-wide font-bold text-slate-500"><span>{label}</span></div>
+      <div className="mt-1 text-xl font-black text-slate-900 tabular-nums"><span>{typeof value === 'number' ? value.toLocaleString() : (value ?? 0)}</span></div>
     </div>
   );
 
   return (
-    <div className="fixed inset-0 z-[120] h-[100dvh] w-screen overflow-y-auto overscroll-y-contain bg-slate-950/60 p-0 backdrop-blur-sm sm:h-auto sm:w-auto sm:px-5 sm:py-6" role="dialog" aria-modal="true" aria-labelledby="medicine-catalogue-import-title">
-      <section className="mx-auto flex h-full max-h-[100dvh] min-h-0 w-full max-w-5xl flex-col overflow-hidden border-0 bg-white shadow-2xl sm:my-0 sm:h-auto sm:max-h-[calc(100dvh-3rem)] sm:rounded-3xl sm:border">
-        <header className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200 px-4 py-4 sm:px-6">
+    <div className="fixed inset-0 z-[120] h-[100dvh] w-screen overflow-y-auto overscroll-y-contain bg-slate-500/40 p-0 backdrop-blur-sm sm:h-auto sm:w-auto sm:px-5 sm:py-6" role="dialog" aria-modal="true" aria-labelledby="medicine-catalogue-import-title">
+      <section className="mx-auto flex h-full max-h-[100dvh] min-h-0 w-full max-w-5xl flex-col overflow-hidden border border-slate-200 bg-white shadow-sm sm:my-0 sm:h-auto sm:max-h-[calc(100dvh-3rem)] sm:rounded-3xl">
+        <header className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-4 sm:px-6">
           <div className="min-w-0">
-            <h2 id="medicine-catalogue-import-title" className="text-base sm:text-lg font-black text-slate-900">Medicine Master Catalogue Enrichment</h2>
-            <p className="mt-1 text-xs text-slate-500">Upload, clean, deduplicate and reconcile a medicine JSON dataset.</p>
+            <h2 id="medicine-catalogue-import-title" className="text-base sm:text-lg font-black text-slate-900">
+              <span>Medicine Master Catalogue Enrichment</span>
+            </h2>
+            <p className="mt-1 text-xs text-slate-600">
+              <span>Upload, clean, deduplicate and reconcile a medicine JSON dataset through the deterministic state machine.</span>
+            </p>
           </div>
-          <button type="button" onClick={close} disabled={busy} className="shrink-0 rounded-full bg-slate-100 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-200" aria-label="Close">✕</button>
+          <button
+            type="button"
+            onClick={close}
+            disabled={busy}
+            className="min-h-11 min-w-11 shrink-0 rounded-full border border-slate-200 bg-slate-100 px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 disabled:opacity-50"
+            aria-label="Close"
+          >
+            <span>✕</span>
+          </button>
         </header>
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain p-4 sm:p-6 space-y-5">
-          <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs leading-5 text-blue-950">
-            Platform-level shared catalogue import. It enriches medicine identity and clinical/product metadata only. Pharmacy selling price, stock, branch, batch, MRP, expiry and manufacturing dates are not imported.
+
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain bg-slate-50 p-4 sm:p-6 space-y-5">
+          <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs leading-5 text-slate-900">
+            <span>Platform-level shared catalogue import. It enriches medicine identity and clinical/product metadata only. Pharmacy selling price, stock, branch, batch, MRP, expiry and manufacturing dates are not imported.</span>
           </div>
+
           {!published && !preview && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="sm:col-span-2 text-xs text-slate-500">Dataset type is detected automatically from the uploaded JSON structure.</div>
-              <label className="block text-xs font-bold text-slate-700">
-                JSON file (max 110 MB)
-                <input type="file" accept=".json,application/json" disabled={busy || Boolean(preview)} onChange={event => setFile(event.target.files?.[0] || null)} className="mt-1.5 block w-full rounded-xl border border-slate-300 bg-white p-2 text-xs file:mr-3 file:rounded-lg file:border-0 file:bg-blue-50 file:px-3 file:py-2 file:font-bold file:text-blue-700" />
+            <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4">
+              <p className="text-xs text-slate-600">
+                <span>Dataset type is detected automatically from the uploaded JSON structure.</span>
+              </p>
+              <label className="flex flex-col gap-1.5 text-xs font-bold text-slate-900">
+                <span>JSON file (max 110 MB)</span>
+                <input
+                  type="file"
+                  accept=".json,application/json"
+                  disabled={busy || Boolean(preview)}
+                  onChange={event => setFile(event.target.files?.[0] || null)}
+                  className="min-h-11 w-full rounded-xl border border-slate-300 bg-white p-2 text-xs text-slate-900 file:mr-3 file:min-h-9 file:rounded-lg file:border-0 file:bg-blue-50 file:px-3 file:py-2 file:font-bold file:text-blue-700"
+                />
               </label>
             </div>
           )}
-          {jobStatus && busy && <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 space-y-2"><div className="flex items-center justify-between gap-3 text-xs"><strong className="text-blue-950">Background import: {jobStatus.stage || jobStatus.status}</strong><span className="font-bold tabular-nums text-blue-800">{Number(jobStatus.progressPercent || 0)}%</span></div><div className="h-2 overflow-hidden rounded-full bg-blue-100"><div className="h-full rounded-full bg-blue-600 transition-all" style={{ width: `${Math.max(0, Math.min(100, Number(jobStatus.progressPercent || 0)))}%` }} /></div><p className="text-[11px] text-blue-900">{jobStatus.fileName} · {jobStatus.processedRecords ? Number(jobStatus.processedRecords).toLocaleString() : 'Preparing'} / {jobStatus.totalRecords ? Number(jobStatus.totalRecords).toLocaleString() : '—'} records · Job {jobStatus.jobId}</p></div>}
-          {jobStatus?.status === 'FAILED' && <p className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">Processing failed: {jobStatus.errorMessage || 'Unknown processing error'} · Attempt {jobStatus.attempts || 1}</p>}
-          {file && !preview && <p className="text-xs text-slate-500 break-all">Selected: <strong>{file.name}</strong> · {(file.size / 1024 / 1024).toFixed(2)} MB</p>}
+
+          {jobStatus && busy && (
+            <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 space-y-2">
+              <div className="flex items-center justify-between gap-3 text-xs">
+                <span className="font-bold text-slate-900">Background import: {jobStatus.stage || jobStatus.status}</span>
+                <span className="font-bold tabular-nums text-blue-700">{Number(jobStatus.progressPercent || 0)}%</span>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-white border border-blue-200">
+                <div className="h-full rounded-full bg-blue-600 transition-all" style={{ width: `${Math.max(0, Math.min(100, Number(jobStatus.progressPercent || 0)))}%` }} />
+              </div>
+              <p className="text-[11px] text-slate-600">
+                <span>{jobStatus.fileName} · {jobStatus.processedRecords ? Number(jobStatus.processedRecords).toLocaleString() : 'Preparing'} / {jobStatus.totalRecords ? Number(jobStatus.totalRecords).toLocaleString() : '—'} records · Job {jobStatus.jobId}</span>
+              </p>
+            </div>
+          )}
+
+          {jobStatus?.status === 'FAILED' && (
+            <p className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
+              <span>Processing failed: {jobStatus.errorMessage || 'Unknown processing error'} · Attempt {jobStatus.attempts || 1}</span>
+            </p>
+          )}
+
+          {file && !preview && (
+            <p className="text-xs text-slate-600 break-all">
+              <span>Selected: <strong>{file.name}</strong> · {(file.size / 1024 / 1024).toFixed(2)} MB</span>
+            </p>
+          )}
+
           {report && (
-            <div className="space-y-3">
+            <div className="space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 className="text-sm font-black text-slate-900">Reconciliation report</h3>
-                <span className="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-extrabold text-slate-600">{batchStatus?.status || published?.status || preview?.status}</span>
+                <h3 className="text-sm font-black text-slate-900">
+                  <span>Reconciliation state & report</span>
+                </h3>
+                <span className={`inline-flex items-center rounded-full px-3 py-1 text-[11px] font-bold ${statusMeta.pillClass}`}>
+                  <span>{statusMeta.label}</span>
+                </span>
               </div>
-              <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-2">
+
+              <div className="flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-white p-3">
+                {RECONCILIATION_PIPELINE_STAGES.map((stage, index) => {
+                  const isCurrent = pipelineIndex === index && effectiveState !== 'FAILED';
+                  const isCompleted = pipelineIndex > index || effectiveState === 'PUBLISHED';
+                  const chipClass = isCurrent
+                    ? 'border-blue-600 bg-blue-600 text-white'
+                    : isCompleted
+                      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                      : 'border-slate-200 bg-slate-50 text-slate-500';
+                  return (
+                    <div key={stage.key} className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-bold ${chipClass}`}>
+                      <span>{index + 1}.</span>
+                      <span>{stage.label}</span>
+                    </div>
+                  );
+                })}
+                {effectiveState === 'FAILED' && (
+                  <div className="flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[11px] font-bold text-rose-700">
+                    <span>Failed — Ready for Recovery (FAILED → RECONCILING)</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="min-w-0"><p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Import batch inspection</p><p className="mt-1 break-all font-mono text-[11px] text-slate-700">{preview.batchId}</p></div>
-                  <button type="button" onClick={refreshBatchStatus} disabled={statusBusy || busy} className="rounded-lg border border-slate-300 px-3 py-2 text-[11px] font-bold text-slate-700 disabled:opacity-50">{statusBusy ? 'Refreshing…' : 'Refresh status'}</button>
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                      <span>Import batch inspection</span>
+                    </p>
+                    <p className="mt-1 break-all font-mono text-[11px] text-slate-600">
+                      <span>{preview.batchId}</span>
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {canReconcile && (
+                      <button
+                        type="button"
+                        onClick={rerunReconciliation}
+                        disabled={busy || statusBusy}
+                        className="min-h-11 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 disabled:opacity-50"
+                      >
+                        <span>{effectiveState === 'FAILED' ? 'Recover & Re-reconcile' : 'Re-run Reconciliation'}</span>
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={refreshBatchStatus}
+                      disabled={statusBusy || busy}
+                      className="min-h-11 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 disabled:opacity-50"
+                    >
+                      <span>{statusBusy ? 'Refreshing…' : 'Refresh status'}</span>
+                    </button>
+                  </div>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-                  <div><span className="block text-[10px] text-slate-500">Batch status</span><strong>{batchStatus?.status || 'Not loaded'}</strong></div>
-                  <div><span className="block text-[10px] text-slate-500">Dataset</span><strong>{batchStatus?.dataset || preview.dataset || 'Auto-detected'}</strong></div>
-                  <div><span className="block text-[10px] text-slate-500">File</span><strong className="break-all">{batchStatus?.fileName || file?.name || '—'}</strong></div>
-                  <div><span className="block text-[10px] text-slate-500">Published</span><strong>{Number(batchStatus?.publishedCount ?? published?.publishedCount ?? 0).toLocaleString()}</strong></div>
+                <div className="flex flex-wrap gap-4 text-xs">
+                  <div className="min-w-[120px] flex-1">
+                    <span className="block text-[10px] text-slate-500">Batch status</span>
+                    <span className="font-bold text-slate-900">{effectiveState || 'Not loaded'}</span>
+                  </div>
+                  <div className="min-w-[120px] flex-1">
+                    <span className="block text-[10px] text-slate-500">Dataset</span>
+                    <span className="font-bold text-slate-900">{batchStatus?.dataset || preview.dataset || 'Auto-detected'}</span>
+                  </div>
+                  <div className="min-w-[140px] flex-1">
+                    <span className="block text-[10px] text-slate-500">File</span>
+                    <span className="font-bold break-all text-slate-900">{batchStatus?.fileName || file?.name || '—'}</span>
+                  </div>
+                  <div className="min-w-[100px] flex-1">
+                    <span className="block text-[10px] text-slate-500">Published</span>
+                    <span className="font-bold tabular-nums text-slate-900">{Number(batchStatus?.publishedCount ?? published?.publishedCount ?? 0).toLocaleString()}</span>
+                  </div>
                 </div>
-                {batchStatus?.errorMessage && <p className="rounded-lg bg-rose-50 p-2 text-xs text-rose-800">{batchStatus.errorMessage}</p>}
+                {batchStatus?.errorMessage && (
+                  <p className="rounded-lg border border-rose-200 bg-rose-50 p-2.5 text-xs text-rose-700">
+                    <span>{batchStatus.errorMessage}</span>
+                  </p>
+                )}
               </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                {metric('Source records', report.sourceRecords)}
-                {metric('Clean records', report.normalizedRecords)}
-                {metric('New medicines', report.newRecords)}
-                {metric('Update candidates', report.updateCandidates)}
-                {metric('Fuzzy auto-merges', report.fuzzyAutoMerge)}
-                {metric('Fuzzy matches to review', report.fuzzyManualReview)}
-                {metric('Unmatched records', report.unmatchedRecords)}
-                {metric('Duplicates removed', report.duplicatesRemoved)}
-                {metric('Rejected rows', report.rejectedRecords)}
-                {metric('With composition', report.withComposition)}
-                {metric('Ingredient chemistry details', report.withIngredientDetails)}
-                {metric('CAS / UNII identifiers', report.withChemicalIdentifiers)}
-                {metric('With toxicology metadata', report.withToxicology)}
-                {metric('With administration routes', report.withRoutes)}
-                {metric('With manufacturer', report.withManufacturer)}
-                {metric('With pack size', report.withPackSize)}
-                {metric('With side effects', report.withSideEffects)}
-                {metric('With uses', report.withUses)}
-                {metric('With suggested alternatives', report.withSuggestedAlternatives)}
-                {metric('Records with alternatives', report.withAlternatives)}
-                {metric('Linked alternative IDs', report.withLinkedAlternativeIds)}
-                {metric('Total alternative links', report.totalAlternativeLinks)}
-                {metric('With therapeutic class', report.withTherapeuticClass)}
-                {metric('With chemical class', report.withChemicalClass)}
-                {metric('Habit-forming metadata', report.withHabitFormingMetadata)}
-                {metric('Partial records', report.partialRecords)}
-                {metric('Missing composition', report.missingComposition)}
-                {metric('Missing manufacturer', report.missingManufacturer)}
-                {metric('Need review', report.needsReview)}
-                {metric('Average quality score', `${report.averageQualityScore || 0}%`)}
-                {metric('Excellent quality', report.excellentQualityRecords)}
-                {metric('Good quality', report.goodQualityRecords)}
-                {metric('Partial quality', report.partialQualityRecords)}
-                {metric('Quality needs review', report.needsReviewQualityRecords)}
+
+              {unresolvedConflicts.length > 0 && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <h4 className="text-xs font-extrabold text-amber-800">
+                        <span>Conflict Resolution Loop ({unresolvedConflicts.length} unresolved)</span>
+                      </h4>
+                      <p className="mt-1 text-[11px] text-amber-800">
+                        <span>Choose how each conflicting or ambiguous medicine should be handled (`CONFLICTS_FOUND → RESOLVING → RECONCILING`).</span>
+                      </p>
+                    </div>
+                    {canResolveConflicts && (
+                      <button
+                        type="button"
+                        onClick={applyConflictResolutions}
+                        disabled={busy || statusBusy}
+                        className="min-h-11 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 disabled:opacity-50"
+                      >
+                        <span>Apply Resolutions & Re-reconcile</span>
+                      </button>
+                    )}
+                  </div>
+                  <div className="max-h-60 overflow-y-auto space-y-2">
+                    {unresolvedConflicts.slice(0, 50).map((conflict, index) => {
+                      const draftKey = conflict.conflictId || conflict.medicineId || `conflict-${index}`;
+                      const targetId = conflict.targetMedicineId || conflict.currentTargetMedicineId || '';
+                      return (
+                        <div key={draftKey} className="flex flex-col gap-2 rounded-xl border border-amber-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
+                          <div className="min-w-0 flex-1 space-y-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-xs font-bold text-slate-900">{conflict.brandName || conflict.medicineId || conflict.reason}</span>
+                              <span className="rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-800">{conflict.reason}</span>
+                            </div>
+                            <p className="text-[11px] text-slate-600">
+                              <span>
+                                {conflict.medicineId ? `Source: ${conflict.medicineId}` : ''}
+                                {targetId ? ` · Candidate: ${targetId}` : ''}
+                                {conflict.score ? ` · Score ${conflict.score}%` : ''}
+                                {conflict.warnings?.length ? ` · ${conflict.warnings.join(', ')}` : ''}
+                              </span>
+                            </p>
+                          </div>
+                          {conflict.medicineId && canResolveConflicts && (
+                            <div className="shrink-0">
+                              <select
+                                aria-label={`Resolution action for ${conflict.brandName || conflict.medicineId}`}
+                                value={resolutionDrafts[draftKey] || ''}
+                                onChange={event => setResolutionDrafts(prev => ({ ...prev, [draftKey]: event.target.value }))}
+                                className="min-h-11 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+                              >
+                                <option value="">Select resolution…</option>
+                                {targetId && <option value="ACCEPT_CANDIDATE">Merge into candidate ({targetId})</option>}
+                                <option value="KEEP_SEPARATE">Keep as separate medicine</option>
+                                <option value="SKIP_RECORD">Skip staged record</option>
+                              </select>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex flex-wrap gap-2">
+                <div className="min-w-[140px] flex-1">{metric('Source records', report.sourceRecords)}</div>
+                <div className="min-w-[140px] flex-1">{metric('Clean records', report.normalizedRecords)}</div>
+                <div className="min-w-[140px] flex-1">{metric('New medicines', report.newRecords)}</div>
+                <div className="min-w-[140px] flex-1">{metric('Update candidates', report.updateCandidates)}</div>
+                <div className="min-w-[140px] flex-1">{metric('Fuzzy auto-merges', report.fuzzyAutoMerge)}</div>
+                <div className="min-w-[140px] flex-1">{metric('Fuzzy matches to review', report.fuzzyManualReview)}</div>
+                <div className="min-w-[140px] flex-1">{metric('Blocking conflicts', report.blockingConflicts)}</div>
+                <div className="min-w-[140px] flex-1">{metric('Duplicates removed', report.duplicatesRemoved)}</div>
+                <div className="min-w-[140px] flex-1">{metric('Rejected rows', report.rejectedRecords)}</div>
+                <div className="min-w-[140px] flex-1">{metric('Average quality score', `${report.averageQualityScore || 0}%`)}</div>
               </div>
+
               {report.publishReconciliation && (
                 <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-2">
-                  <h4 className="text-xs font-extrabold text-amber-950">Fresh publish-time reconciliation</h4>
-                  <p className="text-[11px] leading-5 text-amber-900">The live master catalogue changed after preview or contains unresolved candidates. Publishing is blocked until the updated report is reviewed and approved.</p>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
-                    <div>Checked: <strong>{Number(report.publishReconciliation.checkedRecords || 0).toLocaleString()}</strong></div>
-                    <div>Updates: <strong>{Number(report.publishReconciliation.matchedUpdates || 0).toLocaleString()}</strong></div>
-                    <div>New inserts: <strong>{Number(report.publishReconciliation.newInserts || 0).toLocaleString()}</strong></div>
-                    <div>Manual review: <strong>{Number(report.publishReconciliation.manualReview || 0).toLocaleString()}</strong></div>
-                    <div>Clinical conflicts: <strong>{Number(report.publishReconciliation.clinicalConflicts || 0).toLocaleString()}</strong></div>
-                    <div>Stale decisions: <strong>{Number(report.publishReconciliation.staleDecisions || 0).toLocaleString()}</strong></div>
-                    <div>Blockers: <strong>{Number(report.publishReconciliation.blockerCount || 0).toLocaleString()}</strong></div>
-                  </div>
-                  {report.publishReconciliation.blockerExamples?.length > 0 && (
-                    <div className="max-h-40 overflow-y-auto space-y-1">
-                      {report.publishReconciliation.blockerExamples.slice(0, 20).map((item, index) => (
-                        <div key={item.medicineId || item.targetMedicineId || item.reason + '-' + index} className="rounded-lg bg-white/80 p-2 text-[10px] text-amber-950">
-                          <strong>{item.brandName || item.targetMedicineId || item.reason}</strong> · {item.reason}
-                          {item.warnings?.length > 0 && <span> · {item.warnings.join(', ')}</span>}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-              <div className="rounded-xl border border-violet-200 bg-violet-50 p-3 space-y-2">
-                <div className="flex flex-wrap items-center justify-between gap-2"><strong className="text-xs text-violet-950">Reconciliation approval</strong><span className={`rounded-full px-2.5 py-1 text-[10px] font-extrabold ${batchStatus?.approvedAt ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>{batchStatus?.approvedAt ? 'Approved' : 'Review required'}</span></div>
-                <p className="text-[11px] leading-5 text-violet-950">New medicines: {Number(report.newRecords || 0).toLocaleString()} · Existing-record update candidates: {Number(report.updateCandidates || 0).toLocaleString()} · Rejected rows: {Number(report.rejectedRecords || 0).toLocaleString()}. Publishing applies the staged reconciliation to the shared master catalogue; it does not change tenant prices or branch inventory.</p>
-                {!batchStatus?.approvedAt && <label className="flex items-start gap-2 text-[11px] font-semibold text-violet-950"><input type="checkbox" checked={reviewConfirmed} onChange={event => setReviewConfirmed(event.target.checked)} className="mt-0.5" />I have reviewed the reconciliation totals, duplicate handling, rejected records and clinical-data warnings, and approve this exact report for publication.</label>}
-                {batchStatus?.approvedAt && <p className="text-[11px] text-emerald-800">Approved by {batchStatus.approvedBy || 'platform administrator'} at {batchStatus.approvedAt ? new Date(batchStatus.approvedAt).toLocaleString() : '—'}.</p>}
-              </div>
-              {report.fuzzyMatchExamples?.length > 0 && (
-                <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-3 space-y-2">
-                  <h4 className="text-xs font-extrabold text-indigo-950">Intelligent reconciliation candidates</h4>
-                  <p className="text-[11px] leading-5 text-indigo-900">High-confidence matches are merged into the existing master record. Ambiguous matches remain separate and are listed for manual review. Strength, dosage-form and composition conflicts are never auto-merged.</p>
-                  <div className="overflow-x-auto"><table className="w-full min-w-[680px] text-left text-[11px]"><thead><tr className="text-indigo-900"><th className="p-2">Incoming medicine</th><th className="p-2">Existing master ID</th><th className="p-2">Score</th><th className="p-2">Decision</th><th className="p-2">Warnings</th></tr></thead><tbody className="divide-y divide-indigo-100">{report.fuzzyMatchExamples.map((match, index) => <tr key={match.matchedMedicineId + '-' + index}><td className="p-2">{match.incomingMedicine}</td><td className="p-2 font-mono">{match.matchedMedicineId}</td><td className="p-2 font-bold">{match.score}%</td><td className="p-2">{match.decision}</td><td className="p-2">{(match.warnings || []).join(', ') || '—'}</td></tr>)}</tbody></table></div>
-                  {report.fuzzyCandidateScanTruncated && <p className="text-[10px] font-semibold text-amber-800">Candidate scan reached its safety cap. Some possible fuzzy matches may require a separate reconciliation pass.</p>}
-                </div>
-              )}
-              {report.qualityIssueCounts && Object.keys(report.qualityIssueCounts).length > 0 && (
-                <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-2">
-                  <h4 className="text-xs font-extrabold text-slate-800">Most common quality gaps</h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {Object.entries(report.qualityIssueCounts).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([issue, count]) => (
-                      <div key={issue} className="flex items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2 text-[11px]">
-                        <span className="min-w-0 break-words text-slate-600">{issue.replace(/_/g, ' ').toLowerCase()}</span>
-                        <strong className="shrink-0 tabular-nums text-slate-900">{Number(count).toLocaleString()}</strong>
-                      </div>
-                    ))}
+                  <h4 className="text-xs font-extrabold text-amber-800">
+                    <span>Fresh live reconciliation summary</span>
+                  </h4>
+                  <div className="flex flex-wrap gap-3 text-[11px] text-amber-800">
+                    <span>Checked: <strong>{Number(report.publishReconciliation.checkedRecords || 0).toLocaleString()}</strong></span>
+                    <span>Updates: <strong>{Number(report.publishReconciliation.matchedUpdates || 0).toLocaleString()}</strong></span>
+                    <span>New inserts: <strong>{Number(report.publishReconciliation.newInserts || 0).toLocaleString()}</strong></span>
+                    <span>Skipped: <strong>{Number(report.publishReconciliation.skippedRecords || 0).toLocaleString()}</strong></span>
+                    <span>Manual review: <strong>{Number(report.publishReconciliation.manualReview || 0).toLocaleString()}</strong></span>
+                    <span>Clinical conflicts: <strong>{Number(report.publishReconciliation.clinicalConflicts || 0).toLocaleString()}</strong></span>
+                    <span>Blockers: <strong>{Number(report.publishReconciliation.blockerCount || 0).toLocaleString()}</strong></span>
                   </div>
                 </div>
               )}
-              <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[11px] leading-5 text-amber-950">
-                Quality scores measure supplied-field completeness and consistency, not clinical correctness or regulatory approval. Missing fields are reported rather than invented. Clinical uses, side effects, habit-forming flags and suggested alternatives are source-provided and unverified; they are informational, not prescribing guidance. Suggested alternatives are not confirmed therapeutic equivalents. Prescription flags and source licensing remain unverified. Confirm dataset redistribution rights before commercial use. Third-party image URLs are not trusted or served as product images.
+
+              <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <strong className="text-xs text-slate-900">Reconciliation approval</strong>
+                  <span className={`rounded-full px-2.5 py-1 text-[10px] font-extrabold ${batchStatus?.approvedAt ? 'border border-emerald-200 bg-emerald-50 text-emerald-700' : 'border border-amber-200 bg-amber-50 text-amber-800'}`}>
+                    <span>{batchStatus?.approvedAt ? 'Approved' : 'Review required'}</span>
+                  </span>
+                </div>
+                <p className="text-[11px] leading-5 text-slate-600">
+                  <span>New medicines: {Number(report.newRecords || 0).toLocaleString()} · Existing-record update candidates: {Number(report.updateCandidates || 0).toLocaleString()} · Rejected rows: {Number(report.rejectedRecords || 0).toLocaleString()}. Publishing applies the staged reconciliation to the shared master catalogue; it does not change tenant prices or branch inventory.</span>
+                </p>
+                {canApprove && (
+                  <label className="flex min-h-11 items-start gap-2.5 text-xs font-semibold text-slate-900 pt-1">
+                    <input
+                      type="checkbox"
+                      checked={reviewConfirmed}
+                      onChange={event => setReviewConfirmed(event.target.checked)}
+                      className="mt-1 h-4 w-4"
+                    />
+                    <span>I have reviewed the reconciliation totals, conflict resolutions, duplicate handling, rejected records and clinical-data warnings, and approve this exact report for publication.</span>
+                  </label>
+                )}
+                {batchStatus?.approvedAt && (
+                  <p className="text-[11px] font-semibold text-emerald-700">
+                    <span>Approved by {batchStatus.approvedBy || 'platform administrator'} at {new Date(batchStatus.approvedAt).toLocaleString()}.</span>
+                  </p>
+                )}
               </div>
+
               {preview?.sample?.length > 0 && (
-                <div className="overflow-x-auto rounded-xl border border-slate-200">
-                  <table className="w-full min-w-[920px] text-left text-xs">
-                    <thead className="bg-slate-50 text-[10px] uppercase text-slate-500"><tr><th className="p-3">Medicine</th><th className="p-3">Composition</th><th className="p-3">Strength / Form</th><th className="p-3">Therapeutic class</th><th className="p-3">Uses / Side effects</th><th className="p-3">Manufacturer</th><th className="p-3">Quality score</th><th className="p-3">Quality issues</th><th className="p-3">Reconciliation</th></tr></thead>
+                <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+                  <table className="w-full min-w-[760px] text-left text-xs">
+                    <thead className="bg-slate-50 text-[10px] uppercase text-slate-500">
+                      <tr>
+                        <th className="p-3">Medicine</th>
+                        <th className="p-3">Composition</th>
+                        <th className="p-3">Strength / Form</th>
+                        <th className="p-3">Manufacturer</th>
+                        <th className="p-3">Quality score</th>
+                        <th className="p-3">Reconciliation</th>
+                      </tr>
+                    </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {preview.sample.map(item => <tr key={item.medicineId}><td className="p-3 font-bold text-slate-800">{item.brandName}</td><td className="p-3 text-slate-600">{item.composition || 'Not supplied'}</td><td className="p-3 text-slate-600">{[item.strength, item.dosageForm, item.packSize].filter(Boolean).join(' · ') || '—'}</td><td className="p-3 text-slate-600">{item.therapeuticClass || '—'}</td><td className="p-3 text-slate-600">{[...(item.uses || []).slice(0, 2), ...(item.sideEffects || []).slice(0, 2)].join(' · ') || '—'}</td><td className="p-3 text-slate-600">{item.manufacturer || 'Not supplied'}</td><td className="p-3 font-bold tabular-nums">{Number(item.qualityScore || 0)}% · {item.qualityGrade || item.dataQualityStatus}</td><td className="p-3 text-slate-600">{(item.qualityIssues || []).slice(0, 4).join(', ') || 'No detected gaps'}</td><td className="p-3"><strong>{item.reconciliationMatch?.decision || 'NEW RECORD'}</strong>{item.reconciliationMatch && <span className="block text-slate-500">{item.reconciliationMatch.method} · {item.reconciliationMatch.score}% · {item.reconciliationMatch.targetMedicineId}</span>}</td></tr>)}
+                      {preview.sample.map(item => (
+                        <tr key={item.medicineId}>
+                          <td className="p-3 font-bold text-slate-900">{item.brandName}</td>
+                          <td className="p-3 text-slate-600">{item.composition || 'Not supplied'}</td>
+                          <td className="p-3 text-slate-600">{[item.strength, item.dosageForm, item.packSize].filter(Boolean).join(' · ') || '—'}</td>
+                          <td className="p-3 text-slate-600">{item.manufacturer || 'Not supplied'}</td>
+                          <td className="p-3 font-bold tabular-nums text-slate-900">{Number(item.qualityScore || 0)}% · {item.qualityGrade || item.dataQualityStatus}</td>
+                          <td className="p-3 text-slate-900">
+                            <strong>{item.reconciliationMatch?.decision || 'NEW RECORD'}</strong>
+                            {item.reconciliationMatch && (
+                              <span className="block text-slate-500">{item.reconciliationMatch.method} · {item.reconciliationMatch.score}% · {item.reconciliationMatch.targetMedicineId}</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>
               )}
-              {published && <p className="text-sm font-bold text-emerald-700">Published {Number(published.publishedCount || 0).toLocaleString()} catalogue records. Status: {published.status}.</p>}
+
+              {published && (
+                <p className="text-sm font-bold text-emerald-700">
+                  <span>Published {Number(published.publishedCount || 0).toLocaleString()} catalogue records. Status: {published.status}.</span>
+                </p>
+              )}
             </div>
           )}
         </div>
-        <footer className="flex shrink-0 flex-col-reverse gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:justify-between sm:px-6 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-          <button type="button" onClick={preview ? () => { setPreview(null); setFile(null); setPublished(null); setBatchStatus(null); setReviewConfirmed(false); } : close} disabled={busy} className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 disabled:opacity-50">{preview ? 'Choose another dataset' : 'Close'}</button>
+
+        <footer className="flex shrink-0 flex-col-reverse gap-2 border-t border-slate-200 bg-white px-4 py-3 sm:flex-row sm:justify-between sm:px-6 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          <button
+            type="button"
+            onClick={preview ? () => { reset(); } : close}
+            disabled={busy}
+            className="min-h-11 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 disabled:opacity-50"
+          >
+            <span>{preview ? 'Choose another dataset' : 'Close'}</span>
+          </button>
           {!preview ? (
-            <div className="flex flex-col gap-2 sm:flex-row"><button type="button" onClick={createPreview} disabled={busy || !file || jobStatus?.status === 'FAILED'} className="rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-extrabold text-white hover:bg-blue-700 disabled:opacity-50">{busy ? (jobStatus ? `Processing… ${jobStatus.progressPercent || 0}%` : 'Uploading securely…') : 'Upload & Analyze'}</button>{jobStatus?.status === 'FAILED' && <button type="button" onClick={retryFailedJob} disabled={busy} className="rounded-xl bg-amber-600 px-5 py-2.5 text-xs font-extrabold text-white disabled:opacity-50">{busy ? 'Retrying…' : 'Retry failed job'}</button>}</div>
-          ) : !published && !batchStatus?.approvedAt ? (
-            <button type="button" onClick={approveReconciliation} disabled={busy || !reviewConfirmed || !preview?.reportFingerprint} className="rounded-xl bg-violet-600 px-5 py-2.5 text-xs font-extrabold text-white hover:bg-violet-700 disabled:opacity-50">{busy ? 'Approving…' : 'Approve reconciliation'}</button>
-          ) : !published ? (
-            <button type="button" onClick={publish} disabled={busy || report?.normalizedRecords === 0} className="rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-extrabold text-white hover:bg-emerald-700 disabled:opacity-50">{busy ? 'Publishing…' : 'Publish to Shared Catalogue'}</button>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <button
+                type="button"
+                onClick={createPreview}
+                disabled={busy || !file || jobStatus?.status === 'FAILED'}
+                className="min-h-11 rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-extrabold text-white hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 disabled:opacity-50"
+              >
+                <span>{busy ? (jobStatus ? `Processing… ${jobStatus.progressPercent || 0}%` : 'Uploading securely…') : 'Upload & Analyze'}</span>
+              </button>
+              {jobStatus?.status === 'FAILED' && (
+                <button
+                  type="button"
+                  onClick={retryFailedJob}
+                  disabled={busy}
+                  className="min-h-11 rounded-xl border border-amber-200 bg-amber-50 px-5 py-2.5 text-xs font-extrabold text-amber-800 hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 disabled:opacity-50"
+                >
+                  <span>{busy ? 'Retrying…' : 'Retry failed job'}</span>
+                </button>
+              )}
+            </div>
+          ) : canApprove ? (
+            <button
+              type="button"
+              onClick={approveReconciliation}
+              disabled={busy || !reviewConfirmed || !preview?.reportFingerprint}
+              className="min-h-11 rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-extrabold text-white hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 disabled:opacity-50"
+            >
+              <span>{busy ? 'Approving…' : 'Approve reconciliation'}</span>
+            </button>
+          ) : canPublish && !published ? (
+            <button
+              type="button"
+              onClick={publish}
+              disabled={busy || report?.normalizedRecords === 0}
+              className="min-h-11 rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-extrabold text-white hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 disabled:opacity-50"
+            >
+              <span>{busy ? 'Publishing…' : 'Publish to Shared Catalogue'}</span>
+            </button>
           ) : (
-            <button type="button" onClick={close} className="rounded-xl bg-slate-900 px-5 py-2.5 text-xs font-extrabold text-white">Done</button>
+            <button
+              type="button"
+              onClick={close}
+              className="min-h-11 rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-extrabold text-white hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
+            >
+              <span>Done</span>
+            </button>
           )}
         </footer>
       </section>

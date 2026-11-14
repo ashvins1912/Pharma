@@ -162,7 +162,7 @@ const CAPABILITIES = [
   ['POST', /^\/api\/v1\/inventory\/catalogue\/imports\/jobs\/[^/]+\/restart$/, 'inventory.catalogue.import'],
   ['GET', /^\/api\/v1\/inventory\/catalogue\/imports\/[^/]+\/records$/, 'inventory.catalogue.import'],
   ['GET', /^\/api\/v1\/inventory\/catalogue\/imports\/[^/]+$/, 'inventory.catalogue.import'],
-  ['POST', /^\/api\/v1\/inventory\/catalogue\/imports\/[^/]+\/(?:approve|publish)$/, 'inventory.catalogue.import'],
+  ['POST', /^\/api\/v1\/inventory\/catalogue\/imports\/[^/]+\/(?:reconcile|conflicts\/resolve|approve|publish)$/, 'inventory.catalogue.import'],
   ['POST', /^\/api\/v1\/inventory\/imports\/preview$/, 'inventory.import'],
   ['POST', /^\/api\/v1\/inventory\/imports\/?$/, 'inventory.import'],
   ['GET', /^\/api\/v1\/inventory\/imports\/[^/]+(?:\/failures(?:\/download)?)?$/, 'inventory.import'],

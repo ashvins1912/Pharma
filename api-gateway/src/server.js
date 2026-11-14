@@ -82,7 +82,7 @@ export function createGatewayApp(gatewayConfig = config, healthMonitor = createH
       'X-Gateway-Authorization',
       'X-Gateway-Trusted-Authorization'
     ],
-    exposedHeaders: ['X-Request-Id', 'X-Correlation-Id'],
+    exposedHeaders: ['X-Request-Id', 'X-Correlation-Id', 'Retry-After'],
     maxAge: 600,
     optionsSuccessStatus: 204
   }));
