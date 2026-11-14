@@ -1,5 +1,8 @@
+import { loadSharedLocalEnv } from './load-shared-env.mjs';
 import { spawn } from 'node:child_process';
 import net from 'node:net';
+
+loadSharedLocalEnv();
 
 const mode = process.argv[2] || 'dev';
 const productionLike = process.env.NODE_ENV === 'production' || mode === 'start';
