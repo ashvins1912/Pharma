@@ -48,11 +48,12 @@ AWS example:
   "executionRoleArn": "arn:aws:iam::123456789012:role/pharma-ecs-execution",
   "subnetIds": ["subnet-0123456789abcdef0"],
   "securityGroupIds": ["sg-0123456789abcdef0"],
+  "allowedServiceNames": ["inventory-service"],
   "stateBackend": {"type":"s3","bucket":"existing-tf-state","key":"pharma/staging.tfstate","region":"ap-south-1","dynamodbTable":"existing-tf-locks"}
 }
 ```
 
-Azure requires `tenantId`, `subscriptionId`, `resourceGroupName`, `location`, `containerAppEnvironmentId` and an existing `azurerm` state backend (`resourceGroupName`, `storageAccountName`, `containerName`, `key`). GCP requires `projectId`, `region` and an existing GCS backend (`bucket`, `prefix`). Kubernetes requires `namespace` and the exact API hostname in `KUBERNETES_API_ALLOWED_HOSTS`. LaunchDarkly requires `projectKey` and `environmentKey`.
+Azure requires `tenantId`, `subscriptionId`, `resourceGroupName`, `location`, `containerAppEnvironmentId`, `allowedServiceNames` and an existing `azurerm` state backend (`resourceGroupName`, `storageAccountName`, `containerName`, `key`). GCP requires `projectId`, `region`, `allowedServiceNames` and an existing GCS backend (`bucket`, `prefix`). Kubernetes requires `namespace`, `allowedDeploymentNames` and the exact API hostname in `KUBERNETES_API_ALLOWED_HOSTS`. LaunchDarkly requires `projectKey`, `environmentKey` and `allowedFlagKeys`.
 
 ## Native deployment execution
 
