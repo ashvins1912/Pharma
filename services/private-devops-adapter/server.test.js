@@ -13,6 +13,7 @@ test('adapter refuses weak service credentials at startup',()=>{
 });
 
 import { verifyProviderIdentity } from './drivers/providerIdentity.js';
+import { nativeProviderPreflight, nativeProviderRollback } from './drivers/nativeExecution.js';
 
 test('native provider identity checks reject unsupported providers without network access', async()=>{
   await assert.rejects(()=>verifyProviderIdentity('unknown',{}),/Unsupported provider/);
@@ -31,4 +32,26 @@ test('Kubernetes identity check requires an endpoint and namespace token context
 });
 test('LaunchDarkly identity check requires project-scoped credentials', async()=>{
   await assert.rejects(()=>verifyProviderIdentity('launchdarkly',{}),/launchdarkly.apiKey/);
+});
+
+test('AWS native preflight refuses placeholder images before Terraform execution',async()=>{
+  await assert.rejects(()=>nativeProviderPreflight('aws',{
+    integration:{targetConfig:{stateBackend:{type:'s3',bucket:'staging-state',key:'service.tfstate',region:'us-east-1'}}},
+    credentials:{accessKeyId:'x',secretAccessKey:'y'},
+    deployment:{files:{'terraform/main.tf':'terraform { backend "s3" {} }'},image:'ghcr.io/example/service:CHANGE_ME'}
+  }),/pinned, explicitly tagged container image/);
+});
+test('Kubernetes native preflight requires an explicit target namespace',async()=>{
+  await assert.rejects(()=>nativeProviderPreflight('kubernetes',{
+    integration:{endpoint:'https://k8s.example.test',targetConfig:{}},
+    credentials:{token:'test-token'},
+    deployment:{files:{'kubernetes/service.yaml':'kind: Deployment'},image:'ghcr.io/example/service:v1'}
+  }),/Kubernetes namespace/);
+});
+test('LaunchDarkly rollback refuses to run without a captured prior state',async()=>{
+  await assert.rejects(()=>nativeProviderRollback('launchdarkly',{
+    integration:{targetConfig:{projectKey:'project',environmentKey:'staging'}},
+    credentials:{apiKey:'test-api-key'},
+    flag:{key:'test-flag'}
+  }),/captured prior LaunchDarkly state/);
 });
