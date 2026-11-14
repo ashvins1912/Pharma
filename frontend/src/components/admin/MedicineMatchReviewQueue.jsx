@@ -38,6 +38,7 @@ export default function MedicineMatchReviewQueue() {
   const [discoveryCursor, setDiscoveryCursor] = useState('');
   const [discoveryComplete, setDiscoveryComplete] = useState(false);
   const [discoverySummary, setDiscoverySummary] = useState(null);
+  const [queueExpanded, setQueueExpanded] = useState(true);
 
   const load = useCallback(async (page = 1) => {
     setLoading(true);
@@ -131,13 +132,15 @@ export default function MedicineMatchReviewQueue() {
   return (
     <section className="overflow-hidden rounded-2xl border border-violet-200 bg-white shadow-sm">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-violet-100 bg-violet-50/70 px-4 py-4">
-        <div><h3 className="text-sm font-black text-slate-900">Possible catalogue matches · Admin mapping</h3><p className="mt-1 text-xs text-slate-600">Review up to 100 product identities per page. Select a master record and explicitly approve the fields Store may display.</p></div>
+        <button type="button" onClick={() => setQueueExpanded(value => !value)} aria-expanded={queueExpanded} className="flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-600 focus-visible:ring-offset-2"><span className="min-w-0"><strong className="block text-sm font-black text-slate-900">Possible catalogue matches · Admin mapping</strong><span className="mt-1 block text-xs text-slate-600">Review up to 100 product identities per page. Select a master record and explicitly approve the fields Store may display.</span></span><svg aria-hidden="true" viewBox="0 0 20 20" fill="none" className={`h-5 w-5 shrink-0 text-slate-500 transition-transform duration-200 ${queueExpanded ? 'rotate-180' : ''}`}><path d="m5 7.5 5 5 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
         <div className="flex flex-wrap items-center gap-2">
           <button type="button" onClick={discoverExistingProducts} disabled={discovering || discoveryComplete} className="min-h-10 rounded-lg bg-violet-700 px-3 py-2 text-xs font-extrabold text-white hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-50">{discovering ? 'Scanning products…' : discoveryComplete ? 'Discovery complete' : discoveryCursor ? 'Scan next 500 products' : 'Discover existing Store products'}</button>
           <button type="button" onClick={() => load(pagination.page || 1)} disabled={loading} className="min-h-10 rounded-lg border border-violet-200 bg-white px-3 py-2 text-xs font-bold text-violet-700 disabled:opacity-50">{loading ? "Refreshing…" : "Refresh queue"}</button>
         </div>
         <div className="rounded-xl border border-violet-200 bg-white px-3 py-2 text-right"><strong className="block text-lg tabular-nums text-violet-800">{Number(pagination.total || 0).toLocaleString()}</strong><span className="text-[10px] font-bold uppercase text-slate-500">Awaiting mapping</span></div>
       </header>
+      {queueExpanded && (
+      <>
       {discoverySummary && <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-violet-100 bg-violet-50/40 px-4 py-2 text-[11px] text-slate-600"><strong className="text-violet-800">Existing product discovery</strong><span>{discoverySummary.scanned.toLocaleString()} scanned</span><span>{discoverySummary.queued.toLocaleString()} added to queue</span><span>{discoverySummary.skipped.toLocaleString()} skipped (no usable medicine name)</span><span className="font-bold">{discoverySummary.hasMore ? 'More batches available' : 'Scan complete'}</span></div>}
       {loading ? <p className="p-6 text-center text-sm text-slate-500">Loading review queue…</p> : items.length ? <div className="divide-y divide-slate-100">
         {items.map(row => {
@@ -167,6 +170,8 @@ export default function MedicineMatchReviewQueue() {
         })}
       </div> : <p className="p-6 text-center text-sm text-slate-500">{pagination.total ? 'No pending mappings on this page.' : 'No possible matches are waiting for admin mapping.'}</p>}
       <footer className="flex items-center justify-between border-t border-slate-100 px-4 py-3"><span className="text-[11px] text-slate-500">Page {pagination.page || 1} of {Math.max(1, pagination.totalPages || 1)} · 100 per batch</span><div className="flex gap-2"><button type="button" disabled={loading || pagination.page <= 1} onClick={() => load(pagination.page - 1)} className="rounded-lg border px-3 py-2 text-xs font-bold disabled:opacity-40">Previous</button><button type="button" disabled={loading || pagination.page >= pagination.totalPages} onClick={() => load(pagination.page + 1)} className="rounded-lg border px-3 py-2 text-xs font-bold disabled:opacity-40">Next 100</button></div></footer>
+      </>
+      )}
     </section>
   );
 }
