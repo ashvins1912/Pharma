@@ -119,6 +119,11 @@ function safeChecks(checks) {
     ...(typeof check?.message === 'string' ? {message:check.message.replace(/[\r\n]+/g,' ').slice(0,240)} : {})
   }));
 }
+function artifactDigest(files) {
+  const normalized=Array.isArray(files)?Object.fromEntries(files.map(file=>[file.path,file.content])):files;
+  if(!normalized||typeof normalized!=='object'||Array.isArray(normalized)) return null;
+  return crypto.createHash('sha256').update(JSON.stringify(normalized)).digest('hex');
+}
 function publicJob(job) {
   return {jobId:job.jobId,provider:job.provider,operation:job.operation,environment:job.environment,status:job.status,result:job.result,errorCode:job.errorCode,rollbackAvailable:Boolean(job.request?.previousSnapshotId),createdAt:job.createdAt,updatedAt:job.updatedAt};
 }
@@ -132,6 +137,8 @@ app.post('/v1/preflight',validateBase,async(req,res)=>{
   const {provider,environment,capabilities=[],integration,credentials}=req.body;
   if (!integration?.id || !credentials || typeof credentials !== 'object' || Array.isArray(credentials)) return res.status(400).json({success:false,code:'INTEGRATION_CONTEXT_REQUIRED'});
   const checks=[];
+  if(req.body.deployment?.artifactDigest && artifactDigest(req.body.deployment.files)!==req.body.deployment.artifactDigest) checks.push({name:'artifact_integrity',status:'FAIL',code:'ARTIFACT_DIGEST_MISMATCH'});
+  else if(req.body.deployment?.artifactDigest) checks.push({name:'artifact_integrity',status:'PASS',code:'ARTIFACT_DIGEST_VERIFIED'});
   checks.push({name:'native_execution_driver',status:'PASS',code:'NATIVE_DRIVER_AVAILABLE'});
   checks.push({name:'environment_policy',status:environment==='production'&&!productionEnabled()?'BLOCKED':'PASS'});
   try { checks.push(await verifyProviderIdentity(provider,credentials,{id:integration.id,endpoint:integration.endpoint,targetConfig:integration.targetConfig||{}})); }
