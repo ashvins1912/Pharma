@@ -347,8 +347,8 @@ router.post('/deployments/plan', async (req, res) => {
     const { integration } = await loadDeployIntegration(integrationId, provider, environment, 'deploy');
     if (environment === 'production') await assertProductionReleaseReady();
     if (['aws','azure','gcp','kubernetes'].includes(provider)) {
-      const stagedPreflight = await ProviderPreflight.findOne({ provider, environment: 'staging', artifactDigest: artifact.digest, serviceName: artifact.serviceName, status: 'PASS' }).sort({ checkedAt: -1 }).lean();
-      if (!stagedPreflight) throw Object.assign(new Error('A passing staging provider preflight for this exact artifact is required before creating a deployment plan.'), { code: 'STAGING_PREFLIGHT_REQUIRED', statusCode: 409 });
+      const stagedPreflight = await ProviderPreflight.findOne({ provider, environment: 'staging', artifactDigest: artifact.digest, serviceName: artifact.serviceName }).sort({ checkedAt: -1 }).lean();
+      if (!stagedPreflight || stagedPreflight.status !== 'PASS') throw Object.assign(new Error('A passing latest staging provider preflight for this exact artifact is required before creating a deployment plan.'), { code: 'STAGING_PREFLIGHT_REQUIRED', statusCode: 409 });
       const stagedIntegration = await InfrastructureIntegration.findOne({ _id: stagedPreflight.integrationId, revokedAt: null }).lean();
       if (!stagedIntegration || stagedIntegration.verification?.authenticated !== true || stagedIntegration.verification?.discoveryPassed !== true || targetConfigDigest(stagedIntegration.targetConfig) !== stagedPreflight.targetDigest) throw Object.assign(new Error('Staging provider target changed or its verification expired; run staging preflight again.'), { code: 'STAGING_PREFLIGHT_STALE', statusCode: 409 });
       if (environment === 'staging' && String(stagedPreflight.integrationId) !== String(integration._id)) throw Object.assign(new Error('Run staging preflight again using the selected staging integration.'), { code: 'STAGING_PREFLIGHT_INTEGRATION_MISMATCH', statusCode: 409 });
@@ -502,8 +502,8 @@ router.post('/feature-flags/rollout', async (req, res) => {
     if (!reference) throw new Error('A change/ticket reference is required for feature flag changes.');
     const { integration } = await loadDeployIntegration(integrationId, 'launchdarkly', environment, 'manage');
     if (environment === 'production') await assertProductionReleaseReady();
-    const stagedPreflight = await ProviderPreflight.findOne({ provider: 'launchdarkly', environment: 'staging', flagKey: key, status: 'PASS' }).sort({ checkedAt: -1 }).lean();
-    if (!stagedPreflight) throw Object.assign(new Error('A passing LaunchDarkly staging preflight for this flag is required before rollout planning.'), { code: 'LAUNCHDARKLY_STAGING_PREFLIGHT_REQUIRED', statusCode: 409 });
+    const stagedPreflight = await ProviderPreflight.findOne({ provider: 'launchdarkly', environment: 'staging', flagKey: key }).sort({ checkedAt: -1 }).lean();
+    if (!stagedPreflight || stagedPreflight.status !== 'PASS') throw Object.assign(new Error('A passing latest LaunchDarkly staging preflight for this flag is required before rollout planning.'), { code: 'LAUNCHDARKLY_STAGING_PREFLIGHT_REQUIRED', statusCode: 409 });
     const stagedIntegration = await InfrastructureIntegration.findOne({ _id: stagedPreflight.integrationId, revokedAt: null }).lean();
     if (!stagedIntegration || stagedIntegration.verification?.authenticated !== true || stagedIntegration.verification?.discoveryPassed !== true || targetConfigDigest(stagedIntegration.targetConfig) !== stagedPreflight.targetDigest) throw Object.assign(new Error('LaunchDarkly staging target changed or its verification expired; run preflight again.'), { code: 'LAUNCHDARKLY_PREFLIGHT_STALE', statusCode: 409 });
     if (environment === 'staging' && String(stagedPreflight.integrationId) !== String(integration._id)) throw Object.assign(new Error('Run LaunchDarkly staging preflight again using the selected integration.'), { code: 'LAUNCHDARKLY_PREFLIGHT_INTEGRATION_MISMATCH', statusCode: 409 });
