@@ -6,7 +6,7 @@ import { nativeProviderPreflight, nativeProviderExecute, nativeProviderRollback 
 
 const app = express();
 app.disable('x-powered-by');
-app.use(express.json({ limit: '256kb' }));
+app.use(express.json({ limit: '10mb' }));
 const PORT = Number(process.env.PORT || 8090);
 const MONGO_URI = process.env.ADAPTER_MONGO_URI || process.env.MONGO_URI;
 const TOKEN = String(process.env.PRIVATE_DEVOPS_ADAPTER_TOKEN || '');
@@ -42,6 +42,17 @@ const evidenceSchema = new mongoose.Schema({
   checkedAt: { type: Date, default: Date.now }
 }, { strict: true });
 const Evidence = mongoose.models.PrivateDevOpsEvidence || mongoose.model('PrivateDevOpsEvidence', evidenceSchema, 'private_devops_evidence');
+const artifactSnapshotSchema = new mongoose.Schema({
+  snapshotId: { type: String, required: true, unique: true },
+  provider: { type: String, required: true, index: true },
+  environment: { type: String, required: true, index: true },
+  serviceName: { type: String, required: true, index: true },
+  digest: { type: String, required: true },
+  image: { type: String, required: true },
+  files: { type: mongoose.Schema.Types.Mixed, required: true },
+  createdAt: { type: Date, default: Date.now, index: true }
+}, { strict: true, minimize: false });
+const ArtifactSnapshot = mongoose.models.PrivateDevOpsArtifactSnapshot || mongoose.model('PrivateDevOpsArtifactSnapshot', artifactSnapshotSchema, 'private_devops_artifact_snapshots');
 
 function safeEqual(a, b) {
   const aa = Buffer.from(String(a)); const bb = Buffer.from(String(b));
@@ -141,11 +152,17 @@ app.post('/v1/deployments/execute',validateBase,async(req,res)=>{
   const existing=await Job.findOne({idempotencyKey});
   if(existing) return res.status(200).json({success:true,accepted:true,deploymentId:existing.jobId,status:existing.status,job:publicJob(existing),replayed:true});
   const previous=await Job.findOne({provider,environment,operation:'deploy',status:'SUCCEEDED','request.serviceName':deployment.serviceName}).sort({createdAt:-1}).lean();
-  const job=await Job.create({jobId:crypto.randomUUID(),idempotencyKey,provider,operation:'deploy',environment,status:'QUEUED',request:{
-    integrationId:String(integration.id),artifactDigest:deployment.artifactDigest,changeReference:deployment.changeReference,
-    serviceName:deployment.serviceName,image:deployment.image||null,deploymentFiles:deployment.files,
-    previousFiles:previous?.request?.deploymentFiles||null,previousImage:previous?.request?.image||null
-  }});
+  const snapshotId=crypto.randomUUID();
+  const artifactBytes=Array.isArray(deployment.files)?deployment.files.reduce((sum,file)=>sum+Buffer.byteLength(String(file?.content||'')),0):0;
+  if(artifactBytes>8*1024*1024) return res.status(413).json({success:false,code:'ARTIFACT_SNAPSHOT_TOO_LARGE'});
+  await ArtifactSnapshot.create({snapshotId,provider,environment,serviceName:deployment.serviceName,digest:String(deployment.artifactDigest||''),image:deployment.image,files:deployment.files});
+  let job;
+  try {
+    job=await Job.create({jobId:crypto.randomUUID(),idempotencyKey,provider,operation:'deploy',environment,status:'QUEUED',request:{
+      integrationId:String(integration.id),artifactDigest:deployment.artifactDigest,changeReference:deployment.changeReference,
+      serviceName:deployment.serviceName,artifactSnapshotId:snapshotId,previousSnapshotId:previous?.request?.artifactSnapshotId||null
+    }});
+  } catch(error) { await ArtifactSnapshot.deleteOne({snapshotId}); throw error; }
   try {
     const result=await providerCall(provider,'execute',{jobId:job.jobId,integration:{id:integration.id,endpoint:integration.endpoint,targetConfig:integration.targetConfig||{}},credentials,deployment});
     job.status=String(result.status||'SUBMITTED');
@@ -186,8 +203,9 @@ app.post('/v1/deployments/rollback',validateBase,async(req,res)=>{
   const key='rollback:'+jobId+':'+changeReference;
   let job=await Job.findOne({idempotencyKey:key});
   if(!job) job=await Job.create({jobId:crypto.randomUUID(),idempotencyKey:key,provider,operation:'rollback',environment,status:'QUEUED',request:{sourceJobId:jobId,changeReference}});
+  const previousSnapshot=source.request?.previousSnapshotId?await ArtifactSnapshot.findOne({snapshotId:source.request.previousSnapshotId}).lean():null;
   try {
-    const result=await providerCall(provider,'rollback',{jobId:job.jobId,sourceJobId:jobId,environment,changeReference,credentials,integration:{id:integration.id,endpoint:integration.endpoint,targetConfig:integration.targetConfig||{}},deployment:{...deployment,previousFiles:source.request?.previousFiles,previousImage:source.request?.previousImage}});
+    const result=await providerCall(provider,'rollback',{jobId:job.jobId,sourceJobId:jobId,environment,changeReference,credentials,integration:{id:integration.id,endpoint:integration.endpoint,targetConfig:integration.targetConfig||{}},deployment:{...deployment,previousFiles:previousSnapshot?.files,previousImage:previousSnapshot?.image}});
     job.status=['SUBMITTED','RUNNING','SUCCEEDED','FAILED','ROLLED_BACK'].includes(result.status)?result.status:'SUBMITTED';
     job.result={providerOperationId:result.operationId||null}; await job.save();
     if(job.status==='ROLLED_BACK'){source.status='ROLLED_BACK';source.updatedAt=new Date();await source.save();}
