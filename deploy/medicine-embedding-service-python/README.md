@@ -30,7 +30,7 @@ The current JS caller already validates model ID, revision, dimensions, row coun
 python -m venv .venv
 . .venv/bin/activate
 pip install -r requirements.txt
-MEDICINE_EMBEDDING_TOKEN=test-secret-token-with-at-least-32-chars pytest -q
+MEDICINE_EMBEDDING_TOKEN=test-secret-token-with-at-least-32-chars python -m unittest discover -s tests -v
 uvicorn app.main:app --host 127.0.0.1 --port 8080
 ```
 
