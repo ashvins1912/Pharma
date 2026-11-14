@@ -32,8 +32,8 @@ export default function DevOpsDeploymentCenter() {
     secretRefs: '{\n  "DATABASE_URL": "secret://pharma/staging/inventory/database-url",\n  "JWT_SECRET": "secret://pharma/staging/inventory/jwt-secret"\n}'
   });
   const [flagForm, setFlagForm] = useState({
-    integrationId: '', environment: 'staging', flagKey: '', strategy: 'progressive',
-    rolloutPercent: 100, changeReference: ''
+    integrationId: '', environment: 'staging', flagKey: '', variationId: '', strategy: 'progressive',
+    rolloutPercent: 10, changeReference: ''
   });
 
   const load = useCallback(async () => {
@@ -159,7 +159,8 @@ export default function DevOpsDeploymentCenter() {
     if (flagForm.environment === 'staging') {
       const preflight = await apiClient.post(`${API}/providers/preflight`, {
         provider: 'launchdarkly', environment: 'staging',
-        integrationId: flagForm.integrationId, flagKey: flagForm.flagKey
+        integrationId: flagForm.integrationId, flagKey: flagForm.flagKey, variationId: flagForm.variationId,
+        strategy: flagForm.strategy, rolloutPercent: Number(flagForm.rolloutPercent)
       }, { timeout: 60000 });
       if (!unwrap(preflight).success) throw new Error('LaunchDarkly staging preflight did not pass. Review the provider evidence before planning the flag rollout.');
     }
@@ -287,12 +288,13 @@ export default function DevOpsDeploymentCenter() {
     </section>
 
     <section className="space-y-3 rounded-xl border p-3">
-      <div><h4 className="font-black">4. LaunchDarkly feature-flag rollout</h4><p className="text-xs text-slate-500">Use canary, progressive, ring, blue/green or kill-switch targeting. The native LaunchDarkly driver owns API credentials, preserves targeting rules, captures the prior state and supports rollback.</p></div>
+      <div><h4 className="font-black">4. LaunchDarkly feature-flag rollout</h4><p className="text-xs text-slate-500">Use canary/progressive percentage steps, explicit blue/green traffic switches or a kill switch. Select the exact variation ID; targeting rules are preserved and the prior state is captured for rollback.</p></div>
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="text-xs font-semibold">LaunchDarkly integration<select value={flagForm.integrationId} onChange={e => setFlagForm(x => ({...x,integrationId:e.target.value}))} className="mt-1 w-full rounded-lg border p-2 text-sm dark:bg-slate-950"><option value="">Select verified LaunchDarkly integration</option>{flagIntegrations.map(x => <option key={x._id} value={x._id}>{x.name} · {x.environment}</option>)}</select></label>
         <label className="text-xs font-semibold">Environment<select value={flagForm.environment} onChange={e => setFlagForm(x => ({...x,environment:e.target.value}))} className="mt-1 w-full rounded-lg border p-2 text-sm dark:bg-slate-950">{['development','staging','production'].map(x => <option key={x}>{x}</option>)}</select></label>
         <label className="text-xs font-semibold">Feature flag key<input value={flagForm.flagKey} onChange={e => setFlagForm(x => ({...x,flagKey:e.target.value}))} placeholder="new-checkout-flow" className="mt-1 w-full rounded-lg border p-2 text-sm dark:bg-slate-950" /></label>
-        <label className="text-xs font-semibold">Strategy<select value={flagForm.strategy} onChange={e => setFlagForm(x => ({...x,strategy:e.target.value}))} className="mt-1 w-full rounded-lg border p-2 text-sm dark:bg-slate-950">{['canary','progressive','ring','blue_green','kill_switch'].map(x => <option key={x} value={x}>{x.replaceAll('_',' ')}</option>)}</select></label>
+        <label className="text-xs font-semibold">Strategy<select value={flagForm.strategy} onChange={e => setFlagForm(x => ({...x,strategy:e.target.value}))} className="mt-1 w-full rounded-lg border p-2 text-sm dark:bg-slate-950">{['canary','progressive','blue_green','kill_switch'].map(x => <option key={x} value={x}>{x.replaceAll('_',' ')}</option>)}</select></label>
+        {flagForm.strategy !== 'kill_switch' && <label className="text-xs font-semibold">Target variation ID<input value={flagForm.variationId} onChange={e => setFlagForm(x => ({...x,variationId:e.target.value}))} placeholder="Paste the exact LaunchDarkly variation ID" className="mt-1 w-full rounded-lg border p-2 text-sm dark:bg-slate-950" /></label>}
         <label className="text-xs font-semibold">Rollout percentage<input type="number" min="0" max="100" value={flagForm.rolloutPercent} onChange={e => setFlagForm(x => ({...x,rolloutPercent:e.target.value}))} className="mt-1 w-full rounded-lg border p-2 text-sm dark:bg-slate-950" /></label>
         <label className="text-xs font-semibold">Change reference<input value={flagForm.changeReference} onChange={e => setFlagForm(x => ({...x,changeReference:e.target.value}))} className="mt-1 w-full rounded-lg border p-2 text-sm dark:bg-slate-950" /></label>
       </div>
