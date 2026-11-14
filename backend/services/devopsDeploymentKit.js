@@ -572,13 +572,13 @@ export function generateDeploymentFiles(input = {}) {
   const files = {
     'Dockerfile': dockerfile(config.runtime, config.port),
     'docker-compose.yml': compose(config, image),
-    `kubernetes/${config.serviceName}.yaml`: kubernetes(config, image),
+    [`kubernetes/${config.serviceName}.yaml`]: kubernetes(config, image),
     'terraform/main.tf': terraform(config, image),
     'ansible/deploy.yml': ansible(config),
     '.env.example': `NODE_ENV=${config.environment}\nPORT=${config.port}\nDATABASE_URL=\nJWT_SECRET=\n`,
     'config.schema.json': JSON.stringify(envSchema, null, 2) + '\n',
     'deployment/rollout-strategy.json': JSON.stringify(rollout, null, 2) + '\n',
-    `.github/workflows/${config.serviceName}-deploy.yml`: workflow(config)
+    [`.github/workflows/${config.serviceName}-deploy.yml`]: workflow(config)
   };
   const digest = crypto.createHash('sha256').update(JSON.stringify(files)).digest('hex');
   return { config, files, digest, strategy: rollout };
