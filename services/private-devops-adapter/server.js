@@ -151,10 +151,13 @@ app.post('/v1/preflight',validateBase,async(req,res)=>{
   else if(req.body.deployment?.artifactDigest) checks.push({name:'artifact_integrity',status:'PASS',code:'ARTIFACT_DIGEST_VERIFIED'});
   checks.push({name:'native_execution_driver',status:'PASS',code:'NATIVE_DRIVER_AVAILABLE'});
   checks.push({name:'environment_policy',status:environment==='production'&&!productionEnabled()?'BLOCKED':'PASS'});
-  try { checks.push(await verifyProviderIdentity(provider,credentials,{id:integration.id,endpoint:integration.endpoint,targetConfig:integration.targetConfig||{}})); }
+  let identityPassed=false;
+  try { const identity=await verifyProviderIdentity(provider,credentials,{id:integration.id,endpoint:integration.endpoint,targetConfig:integration.targetConfig||{}}); checks.push(identity); identityPassed=identity.status==='PASS'; }
   catch(error){checks.push({name:'provider_identity',status:'FAIL',code:SAFE_CODE.test(String(error.code||''))?error.code:'PROVIDER_IDENTITY_FAILED'});}
-  try { const result=await providerCall(provider,'preflight',{provider,environment,capabilities,integration:{id:integration.id,endpoint:integration.endpoint,targetConfig:integration.targetConfig||{}},credentials,deployment:req.body.deployment||{files:req.body.files||{},serviceName:req.body.serviceName||'preflight'},flag:req.body.flag}); const providerChecks=safeChecks(result.checks||[result]); checks.push(...providerChecks); if (!providerChecks.length) checks.push({name:'provider_execution_preflight',status:'FAIL',code:'EMPTY_PROVIDER_EVIDENCE'}); }
-  catch(error){checks.push({name:'provider_execution_preflight',status:'FAIL',code:SAFE_CODE.test(String(error.code||''))?error.code:'PREFLIGHT_FAILED'});}
+  if(identityPassed) {
+    try { const result=await providerCall(provider,'preflight',{provider,environment,capabilities,integration:{id:integration.id,endpoint:integration.endpoint,targetConfig:integration.targetConfig||{}},credentials,deployment:req.body.deployment||{files:req.body.files||{},serviceName:req.body.serviceName||'preflight'},flag:req.body.flag}); const providerChecks=safeChecks(result.checks||[result]); checks.push(...providerChecks); if (!providerChecks.length) checks.push({name:'provider_execution_preflight',status:'FAIL',code:'EMPTY_PROVIDER_EVIDENCE'}); }
+    catch(error){checks.push({name:'provider_execution_preflight',status:'FAIL',code:SAFE_CODE.test(String(error.code||''))?error.code:'PREFLIGHT_FAILED'});}
+  } else checks.push({name:'provider_execution_preflight',status:'BLOCKED',code:'IDENTITY_CHECK_REQUIRED'});
   const passed=checks.length>0 && checks.every(c=>c.status==='PASS');
   const evidence=await Evidence.create({runId:crypto.randomUUID(),provider,environment,status:passed?'PASS':checks.some(c=>c.status==='FAIL')?'FAIL':'BLOCKED',checks:safeChecks(checks)});
   return res.status(passed?200:424).json({success:passed,evidence});
