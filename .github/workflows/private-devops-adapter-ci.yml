@@ -8,11 +8,13 @@ on:
       - 'backend/security/infrastructureCredentialVault.js'
       - 'backend/services/devopsDeploymentKit.js'
       - 'frontend/src/components/admin/InfrastructureSecurityPanel.jsx'
+      - 'frontend/src/components/admin/DevOpsDeploymentCenter.jsx'
   push:
     branches: [feat/private-devops-provider-adapter]
     paths:
       - 'services/private-devops-adapter/**'
       - 'backend/gateway/routes/adminDevOps.js'
+      - 'frontend/src/components/admin/DevOpsDeploymentCenter.jsx'
 jobs:
   adapter:
     runs-on: ubuntu-latest
