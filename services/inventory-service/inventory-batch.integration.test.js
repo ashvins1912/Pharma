@@ -122,3 +122,61 @@ test('inventory lookup aggregates active batches and reservation allocates/relea
     await mongoose.disconnect();
   }
 });
+
+
+test('reservation concurrency prevents overselling and scopes idempotency by tenant and branch', {
+  skip: !testMongoUri,
+  timeout: 60000
+}, async () => {
+  const databaseName = `inventory_concurrency_${randomUUID().replace(/-/g, '')}`;
+  const tenantA = `tenant-a-${randomUUID()}`;
+  const tenantB = `tenant-b-${randomUUID()}`;
+  const branchId = 'branch-shared-name';
+  await mongoose.connect(testMongoUri, { dbName: databaseName, serverSelectionTimeoutMS: 10000 });
+  await Promise.all([Product.init(), Inventory.init(), Reservation.init(), Audit.init()]);
+
+  try {
+    const [productA, productB] = await Product.create([
+      { tenantId: tenantA, sku: 'RACE-001', name: 'Concurrency Test A', active: true, version: 1 },
+      { tenantId: tenantB, sku: 'RACE-001', name: 'Concurrency Test B', active: true, version: 1 }
+    ]);
+    await Inventory.create([
+      { tenantId: tenantA, branchId, productId: productA._id, sku: productA.sku, batchNumber: 'A-LOT', stockQuantity: 1, reservedQuantity: 0, price: 10 },
+      { tenantId: tenantB, branchId, productId: productB._id, sku: productB.sku, batchNumber: 'B-LOT', stockQuantity: 1, reservedQuantity: 0, price: 10 }
+    ]);
+
+    // The same caller-generated key is valid in two distinct tenant scopes.
+    const scoped = await Promise.all([
+      reserveInventory({ orderId: 'ORD-TENANT-A', items: [{ productId: String(productA._id), quantity: 1 }], tenantId: tenantA, branchId, idempotencyKey: 'same-client-key', actor: 'concurrency-test' }),
+      reserveInventory({ orderId: 'ORD-TENANT-B', items: [{ productId: String(productB._id), quantity: 1 }], tenantId: tenantB, branchId, idempotencyKey: 'same-client-key', actor: 'concurrency-test' })
+    ]);
+    assert.equal(scoped.length, 2);
+    assert.notEqual(scoped[0].reservationId, scoped[1].reservationId);
+
+    const raceProduct = await Product.create({
+      tenantId: tenantA, sku: 'RACE-002', name: 'Last Unit Race', active: true, version: 1
+    });
+    await Inventory.create({
+      tenantId: tenantA, branchId, productId: raceProduct._id, sku: raceProduct.sku,
+      batchNumber: 'ONE-UNIT', stockQuantity: 1, reservedQuantity: 0, price: 5
+    });
+
+    const attempts = await Promise.allSettled(Array.from({ length: 8 }, (_, index) => reserveInventory({
+      orderId: `ORD-RACE-${index}`,
+      items: [{ productId: String(raceProduct._id), quantity: 1 }],
+      tenantId: tenantA,
+      branchId,
+      idempotencyKey: `race-key-${index}`,
+      actor: 'concurrency-test'
+    })));
+    const accepted = attempts.filter(result => result.status === 'fulfilled');
+    assert.equal(accepted.length, 1, 'only one reservation may claim the last unit');
+    const storedStock = await Inventory.findOne({ tenantId: tenantA, branchId, productId: raceProduct._id }).lean();
+    assert.equal(storedStock.reservedQuantity, 1);
+    assert.ok(storedStock.reservedQuantity <= storedStock.stockQuantity);
+    assert.equal(await Reservation.countDocuments({ tenantId: tenantA, branchId, orderId: /^ORD-RACE-/ }), 1);
+  } finally {
+    await mongoose.connection.dropDatabase();
+    await mongoose.disconnect();
+  }
+});
