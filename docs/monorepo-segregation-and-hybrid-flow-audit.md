@@ -301,3 +301,37 @@ This report is an evidence-based static audit and architecture blueprint. It is 
 - Expected query-shape improvement: candidate-read round trips change from one query per cart line ((O(K)) candidate reads) to one batched candidate query ((O(1)) candidate reads), while conditional writes remain per allocated batch. This is a reduction in DB round trips, not a claim of measured latency improvement.
 - Tests have not been executed in this environment. CI must run the inventory-service and root workspace suites before merge. A concurrent last-unit test and a multi-line FEFO allocation regression test should be required before enabling this change in production.
 - Carrier TOPSIS/bandit, Redis Lua leases, webhook Bloom prefilter/circuit breaker, payment ledger Saga and LRU-K/Merkle sync are specified above but are **not yet implemented**. They require their actual provider/storage call sites and deployment contracts to be traced before safely wiring them in.
+
+
+## 9. Follow-on implementation added to this branch
+
+The initial audit branch has now been extended with additional reusable code:
+
+### Inventory reservation correctness
+- Reservation idempotency is now unique by `tenantId + branchId + idempotencyKey`, rather than globally unique by caller key. This prevents unrelated sellers from colliding when clients reuse common idempotency keys.
+- Added an explicit migration script: `npm --workspace services/inventory-service run migrate:reservation-idempotency-index`. It creates the scoped compound unique index before dropping the legacy global index. Run it against the Inventory database during a controlled deployment window.
+- Added replica-set integration coverage for two tenants reusing the same key and eight concurrent attempts to reserve a single remaining unit. This test is part of `inventory-batch.integration.test.js` and is enabled by `INVENTORY_TEST_MONGO_URI`.
+
+### Adaptive carrier selection kernel
+- Added a pure TOPSIS scorer and epsilon-greedy selector to `packages/algorithm-kernel/src/logistics/carrier-selection.js`, with unit tests.
+- Hard serviceability exclusion is applied before scoring. The bandit consumes verified delivery outcomes and does not override compliance or serviceability.
+- This is a reusable algorithm kernel, not yet wired to a persistent per-tenant/per-lane performance repository or an external shipping provider adapter. Bandit state is currently in process memory; production use requires durable outcome statistics and model-version audit.
+
+### Two-tier cache primitives
+- Added `LruKCache`, `SingleFlight` and `TieredCache` to `packages/shared-cache/index.js`, with unit tests.
+- L1 is bounded and TTL-aware; L2 uses the existing SharedCacheClient when configured; source reads are coalesced; cache failures fall back to the source; invalidation clears both tiers best-effort.
+- These are composable primitives. Domain cache keys, durable versioned invalidation events and service-by-service adoption still need integration.
+
+### Verification
+- Root `npm test` now includes `packages/algorithm-kernel` tests.
+- GitHub Actions workflow `Tenant security regression` runs inventory integration tests against a MongoDB replica set, then frontend build/lint and the root regression suite.
+- At the time of this update, the workflow run associated with an earlier branch commit was still in progress. Do not treat it as a pass until the latest branch commit has a completed green run.
+
+## 10. Remaining production integration work (not claimed complete)
+
+1. Payment gateway provider adapters, payment-intent creation, durable webhook ingress, wallet accounts, double-entry ledger, split settlement and payout reconciliation.
+2. Logistics provider connection CRUD, encrypted seller credential storage, Shiprocket/Delhivery and further direct/aggregator adapters, quote/booking/AWB/manifest/label/tracking/NDR/returns APIs, seller UI and provider webhook ingress.
+3. Persisted bandit statistics per tenant/lane/provider and integration of the hybrid selector into shipment booking.
+4. Apply TieredCache to selected catalogue/feed/read paths with explicit cache version and outbox-driven invalidation.
+5. Customer/seller/provider UI-to-API-to-database Playwright flows and service contract tests.
+6. Run concurrency/load tests and publish before/after p50/p95/p99, DB round-trip counts, lock waits, error rates and cache hit rates.
