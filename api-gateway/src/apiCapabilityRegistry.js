@@ -100,6 +100,8 @@ const CAPABILITIES = [
   ['PATCH', /^\/api\/v1\/profile\/access\/users(?:\/|$)/, 'users.manage'],
   ['GET', /^\/api\/v1\/admin\/payments\/outstanding$/, 'billing.read'],
   ['POST', /^\/api\/v1\/admin\/payments\/reminders\/dispatch$/, 'billing.write'],
+  ['GET', /^\/api\/v1\/payments\/providers(?:\/|$)/, 'billing.read'],
+  ['PUT', /^\/api\/v1\/payments\/providers(?:\/|$)/, 'billing.write'],
   ['GET', /^\/api\/v1\/billing(?:\/|$)/, 'billing.read'],
   ['POST', /^\/api\/v1\/billing(?:\/|$)/, 'billing.write'],
   ['PUT', /^\/api\/v1\/billing(?:\/|$)/, 'billing.write'],
