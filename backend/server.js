@@ -70,6 +70,11 @@ app.use(express.json({
     limit: '8mb',
     verify: (req, _res, buffer) => { req.rawBody = Buffer.from(buffer); }
 }));
+app.use(express.urlencoded({
+    extended: false,
+    limit: '32kb',
+    verify: (req, _res, buffer) => { req.rawBody = Buffer.from(buffer); }
+}));
 // Payment provider callbacks authenticate with a timestamped HMAC over the raw body.
 // Mount this narrow public webhook boundary before browser CSRF middleware.
 app.use('/webhooks/payments', paymentWebhookRoutes);
