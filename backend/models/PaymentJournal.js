@@ -20,6 +20,16 @@ const paymentJournalSchema = new mongoose.Schema({
   postedAt: { type: Date, required: true }
 }, { timestamps: true });
 
+paymentJournalSchema.pre('validate', function validateBalancedJournal(next) {
+  const entries = Array.isArray(this.entries) ? this.entries : [];
+  const debits = entries.filter(entry => entry.side === 'DEBIT').reduce((sum, entry) => sum + Number(entry.amountMinor || 0), 0);
+  const credits = entries.filter(entry => entry.side === 'CREDIT').reduce((sum, entry) => sum + Number(entry.amountMinor || 0), 0);
+  if (!entries.length || debits !== credits || debits !== this.totalMinor) {
+    return next(new Error('Payment journal must balance debits and credits to totalMinor.'));
+  }
+  return next();
+});
+
 paymentJournalSchema.index({ tenantId: 1, postedAt: -1 });
 paymentJournalSchema.index({ provider: 1, providerEventId: 1 }, { unique: true });
 
