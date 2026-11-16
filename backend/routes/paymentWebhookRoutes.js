@@ -87,7 +87,7 @@ router.post('/:provider', async (req, res) => {
       payloadHash: hashWebhookPayload(req.rawBody), signatureVerified: true,
       requestId: req.requestId || null
     });
-    if (!result.duplicate) await PaymentIntent.updateOne({ _id: normalized.intent._id, tenantId: normalized.intent.tenantId }, { $set: { status: 'PAID' } });
+    await PaymentIntent.updateOne({ _id: normalized.intent._id, tenantId: normalized.intent.tenantId }, { $set: { status: 'PAID' } });
     return res.status(200).json({ success: true, data: result, requestId: req.requestId || null });
   } catch (error) {
     const status = Number(error.statusCode) || 500;
