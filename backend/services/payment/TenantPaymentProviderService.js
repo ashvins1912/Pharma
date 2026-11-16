@@ -73,6 +73,14 @@ export async function resolveTenantPaymentProvider({ tenantId, environment = 'pr
   if (!record) throw fail(409, 'PAYMENT_PROVIDER_NOT_CONFIGURED', 'Tenant has no enabled default payment provider.');
   return { provider: record.provider, environment: record.environment, credentials: decryptProviderCredentials(record) };
 }
+export async function resolveTenantPaymentProviderCredentials({ tenantId, provider, environment = 'production' }) {
+  const name = normalize(provider, 'provider');
+  const record = await TenantPaymentProvider.findOne({
+    tenantId: String(tenantId), provider: name, environment, enabled: true
+  }).select('+credentialCiphertext +credentialIv +credentialTag +credentialKeyVersion').lean();
+  if (!record) throw fail(404, 'PAYMENT_PROVIDER_NOT_CONFIGURED', 'This tenant has no enabled credentials for the payment provider.');
+  return decryptProviderCredentials(record);
+}
 export async function selectDefaultTenantPaymentProvider({ tenantId, provider, environment = 'production' }) {
   const tenant = String(tenantId || '').trim();
   const name = normalize(provider, 'provider');
