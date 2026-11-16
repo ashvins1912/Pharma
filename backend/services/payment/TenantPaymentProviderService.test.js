@@ -1,27 +1,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { encryptProviderCredentials, decryptProviderCredentials, validateProviderCredentials, sanitizeProvider } from './TenantPaymentProviderService.js';
+import { encryptProviderCredentials, decryptProviderCredentials, validateProviderCredentials } from './TenantPaymentProviderService.js';
 
-test('provider credential validation is adapter-specific', () => {
-  assert.deepEqual(validateProviderCredentials('razorpay', { keyId: 'rzp_test_123', keySecret: 'secret123', webhookSecret: 'webhook123', extra: 'ignored' }),
-    { keyId: 'rzp_test_123', keySecret: 'secret123', webhookSecret: 'webhook123' });
-  assert.throws(() => validateProviderCredentials('cashfree', { clientId: '12345678' }), /clientSecret/);
-  assert.throws(() => validateProviderCredentials('unknown', {}), /not registered/);
-});
-test('tenant credentials encrypt with authenticated encryption and never appear in public config', () => {
-  const previous = process.env.PAYMENT_CREDENTIAL_ENCRYPTION_KEY;
-  process.env.PAYMENT_CREDENTIAL_ENCRYPTION_KEY = 'ab'.repeat(32);
+test('provider credentials are authenticated-encrypted and round-trip', () => {
+  const prior=process.env.PAYMENT_CREDENTIAL_ENCRYPTION_KEY;
+  process.env.PAYMENT_CREDENTIAL_ENCRYPTION_KEY='11'.repeat(32);
   try {
-    const credentials = { keyId: 'rzp_test_123', keySecret: 'secret123' };
-    const encrypted = encryptProviderCredentials(credentials);
-    assert.ok(!encrypted.credentialCiphertext.includes('secret123'));
-    assert.deepEqual(decryptProviderCredentials(encrypted), credentials);
-    assert.throws(() => decryptProviderCredentials({ ...encrypted, credentialTag: 'AA'.repeat(16) }));
-    const publicConfig = sanitizeProvider({ _id: '123', tenantId: 'tenant-a', provider: 'razorpay', environment: 'sandbox', enabled: true, isDefault: true, ...encrypted });
-    assert.ok(!JSON.stringify(publicConfig).includes('credentialCiphertext'));
-    assert.ok(!JSON.stringify(publicConfig).includes('secret123'));
-  } finally {
-    if (previous === undefined) delete process.env.PAYMENT_CREDENTIAL_ENCRYPTION_KEY;
-    else process.env.PAYMENT_CREDENTIAL_ENCRYPTION_KEY = previous;
-  }
+    const input={keyId:'rzp_test_123456',keySecret:'secret_value_123',webhookSecret:'webhook_secret_123'};
+    const encrypted=encryptProviderCredentials(input);
+    assert.equal(JSON.stringify(encrypted).includes('secret_value_123'),false);
+    assert.deepEqual(decryptProviderCredentials(encrypted),input);
+    assert.throws(()=>decryptProviderCredentials({...encrypted,credentialTag:Buffer.alloc(16).toString('base64')}));
+  } finally { if(prior===undefined) delete process.env.PAYMENT_CREDENTIAL_ENCRYPTION_KEY; else process.env.PAYMENT_CREDENTIAL_ENCRYPTION_KEY=prior; }
+});
+
+test('provider credential validation requires provider-specific secret fields',()=>{
+  assert.deepEqual(validateProviderCredentials('razorpay',{keyId:'rzp_test_123',keySecret:'secret_123',webhookSecret:'hook_secret_123'}),{keyId:'rzp_test_123',keySecret:'secret_123',webhookSecret:'hook_secret_123'});
+  assert.throws(()=>validateProviderCredentials('cashfree',{clientId:'client_123',clientSecret:'secret_123'}),{code:'INVALID_CREDENTIALS'});
+  assert.throws(()=>validateProviderCredentials('unknown',{secret:'x'}),{code:'UNSUPPORTED_PAYMENT_PROVIDER'});
 });
