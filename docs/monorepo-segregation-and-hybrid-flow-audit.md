@@ -292,3 +292,12 @@ The following need a second pass against exact callers and provider integrations
 - Existing CI result and runtime concurrency/load-test baselines.
 
 This report is an evidence-based static audit and architecture blueprint. It is not a claim that these runtime gates have passed.
+
+
+## 8. Changes made on this audit branch
+
+- Added this architecture/flow audit and segregation strategy.
+- Updated `services/inventory-service/src/inventory.js` so reservation candidate batches for all cart products are fetched in one tenant/branch-scoped query and grouped in memory. The existing MongoDB transaction, FEFO allocation order, conditional `reservedQuantity` increment, reservation idempotency, Reservation write and Audit write are retained.
+- Expected query-shape improvement: candidate-read round trips change from one query per cart line ((O(K)) candidate reads) to one batched candidate query ((O(1)) candidate reads), while conditional writes remain per allocated batch. This is a reduction in DB round trips, not a claim of measured latency improvement.
+- Tests have not been executed in this environment. CI must run the inventory-service and root workspace suites before merge. A concurrent last-unit test and a multi-line FEFO allocation regression test should be required before enabling this change in production.
+- Carrier TOPSIS/bandit, Redis Lua leases, webhook Bloom prefilter/circuit breaker, payment ledger Saga and LRU-K/Merkle sync are specified above but are **not yet implemented**. They require their actual provider/storage call sites and deployment contracts to be traced before safely wiring them in.
