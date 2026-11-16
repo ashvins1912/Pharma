@@ -335,3 +335,12 @@ The initial audit branch has now been extended with additional reusable code:
 4. Apply TieredCache to selected catalogue/feed/read paths with explicit cache version and outbox-driven invalidation.
 5. Customer/seller/provider UI-to-API-to-database Playwright flows and service contract tests.
 6. Run concurrency/load tests and publish before/after p50/p95/p99, DB round-trip counts, lock waits, error rates and cache hit rates.
+
+
+### Payment settlement core added (canonical HMAC provider contract)
+- Added durable `PaymentWebhookEvent`, `PaymentJournal` and `PaymentOutbox` models.
+- Added a signed webhook ingress at `POST /webhooks/payments/:provider`, mounted before browser CSRF middleware. It requires a provider-specific `PAYMENT_WEBHOOK_SECRET_<PROVIDER>` of at least 32 characters, a timestamp within five minutes and an HMAC-SHA256 signature over `<timestamp>.<raw-body>`.
+- The endpoint accepts a **normalized internal event contract**: `{ id, type: "payment.captured", data: { orderNumber, tenantId, amountMinor, currency } }`. It is not a drop-in Razorpay/Stripe/PayU webhook parser; provider-specific signature and payload adapters must normalize to this contract before production onboarding.
+- Settlement validates tenant-owned order, rejects COD orders and amount/currency mismatch, posts integer-minor-unit double-entry journal lines (gateway clearing debit, seller payable credit, optional platform fee revenue credit), marks the order paid and writes a payment outbox record in one MongoDB transaction.
+- Provider + event ID uniqueness and payload hash collision checks prevent duplicate posting and event-ID reuse with changed content. A second distinct capture event for an already-paid order is persisted as ignored and does not post a second journal.
+- Added unit and replica-set integration tests. The outbox consumer, provider intent adapters, refund/dispute flows, seller wallet withdrawal, bank payout and reconciliation are not implemented yet; a seller payable journal is not equivalent to a completed payout.
