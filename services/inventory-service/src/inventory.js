@@ -661,6 +661,29 @@ export async function reserveInventory({ orderId, items, idempotencyKey, actor, 
         _id: { $in: productIds }, tenantId: normalizedTenantId, active: true
       }).session(session).lean();
       const productById = new Map(products.map(product => [String(product._id), product]));
+      // Fetch all eligible batches in one tenant/branch-scoped read instead of
+      // issuing one awaited query per cart line. Conditional increments below
+      // remain the concurrency boundary; this read is only a candidate snapshot.
+      const candidateRows = await Inventory.find({
+        productId: { $in: productIds },
+        tenantId: normalizedTenantId,
+        branchId: normalizedBranchId,
+        $expr: { $gt: ['$stockQuantity', '$reservedQuantity'] },
+        $or: [{ expiryDate: null }, { expiryDate: { $gte: today } }]
+      }).session(session).lean();
+      const candidatesByProduct = new Map();
+      for (const candidate of candidateRows) {
+        const key = String(candidate.productId);
+        if (!candidatesByProduct.has(key)) candidatesByProduct.set(key, []);
+        candidatesByProduct.get(key).push(candidate);
+      }
+      const compareExpiryFirst = (a, b) => {
+        const ae = a.expiryDate ? new Date(a.expiryDate).getTime() : Number.MAX_SAFE_INTEGER;
+        const be = b.expiryDate ? new Date(b.expiryDate).getTime() : Number.MAX_SAFE_INTEGER;
+        return ae - be || String(a._id).localeCompare(String(b._id));
+      };
+      for (const candidates of candidatesByProduct.values()) candidates.sort(compareExpiryFirst);
+
       const reservedItems = [];
       for (const item of normalized) {
         const product = productById.get(item.productId);
@@ -669,18 +692,7 @@ export async function reserveInventory({ orderId, items, idempotencyKey, actor, 
           error.statusCode = 409;
           throw error;
         }
-        const candidates = await Inventory.find({
-          productId: product._id,
-          tenantId: normalizedTenantId,
-          branchId: normalizedBranchId,
-          $expr: { $gt: ['$stockQuantity', '$reservedQuantity'] },
-          $or: [{ expiryDate: null }, { expiryDate: { $gte: today } }]
-        }).session(session).lean();
-        candidates.sort((a, b) => {
-          const ae = a.expiryDate ? new Date(a.expiryDate).getTime() : Number.MAX_SAFE_INTEGER;
-          const be = b.expiryDate ? new Date(b.expiryDate).getTime() : Number.MAX_SAFE_INTEGER;
-          return ae - be || String(a._id).localeCompare(String(b._id));
-        });
+        const candidates = candidatesByProduct.get(item.productId) || [];
         let remaining = item.quantity;
         const allocations = [];
         for (const candidate of candidates) {

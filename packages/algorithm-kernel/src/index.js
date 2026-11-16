@@ -8,3 +8,5 @@ export {
   fieldSimilarity, normalizeStrength, normalizeDosageForm
 } from './catalogue/similarity.js';
 export { CharacterNgramCandidateIndex } from './catalogue/candidate-index.js';
+
+export { scoreCarriersTOPSIS, EpsilonGreedyCarrierBandit, HybridCarrierSelector, DEFAULT_CARRIER_CRITERIA } from './logistics/carrier-selection.js';

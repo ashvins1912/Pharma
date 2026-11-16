@@ -58,7 +58,7 @@ const reservationSchema = new mongoose.Schema({
   tenantId: { type: 'string', required: true, index: true },
   branchId: { type: 'string', required: true, index: true },
   reservationId: { type: 'string', required: true, unique: true },
-  idempotencyKey: { type: 'string', required: true, unique: true },
+  idempotencyKey: { type: 'string', required: true },
   parentJobId: { type: mongoose.Schema.Types.ObjectId, default: null, index: true },
   orderId: { type: 'string', required: true, index: true },
   status: { type: 'string', enum: ['RESERVED', 'RELEASED', 'DEDUCTED'], default: 'RESERVED' },
@@ -75,6 +75,7 @@ const reservationSchema = new mongoose.Schema({
   }]
 }, { timestamps: true });
 
+reservationSchema.index({ tenantId: 1, branchId: 1, idempotencyKey: 1 }, { unique: true, name: 'tenant_branch_idempotency_unique' });
 reservationSchema.index({ status: 1, expiresAt: 1 });
 
 const importJobSchema = new mongoose.Schema({

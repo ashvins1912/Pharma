@@ -97,3 +97,131 @@ export class SharedCacheClient {
 }
 
 export const sharedCache = new SharedCacheClient();
+
+
+export class LruKCache {
+  constructor({ capacity = 500, k = 2, now = () => Date.now() } = {}) {
+    if (!Number.isInteger(capacity) || capacity < 1) throw new RangeError('capacity must be a positive integer.');
+    if (!Number.isInteger(k) || k < 1) throw new RangeError('k must be a positive integer.');
+    this.capacity = capacity;
+    this.k = k;
+    this.now = now;
+    this.clock = 0;
+    this.entries = new Map();
+  }
+
+  get(key) {
+    const normalized = String(key);
+    const entry = this.entries.get(normalized);
+    if (!entry) return undefined;
+    if (entry.expiresAt !== null && entry.expiresAt <= this.now()) {
+      this.entries.delete(normalized);
+      return undefined;
+    }
+    entry.accesses.push(++this.clock);
+    if (entry.accesses.length > this.k) entry.accesses.shift();
+    return entry.value;
+  }
+
+  set(key, value, ttlMs = 60000) {
+    if (!Number.isFinite(ttlMs) || ttlMs <= 0) throw new RangeError('ttlMs must be positive.');
+    const normalized = String(key);
+    const current = this.entries.get(normalized);
+    this.entries.set(normalized, {
+      value,
+      accesses: current?.accesses || [++this.clock],
+      expiresAt: this.now() + ttlMs
+    });
+    this.#evict();
+    return this;
+  }
+
+  delete(key) { return this.entries.delete(String(key)); }
+  clear() { this.entries.clear(); }
+  get size() { return this.entries.size; }
+
+  #evict() {
+    while (this.entries.size > this.capacity) {
+      const candidates = [...this.entries.entries()];
+      candidates.sort((left, right) => {
+        const a = left[1].accesses;
+        const b = right[1].accesses;
+        const aCold = a.length < this.k;
+        const bCold = b.length < this.k;
+        if (aCold !== bCold) return aCold ? -1 : 1;
+        const aDistanceAnchor = a[a.length - this.k] ?? a[0] ?? 0;
+        const bDistanceAnchor = b[b.length - this.k] ?? b[0] ?? 0;
+        return aDistanceAnchor - bDistanceAnchor;
+      });
+      this.entries.delete(candidates[0][0]);
+    }
+  }
+}
+
+export class SingleFlight {
+  constructor() { this.pending = new Map(); }
+
+  run(key, loader) {
+    const normalized = String(key);
+    if (this.pending.has(normalized)) return this.pending.get(normalized);
+    const promise = Promise.resolve().then(loader);
+    this.pending.set(normalized, promise);
+    promise.finally(() => {
+      if (this.pending.get(normalized) === promise) this.pending.delete(normalized);
+    }).catch(() => {});
+    return promise;
+  }
+
+  get size() { return this.pending.size; }
+}
+
+export class TieredCache {
+  constructor({ l1 = new LruKCache(), l2 = null, singleFlight = new SingleFlight(), namespace = 'app' } = {}) {
+    this.l1 = l1;
+    this.l2 = l2;
+    this.singleFlight = singleFlight;
+    this.namespace = namespace;
+  }
+
+  #key(key) { return `${this.namespace}:${String(key)}`; }
+
+  async getOrLoad(key, loader, { ttlMs = 60000, ttlSeconds = Math.max(1, Math.ceil(ttlMs / 1000)) } = {}) {
+    if (typeof loader !== 'function') throw new TypeError('loader must be a function.');
+    const cacheKey = this.#key(key);
+    const local = this.l1.get(cacheKey);
+    if (local !== undefined) return local;
+    return this.singleFlight.run(cacheKey, async () => {
+      const secondLocal = this.l1.get(cacheKey);
+      if (secondLocal !== undefined) return secondLocal;
+      if (this.l2?.enabled) {
+        try {
+          const remote = await this.l2.get(cacheKey);
+          if (remote !== null && remote !== undefined) {
+            this.l1.set(cacheKey, remote, ttlMs);
+            return remote;
+          }
+        } catch {
+          // L2 is an optimization. Fall through to the source loader.
+        }
+      }
+      const value = await loader();
+      this.l1.set(cacheKey, value, ttlMs);
+      if (this.l2?.enabled) {
+        try { await this.l2.set(cacheKey, value, ttlSeconds); } catch {
+          // Do not fail a successful source read because cache persistence failed.
+        }
+      }
+      return value;
+    });
+  }
+
+  async invalidate(key) {
+    const cacheKey = this.#key(key);
+    this.l1.delete(cacheKey);
+    if (this.l2?.enabled) {
+      try { await this.l2.del(cacheKey); } catch {
+        // L1 is cleared even if distributed invalidation is temporarily unavailable.
+      }
+    }
+  }
+}

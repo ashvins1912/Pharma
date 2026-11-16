@@ -53,3 +53,65 @@ test('writes cache values with HTTP PUT and reads them back with HTTP GET', asyn
   assert.deepEqual(calls.map(call => call.method), ['PUT', 'GET']);
   assert.ok(calls.every(call => call.headers['x-cache-service-token'] === 'b'.repeat(40)));
 });
+
+import { LruKCache, SingleFlight, TieredCache } from './index.js';
+
+test('LRU-K evicts the entry with the oldest kth reference and expires stale values', () => {
+  let now = 1000;
+  const cache = new LruKCache({ capacity: 2, k: 2, now: () => now });
+  cache.set('a', 'A', 100);
+  assert.equal(cache.get('a'), 'A');
+  cache.set('b', 'B', 100);
+  assert.equal(cache.get('b'), 'B');
+  cache.set('c', 'C', 100);
+  assert.equal(cache.get('a'), undefined);
+  assert.equal(cache.get('b'), 'B');
+  now = 1200;
+  assert.equal(cache.get('b'), undefined);
+});
+
+test('single-flight coalesces concurrent loads and clears rejected work', async () => {
+  const flight = new SingleFlight();
+  let calls = 0;
+  const loader = async () => {
+    calls += 1;
+    await new Promise(resolve => setTimeout(resolve, 5));
+    return 'value';
+  };
+  const values = await Promise.all([
+    flight.run('same', loader),
+    flight.run('same', loader),
+    flight.run('same', loader)
+  ]);
+  assert.deepEqual(values, ['value', 'value', 'value']);
+  assert.equal(calls, 1);
+  await assert.rejects(flight.run('reject', async () => { throw new Error('failure'); }), /failure/);
+  assert.equal(flight.size, 0);
+});
+
+test('tiered cache coalesces source loads, writes L1/L2 and invalidates both tiers', async () => {
+  const remoteValues = new Map();
+  const calls = { get: 0, set: 0, del: 0, load: 0 };
+  const l2 = {
+    enabled: true,
+    async get(key) { calls.get += 1; return remoteValues.get(key) ?? null; },
+    async set(key, value) { calls.set += 1; remoteValues.set(key, value); },
+    async del(key) { calls.del += 1; return remoteValues.delete(key); }
+  };
+  const cache = new TieredCache({ l1: new LruKCache({ capacity: 10 }), l2, namespace: 'test' });
+  const loader = async () => { calls.load += 1; return { version: 1 }; };
+  const [one, two] = await Promise.all([
+    cache.getOrLoad('catalog', loader),
+    cache.getOrLoad('catalog', loader)
+  ]);
+  assert.deepEqual(one, { version: 1 });
+  assert.deepEqual(two, { version: 1 });
+  assert.equal(calls.load, 1);
+  assert.equal(calls.set, 1);
+  assert.deepEqual(await cache.getOrLoad('catalog', loader), { version: 1 });
+  assert.equal(calls.get, 1);
+  await cache.invalidate('catalog');
+  assert.equal(calls.del, 1);
+  assert.deepEqual(await cache.getOrLoad('catalog', loader), { version: 1 });
+  assert.equal(calls.load, 2);
+});
