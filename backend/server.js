@@ -75,7 +75,7 @@ app.use(express.urlencoded({
     limit: '32kb',
     verify: (req, _res, buffer) => { req.rawBody = Buffer.from(buffer); }
 }));
-// Payment provider callbacks authenticate with a timestamped HMAC over the raw body.
+// Provider-native webhook signatures require the untouched JSON or urlencoded body.
 // Mount this narrow public webhook boundary before browser CSRF middleware.
 app.use('/webhooks/payments', paymentWebhookRoutes);
 app.use(cookieParser());
