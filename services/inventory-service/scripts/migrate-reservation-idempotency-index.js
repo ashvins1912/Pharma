@@ -1,10 +1,11 @@
 import mongoose from 'mongoose';
 import { config } from '../src/config.js';
+import { Reservation } from '../src/models.js';
 
 if (!config.mongoUri) throw new Error('INVENTORY_MONGO_URI is required.');
 await mongoose.connect(config.mongoUri, { dbName: config.dbName, serverSelectionTimeoutMS: 10000 });
 try {
-  const reservations = mongoose.connection.collection('inventoryreservations');
+  const reservations = Reservation.collection;
   const indexes = await reservations.indexes();
   const legacy = indexes.find(index => index.name === 'idempotencyKey_1');
   // Create the correctly scoped unique index before removing the legacy global
