@@ -17,6 +17,7 @@ import riderProfileRoutes from './routes/riderProfileRoutes.js';
 import profileRoutes from './routes/profileRoutes.js';
 import assignmentRoutes from './modules/delivery/routes/assignmentRoutes.js';
 import paymentActionRoutes from './routes/paymentActionRoutes.js';
+import paymentWebhookRoutes from './routes/paymentWebhookRoutes.js';
 import adminPaymentReminderRoutes from './routes/adminPaymentReminderRoutes.js';
 import medicineRequestRoutes from './routes/medicineRequestRoutes.js';
 import catalogRoutes from './routes/catalogRoutes.js';
@@ -69,6 +70,9 @@ app.use(express.json({
     limit: '8mb',
     verify: (req, _res, buffer) => { req.rawBody = Buffer.from(buffer); }
 }));
+// Payment provider callbacks authenticate with a timestamped HMAC over the raw body.
+// Mount this narrow public webhook boundary before browser CSRF middleware.
+app.use('/webhooks/payments', paymentWebhookRoutes);
 app.use(cookieParser());
 app.use(csrfProtection);
 app.use(auditMutation);
