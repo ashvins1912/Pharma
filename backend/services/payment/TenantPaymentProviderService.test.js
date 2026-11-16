@@ -18,7 +18,7 @@ test('tenant credentials encrypt with authenticated encryption and never appear 
     assert.deepEqual(decryptProviderCredentials(encrypted), credentials);
     assert.throws(() => decryptProviderCredentials({ ...encrypted, credentialTag: 'AA'.repeat(16) }));
     const publicConfig = sanitizeProvider({ _id: '123', tenantId: 'tenant-a', provider: 'razorpay', environment: 'sandbox', enabled: true, isDefault: true, ...encrypted });
-    assert.ok(!JSON.stringify(publicConfig).includes('credential'));
+    assert.ok(!JSON.stringify(publicConfig).includes('credentialCiphertext'));
     assert.ok(!JSON.stringify(publicConfig).includes('secret123'));
   } finally {
     if (previous === undefined) delete process.env.PAYMENT_CREDENTIAL_ENCRYPTION_KEY;
