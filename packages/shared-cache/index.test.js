@@ -113,5 +113,5 @@ test('tiered cache coalesces source loads, writes L1/L2 and invalidates both tie
   await cache.invalidate('catalog');
   assert.equal(calls.del, 1);
   assert.deepEqual(await cache.getOrLoad('catalog', loader), { version: 1 });
-  assert.equal(calls.load, 1);
+  assert.equal(calls.load, 2);
 });
