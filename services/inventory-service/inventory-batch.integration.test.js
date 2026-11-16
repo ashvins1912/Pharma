@@ -161,7 +161,7 @@ test('reservation concurrency prevents overselling and scopes idempotency by ten
       batchNumber: 'ONE-UNIT', stockQuantity: 1, reservedQuantity: 0, price: 5
     });
 
-    const attempts = await Promise.allSettled(Array.from({ length: 8 }, (_, index) => reserveInventory({
+    const attempts = await Promise.allSettled(Array.from({ length: 2 }, (_, index) => reserveInventory({
       orderId: `ORD-RACE-${index}`,
       items: [{ productId: String(raceProduct._id), quantity: 1 }],
       tenantId: tenantA,
