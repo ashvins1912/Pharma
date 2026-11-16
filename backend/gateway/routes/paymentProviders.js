@@ -21,7 +21,7 @@ async function tenantAdmin(req) {
 router.use(authenticateUser);
 router.get('/providers',wrap(async(req,res)=>{const{tenantId}=await tenantAdmin(req);return res.json({success:true,data:await listTenantPaymentProviders(tenantId)});}));
 router.put('/providers/:provider',wrap(async(req,res)=>{const{tenantId,userId}=await tenantAdmin(req);const data=await configureTenantPaymentProvider({tenantId,provider:req.params.provider,environment:req.body?.environment||'sandbox',credentials:req.body?.credentials,actorId:userId});return res.json({success:true,data});}));
-router.post('/intents',wrap(async(req,res)=>{const data=await createTenantCheckout({user:req.user,orderNumber:req.body?.orderNumber,idempotencyKey:req.get('idempotency-key'),returnUrl:req.body?.returnUrl});return res.status(201).json({success:true,data,requestId:req.requestId||null});}));
+router.post('/intents',wrap(async(req,res)=>{const data=await createTenantCheckout({user:req.user,orderNumber:req.body?.orderNumber,idempotencyKey:req.get('idempotency-key'),environment:req.body?.environment||'sandbox'});return res.status(201).json({success:true,data,requestId:req.requestId||null});}));
 router.put('/providers/:provider/default',wrap(async(req,res)=>{const{tenantId}=await tenantAdmin(req);const data=await selectDefaultTenantPaymentProvider({tenantId,provider:req.params.provider,environment:req.body?.environment||'production'});return res.json({success:true,data});}));
 router.use((error,req,res,_next)=>res.status(Number(error.statusCode)||500).json({success:false,code:error.code||'PAYMENT_PROVIDER_CONFIGURATION_FAILED',message:Number(error.statusCode)>=500?'Payment provider configuration is temporarily unavailable.':error.message,requestId:req.requestId||null}));
 export default router;
